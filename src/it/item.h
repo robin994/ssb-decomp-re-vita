@@ -53,19 +53,24 @@ extern intptr_t lITMonsterAnimBankStart;
 
 // Points to all sorts of data
 #ifdef PORT
-// Under PORT, attr->data is a u32 relocation token; PORT_RESOLVE() converts it to a real pointer.
-#endif
+/* PORT: attr->data is a u32 relocation token; PORT_RESOLVE() converts it to a
+ * real pointer at access time. Without the resolve the offset arithmetic below
+ * would treat the token integer as a virtual address and dereference garbage. */
 #define itGetPData(ip, off1, off2)                                                                                     \
-#ifdef PORT
 	((void*)(((uintptr_t)PORT_RESOLVE((ip)->attr->data) - (intptr_t) (off1)) + (intptr_t) (off2)))
 #else
+#define itGetPData(ip, off1, off2)                                                                                     \
 	((void*)(((uintptr_t)(ip)->attr->data - (intptr_t) (off1)) + (intptr_t) (off2)))
 #endif
 
-#define itGetMonsterAnimNode(ip, off)                                                                                  \
 #ifdef PORT
+/* PORT: same token-resolve treatment as itGetPData. The bank-start anchor is a
+ * file_id constant (#define from reloc_data.h) rather than a linker symbol, so
+ * we drop the address-of operator. */
+#define itGetMonsterAnimNode(ip, off)                                                                                  \
 	((void*)(((uintptr_t)PORT_RESOLVE((ip)->attr->data) - (intptr_t) (off)) + (intptr_t)llITCommonDataMonsterAnimBankStart))
 #else
+#define itGetMonsterAnimNode(ip, off)                                                                                  \
 	((void*)(((uintptr_t)(ip)->attr->data - (intptr_t) (off)) + (intptr_t)&llITCommonDataMonsterAnimBankStart))
 #endif
 

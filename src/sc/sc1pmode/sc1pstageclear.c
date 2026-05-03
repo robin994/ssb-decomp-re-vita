@@ -7,7 +7,7 @@
 #include <reloc_data.h>
 #include <sys/audio.h>
 #ifdef PORT
-#include "../../../port/bridge/framebuffer_capture.h"
+#include <bridge/framebuffer_capture.h>
 extern void portFixupSprite(void *sprite);
 extern void portFixupBitmapArray(void *bitmaps, unsigned int count);
 extern void portFixupSpriteBitmapData(void *sprite, void *bitmaps);
