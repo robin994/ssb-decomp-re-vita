@@ -3,6 +3,9 @@
 #include <wp/weapon.h>
 #include <sc/scene.h>
 #include <reloc_data.h>
+#ifdef PORT
+extern void *func_800269C0_275C0(u16 id);
+#endif
 
 // // // // // // // // // // // //
 //                               //
@@ -22,6 +25,16 @@ extern void syInterpCubic(void*, void*, f32);
 // 0x8012E940
 intptr_t dGRSectorArwingSectorDescs[/* */] =
 {
+#ifdef PORT
+    llGRSectorMapArwing0SectorDesc,
+    llGRSectorMapArwing1SectorDesc,
+    llGRSectorMapArwing2SectorDesc,
+    llGRSectorMapArwing3SectorDesc,
+    llGRSectorMapArwing4SectorDesc,
+    llGRSectorMapArwing5SectorDesc,
+    llGRSectorMapArwing6SectorDesc,
+    llGRSectorMapArwing7SectorDesc
+#else
     &llGRSectorMapArwing0SectorDesc,
     &llGRSectorMapArwing1SectorDesc,
     &llGRSectorMapArwing2SectorDesc,
@@ -30,17 +43,27 @@ intptr_t dGRSectorArwingSectorDescs[/* */] =
     &llGRSectorMapArwing5SectorDesc,
     &llGRSectorMapArwing6SectorDesc,
     &llGRSectorMapArwing7SectorDesc
+#endif
 };
 
 // 0x8012E960
 intptr_t dGRSectorArwingAnimJoints[/* */] =
 {
+#ifdef PORT
+    llGRSectorMapArwing0AnimJoint,
+    llGRSectorMapArwing1AnimJoint,
+    llGRSectorMapArwing2AnimJoint,
+    llGRSectorMapArwing3AnimJoint,
+    llGRSectorMapArwing4AnimJoint,
+    llGRSectorMapArwing5AnimJoint
+#else
     &llGRSectorMapArwing0AnimJoint,
     &llGRSectorMapArwing1AnimJoint,
     &llGRSectorMapArwing2AnimJoint,
     &llGRSectorMapArwing3AnimJoint,
     &llGRSectorMapArwing4AnimJoint,
     &llGRSectorMapArwing5AnimJoint
+#endif
 };
 
 // 0x8012E978
@@ -163,7 +186,11 @@ WPDesc dGRSectorArwingWeaponLaser2DWeaponDesc =
     0,                                          // Render flags?
     nWPKindArwingLaser2D,                       // Weapon Kind
     &gGRCommonStruct.sector.weapon_head,        // Pointer to character's loaded files?
+#ifdef PORT
+    llGRSectorMapArwingLaser2DWeaponAttributes,    // Offset of weapon attributes in loaded files
+#else
     &llGRSectorMapArwingLaser2DWeaponAttributes,    // Offset of weapon attributes in loaded files
+#endif
     
     // DObj transformation struct
     {
@@ -188,7 +215,11 @@ WPDesc dGRSectorArwingWeaponLaser3DWeaponDesc =
     0,                                          // Render flags?
     nWPKindArwingLaser3D,                       // Weapon Kind
     &gGRCommonStruct.sector.weapon_head,        // Pointer to character's loaded files?
+#ifdef PORT
+    llGRSectorMapArwingLaser3DWeaponAttributes,    // Offset of weapon attributes in loaded files
+#else
     &llGRSectorMapArwingLaser3DWeaponAttributes,    // Offset of weapon attributes in loaded files
+#endif
     
     // DObj transformation struct
     {
@@ -459,7 +490,11 @@ void func_ovl2_80106D00(void)
         gGRCommonStruct.sector.map_dobjs[9]->anim_wait = AOBJ_ANIM_NULL;
         gGRCommonStruct.sector.map_dobjs[9]->flags = DOBJ_FLAG_HIDDEN;
 
+#ifdef PORT
+        grSectorArwingAddAnim(gGRCommonStruct.sector.map_dobjs[8], lbRelocGetFileData(AObjEvent32*, gGRCommonStruct.sector.map_file, llFoxSpecial3_2EB4_AnimJoint), 0.0F);
+#else
         grSectorArwingAddAnim(gGRCommonStruct.sector.map_dobjs[8], lbRelocGetFileData(AObjEvent32*, gGRCommonStruct.sector.map_file, &llFoxSpecial3_2EB4_AnimJoint), 0.0F);
+#endif
     }
     else if (gGRCommonStruct.sector.map_dobjs[8]->anim_wait == AOBJ_ANIM_NULL)
     {
@@ -947,8 +982,13 @@ void func_ovl2_80107958(void)
             {
                 mh1 = gGRCommonStruct.sector.map_head;
 
+#ifdef PORT
+                grSectorArwingAddAnim(gGRCommonStruct.sector.map_dobjs[4], lbRelocGetFileData(AObjEvent32*, mh1, llFoxSpecial3_1B84_AnimJoint), 0.0F);
+                grSectorArwingAddAnim(gGRCommonStruct.sector.map_dobjs[5], lbRelocGetFileData(AObjEvent32*, mh1, llFoxSpecial3_1B84_AnimJoint), 0.0F);
+#else
                 grSectorArwingAddAnim(gGRCommonStruct.sector.map_dobjs[4], lbRelocGetFileData(AObjEvent32*, mh1, &llFoxSpecial3_1B84_AnimJoint), 0.0F);
                 grSectorArwingAddAnim(gGRCommonStruct.sector.map_dobjs[5], lbRelocGetFileData(AObjEvent32*, mh1, &llFoxSpecial3_1B84_AnimJoint), 0.0F);
+#endif
 
                 gGRCommonStruct.sector.unk_sector_0x52++;
             }
@@ -958,8 +998,13 @@ void func_ovl2_80107958(void)
 
                 func_ovl2_80107910();
 
+#ifdef PORT
+                grSectorArwingAddAnim(gGRCommonStruct.sector.map_dobjs[2], lbRelocGetFileData(AObjEvent32*, mh2, llFoxSpecial3_1B34_AnimJoint), 0.0F);
+                grSectorArwingAddAnim(gGRCommonStruct.sector.map_dobjs[3], lbRelocGetFileData(AObjEvent32*, mh2, llFoxSpecial3_1B34_AnimJoint), 0.0F);
+#else
                 grSectorArwingAddAnim(gGRCommonStruct.sector.map_dobjs[2], lbRelocGetFileData(AObjEvent32*, mh2, &llFoxSpecial3_1B34_AnimJoint), 0.0F);
                 grSectorArwingAddAnim(gGRCommonStruct.sector.map_dobjs[3], lbRelocGetFileData(AObjEvent32*, mh2, &llFoxSpecial3_1B34_AnimJoint), 0.0F);
+#endif
 
                 gGRCommonStruct.sector.arwing_laser_timer = 30;
                 gGRCommonStruct.sector.arwing_laser_ammo--;
@@ -981,7 +1026,11 @@ void func_ovl2_80107B30(void)
 {
     if ((gGRCommonStruct.sector.map_dobjs[8]->anim_wait == AOBJ_ANIM_NULL) && (gGRCommonStruct.sector.map_dobjs[7]->flags == DOBJ_FLAG_NONE))
     {
+#ifdef PORT
+        grSectorArwingAddAnim(gGRCommonStruct.sector.map_dobjs[8], lbRelocGetFileData(AObjEvent32*, gGRCommonStruct.sector.map_file, llFoxSpecial3_2EB4_AnimJoint), 0.0F);
+#else
         grSectorArwingAddAnim(gGRCommonStruct.sector.map_dobjs[8], lbRelocGetFileData(AObjEvent32*, gGRCommonStruct.sector.map_file, &llFoxSpecial3_2EB4_AnimJoint), 0.0F);
+#endif
 
         func_800269C0_275C0(nSYAudioFGMSectorAmbient2);
     }
@@ -1053,10 +1102,17 @@ void func_ovl2_80107D50(void)
 
         desc = (GRSectorDesc*) ((intptr_t)dGRSectorArwingSectorDescs[gGRCommonStruct.sector.arwing_flight_pattern] + (uintptr_t)gGRCommonStruct.sector.map_head);
 
+#ifdef PORT
+        grSectorArwingAddAnim(gGRCommonStruct.sector.map_dobjs[0], (AObjEvent32*)PORT_RESOLVE(desc->anim_joint_0x0), 0.0F);
+        grSectorArwingAddAnim(gGRCommonStruct.sector.map_dobjs[7], (AObjEvent32*)PORT_RESOLVE(desc->anim_joint_0x1C), 0.0F);
+        grSectorArwingAddAnim(gGRCommonStruct.sector.map_dobjs[9], (AObjEvent32*)PORT_RESOLVE(desc->anim_joint_0x24), 0.0F);
+        grSectorArwingAddAnim(gGRCommonStruct.sector.map_dobjs[11], (AObjEvent32*)PORT_RESOLVE(desc->anim_joint_0x2C), 0.0F);
+#else
         grSectorArwingAddAnim(gGRCommonStruct.sector.map_dobjs[0], desc->anim_joint_0x0, 0.0F);
         grSectorArwingAddAnim(gGRCommonStruct.sector.map_dobjs[7], desc->anim_joint_0x1C, 0.0F);
         grSectorArwingAddAnim(gGRCommonStruct.sector.map_dobjs[9], desc->anim_joint_0x24, 0.0F);
         grSectorArwingAddAnim(gGRCommonStruct.sector.map_dobjs[11], desc->anim_joint_0x2C, 0.0F);
+#endif
 
         gGRCommonStruct.sector.arwing_flight_pattern = -1;
         map_gobj->flags = GOBJ_FLAG_NONE;
@@ -1089,9 +1145,17 @@ void grSectorInitAll(void)
     GObj *map_gobj;
     void *map_file;
 
+#ifdef PORT
+    gGRCommonStruct.sector.map_head = (void*) ((uintptr_t)PORT_RESOLVE(gMPCollisionGroundData->map_nodes) - (intptr_t)llGRSectorMapMapHead);
+#else
     gGRCommonStruct.sector.map_head = (void*) ((uintptr_t)gMPCollisionGroundData->map_nodes - (intptr_t)&llGRSectorMapMapHead);
+#endif
 
+#ifdef PORT
+    map_file = lbRelocGetForceStatusBufferFile((intptr_t)llFoxSpecial3FileID);
+#else
     map_file = lbRelocGetForceStatusBufferFile((intptr_t)&llFoxSpecial3FileID);
+#endif
 
     gGRCommonStruct.sector.map_file = map_file;
 
@@ -1100,7 +1164,11 @@ void grSectorInitAll(void)
     gGRCommonStruct.sector.map_gobj = map_gobj;
 
     gcAddGObjDisplay(map_gobj, gcDrawDObjTreeDLLinksForGObj, 6, GOBJ_PRIORITY_DEFAULT, ~0);
+#ifdef PORT
+    grModelSetupGroundDObjs(map_gobj, lbRelocGetFileData(DObjDesc*, map_file, llFoxSpecial3EntryArwingDObjDesc), gGRCommonStruct.sector.map_dobjs, dGRSectorArwingTransformKinds);
+#else
     grModelSetupGroundDObjs(map_gobj, lbRelocGetFileData(DObjDesc*, map_file, &llFoxSpecial3EntryArwingDObjDesc), gGRCommonStruct.sector.map_dobjs, dGRSectorArwingTransformKinds);
+#endif
     gcAddGObjProcess(map_gobj, gcPlayAnimAll, nGCProcessKindFunc, 5);
 
     gGRCommonStruct.sector.arwing_status = 0;
@@ -1113,10 +1181,18 @@ void grSectorInitAll(void)
 
     map_gobj->flags = GOBJ_FLAG_HIDDEN;
 
+#ifdef PORT
+    gcAddDObjAnimJoint(gGRCommonStruct.sector.map_dobjs[10], lbRelocGetFileData(AObjEvent32*, map_file, llFoxSpecial3_2E74_AnimJoint), 0.0F);
+#else
     gcAddDObjAnimJoint(gGRCommonStruct.sector.map_dobjs[10], lbRelocGetFileData(AObjEvent32*, map_file, &llFoxSpecial3_2E74_AnimJoint), 0.0F);
+#endif
     gcPlayAnimAll(map_gobj);
     mpCollisionSetYakumonoOffID(1);
+#ifdef PORT
+    gGRCommonStruct.sector.weapon_head = (void*) ((uintptr_t)gMPCollisionGroundData - (intptr_t)llGRSectorMapMapHeader);
+#else
     gGRCommonStruct.sector.weapon_head = (void*) ((uintptr_t)gMPCollisionGroundData - (intptr_t)&llGRSectorMapMapHeader);
+#endif
 }
 
 // 0x80107FCC

@@ -4507,6 +4507,11 @@ sb32 ftComputerCheckDetectTarget(FTStruct *this_fp, f32 detect_range_base)
         }
     }
     else return FALSE;
+#ifdef PORT
+    /* PORT: original falls through when inner nested ifs fail — was UB under
+     * -Wno-return-type. Treat as "no target detected". */
+    return FALSE;
+#endif
 }
 
 // 0x80134000

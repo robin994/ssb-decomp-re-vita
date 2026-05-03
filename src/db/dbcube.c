@@ -18,14 +18,23 @@ extern void* func_800269C0_275C0(u16);
 // 0x801321E0
 s32 dDBCubePad0x801321E0[/* */] = { 0, 0 };
 
+#ifdef PORT
+// 0x801321E8
+u16 dDBCubeKirbyFaceTexture[/* */] =
+#else
 // 0x801321E8: 32x32 RGBA5551 face texture used by the debug Kirby cube.
 // The raw bytes live in assets/db/dbkirby.rgba16.bin (extracted from the
 // baserom at make extract time) with a .png preview next to it. The
 // .inc.c below is regenerated from the .bin by tools/extractDbKirbyTex.py
 // so no texture bytes are committed to the source tree.
 u16 dDBCubeKirbyFaceTexture[32 * 32] =
+#endif
 {
+#ifdef PORT
+	#include "dbkirby.txt"
+#else
 	#include <db/dbkirby.rgba16.inc.c>
+#endif
 };
 
 // 0x801329E8
@@ -542,7 +551,11 @@ void dbCubeFuncStart(void)
 	s32 unused3;
 
 	rl_setup.table_addr = (uintptr_t)&lLBRelocTableAddr;
+#ifdef PORT
+	rl_setup.table_files_num = (u32)llRelocFileCount;
+#else
 	rl_setup.table_files_num = (u32)&llRelocFileCount;
+#endif
 	rl_setup.file_heap = NULL;
 	rl_setup.file_heap_size = 0;
 	rl_setup.status_buffer = sDBCubeStatusBuffer;

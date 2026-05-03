@@ -1,4 +1,9 @@
+#include <string.h>
 #include <sys/obj.h>
+#ifdef PORT
+#include <port_log.h>
+extern void portFixupMObjSub(void *mobjsub);
+#endif
 
 extern void syInterpCubic(Vec3f*, void*, f32);
 
@@ -171,18 +176,48 @@ void gcAddAnimJointAll(GObj *gobj, AObjEvent32 **anim_joints, f32 anim_frame)
 
     while (dobj != NULL) 
     {
-        if (*anim_joints != NULL) 
+        if (anim_joints != NULL)
         {
-            gcAddDObjAnimJoint(dobj, *anim_joints, anim_frame);
-            dobj->is_anim_root = is_anim_root;
-            is_anim_root = FALSE;
-        } 
-        else 
-        {
-            dobj->anim_wait = AOBJ_ANIM_NULL;
-            dobj->is_anim_root = FALSE;
+ #ifdef PORT
+            u32 anim_joint_token = *(u32*)anim_joints;
+
+            if (anim_joint_token != 0)
+            {
+                AObjEvent32 *anim_joint = (AObjEvent32*)PORT_RESOLVE(anim_joint_token);
+
+                if (anim_joint != NULL)
+                {
+                    gcAddDObjAnimJoint(dobj, anim_joint, anim_frame);
+                    dobj->is_anim_root = is_anim_root;
+                    is_anim_root = FALSE;
+                }
+                else
+                {
+                    dobj->anim_wait = AOBJ_ANIM_NULL;
+                    dobj->is_anim_root = FALSE;
+                }
+            }
+            else
+            {
+                dobj->anim_wait = AOBJ_ANIM_NULL;
+                dobj->is_anim_root = FALSE;
+            }
+            anim_joints = (AObjEvent32**)(void*)(((u32*)anim_joints) + 1);
+ #else
+            if (*anim_joints != NULL)
+            {
+                gcAddDObjAnimJoint(dobj, *anim_joints, anim_frame);
+                dobj->is_anim_root = is_anim_root;
+                is_anim_root = FALSE;
+            } 
+            else 
+            {
+                dobj->anim_wait = AOBJ_ANIM_NULL;
+                dobj->is_anim_root = FALSE;
+            }
+            anim_joints++;
+ #endif
         }
-        anim_joints++;
         dobj = gcGetTreeDObjNext(dobj);
     }
 }
@@ -197,6 +232,35 @@ void gcAddMatAnimJointAll(GObj *gobj, AObjEvent32 ***p_matanim_joints, f32 anim_
     {
         if (p_matanim_joints != NULL)
         {
+#ifdef PORT
+            u32 matanim_joints_token = *(u32*)p_matanim_joints;
+
+            if (matanim_joints_token != 0)
+            {
+                u32 *matanim_joints = (u32*)PORT_RESOLVE(matanim_joints_token);
+                MObj *mobj = dobj->mobj;
+
+                if (matanim_joints != NULL)
+                {
+                    while (mobj != NULL)
+                    {
+                        u32 matanim_joint_token = *matanim_joints;
+
+                        if (matanim_joint_token != 0)
+                        {
+                            AObjEvent32 *matanim_joint = (AObjEvent32*)PORT_RESOLVE(matanim_joint_token);
+
+                            if (matanim_joint != NULL)
+                            {
+                                gcAddMObjMatAnimJoint(mobj, matanim_joint, anim_frame);
+                            }
+                        }
+                        matanim_joints++;
+                        mobj = mobj->next;
+                    }
+                }
+            }
+#else
             if (*p_matanim_joints != NULL)
             {
                 AObjEvent32 **matanim_joints = *p_matanim_joints;
@@ -213,6 +277,10 @@ void gcAddMatAnimJointAll(GObj *gobj, AObjEvent32 ***p_matanim_joints, f32 anim_
                 }
             }
             p_matanim_joints++;
+#endif
+#ifdef PORT
+            p_matanim_joints = (AObjEvent32***)(void*)(((u32*)p_matanim_joints) + 1);
+#endif
         }
         dobj = gcGetTreeDObjNext(dobj);
     }
@@ -229,6 +297,32 @@ void gcAddAnimAll(GObj *gobj, AObjEvent32 **anim_joints, AObjEvent32 ***p_matani
     {
         if (anim_joints != NULL)
         {
+#ifdef PORT
+            u32 anim_joint_token = *(u32*)anim_joints;
+
+            if (anim_joint_token != 0)
+            {
+                AObjEvent32 *anim_joint = (AObjEvent32*)PORT_RESOLVE(anim_joint_token);
+
+                if (anim_joint != NULL)
+                {
+                    gcAddDObjAnimJoint(dobj, anim_joint, anim_frame);
+                    dobj->is_anim_root = is_anim_root;
+                    is_anim_root = FALSE;
+                }
+                else
+                {
+                    dobj->anim_wait = AOBJ_ANIM_NULL;
+                    dobj->is_anim_root = FALSE;
+                }
+            } 
+            else 
+            {
+                dobj->anim_wait = AOBJ_ANIM_NULL;
+                dobj->is_anim_root = FALSE;
+            }
+            anim_joints = (AObjEvent32**)(void*)(((u32*)anim_joints) + 1);
+#else
             if (*anim_joints != NULL)
             {
                 gcAddDObjAnimJoint(dobj, *anim_joints, anim_frame);
@@ -241,9 +335,39 @@ void gcAddAnimAll(GObj *gobj, AObjEvent32 **anim_joints, AObjEvent32 ***p_matani
                 dobj->is_anim_root = FALSE;
             }
             anim_joints++;
+#endif
         }
         if (p_matanim_joints != NULL) 
         {
+#ifdef PORT
+            u32 matanim_joints_token = *(u32*)p_matanim_joints;
+
+            if (matanim_joints_token != 0)
+            {
+                u32 *matanim_joints = (u32*)PORT_RESOLVE(matanim_joints_token);
+                MObj *mobj = dobj->mobj;
+
+                if (matanim_joints != NULL)
+                {
+                    while (mobj != NULL)
+                    {
+                        u32 matanim_joint_token = *matanim_joints;
+
+                        if (matanim_joint_token != 0)
+                        {
+                            AObjEvent32 *matanim_joint = (AObjEvent32*)PORT_RESOLVE(matanim_joint_token);
+
+                            if (matanim_joint != NULL)
+                            {
+                                gcAddMObjMatAnimJoint(mobj, matanim_joint, anim_frame);
+                            }
+                        }
+                        matanim_joints++;
+                        mobj = mobj->next;
+                    }
+                }
+            }
+#else
             if (*p_matanim_joints != NULL) 
             {
                 AObjEvent32 **matanim_joints = *p_matanim_joints;
@@ -260,6 +384,10 @@ void gcAddAnimAll(GObj *gobj, AObjEvent32 **anim_joints, AObjEvent32 ***p_matani
                 }
             }
             p_matanim_joints++;
+#endif
+#ifdef PORT
+            p_matanim_joints = (AObjEvent32***)(void*)(((u32*)p_matanim_joints) + 1);
+#endif
         }
         dobj = gcGetTreeDObjNext(dobj);
     }
@@ -273,6 +401,18 @@ void gcParseDObjAnimJoint(DObj *dobj)
     u32 command_kind;
     u32 flags;
     f32 payload;
+
+#ifdef PORT
+    /* Un-halfswap this EVENT32 stream on first access. See
+     * port/port_aobj_fixup.{h,cpp} — file-loaded AObjEvent32 data was
+     * corrupted by portRelocFixupFighterFigatree's u16-halfswap, and the
+     * fix is lazy per-stream at the first EVENT32 reader touch.
+     * Idempotent; subsequent calls on the same head are no-ops. */
+    extern void port_aobj_event32_unhalfswap_stream(void *head);
+    if (dobj->anim_joint.event32 != NULL) {
+        port_aobj_event32_unhalfswap_stream(dobj->anim_joint.event32);
+    }
+#endif
 
     if (dobj->anim_wait != AOBJ_ANIM_NULL)
     {
@@ -510,7 +650,7 @@ void gcParseDObjAnimJoint(DObj *dobj)
 
             case nGCAnimEvent32SetAnim:
                 AObjAnimAdvance(dobj->anim_joint.event32);
-                dobj->anim_joint.event32 = dobj->anim_joint.event32->p;
+                dobj->anim_joint.event32 = PORT_RESOLVE(dobj->anim_joint.event32->p);
                 dobj->anim_frame = -dobj->anim_wait;
                 dobj->parent_gobj->anim_frame = -dobj->anim_wait;
 
@@ -522,9 +662,9 @@ void gcParseDObjAnimJoint(DObj *dobj)
 
             case nGCAnimEvent32Jump:
                 AObjAnimAdvance(dobj->anim_joint.event32);
-                dobj->anim_joint.event32 = dobj->anim_joint.event32->p;
+                dobj->anim_joint.event32 = PORT_RESOLVE(dobj->anim_joint.event32->p);
 
-                if ((dobj->is_anim_root != FALSE) && (dobj->parent_gobj->func_anim != NULL)) 
+                if ((dobj->is_anim_root != FALSE) && (dobj->parent_gobj->func_anim != NULL))
                 {
                     dobj->parent_gobj->func_anim(dobj, -2, 0);
                 }
@@ -558,7 +698,7 @@ void gcParseDObjAnimJoint(DObj *dobj)
                 { 
                     track_aobjs[nGCAnimTrackTraI - nGCAnimTrackJointStart] = gcAddAObjForDObj(dobj, nGCAnimTrackTraI); 
                 }
-                track_aobjs[nGCAnimTrackTraI - nGCAnimTrackJointStart]->interpolate = dobj->anim_joint.event32->p;
+                track_aobjs[nGCAnimTrackTraI - nGCAnimTrackJointStart]->interpolate = PORT_RESOLVE(dobj->anim_joint.event32->p);
 
                 AObjAnimAdvance(dobj->anim_joint.event32);
                 break;
@@ -626,9 +766,31 @@ void gcParseDObjAnimJoint(DObj *dobj)
 
                 // empty, but necessary
             default:
+#ifdef PORT
+                /* PORT: safety net.  The port_aobj_event32_unhalfswap_stream
+                 * call at function entry should have made the command word
+                 * byte layout correct before we got here, so unhandled
+                 * opcodes would only happen on truly corrupt data (or an
+                 * opcode 23 we don't implement).  The original N64 `break;`
+                 * would re-parse the same event and spin — terminate the
+                 * animation instead. */
+                /* Include the raw u32 word too — a halfswap-corrupted
+                 * stream surfaces here as opcode in the high 7 bits of a
+                 * shifted command word, and seeing the byte pattern
+                 * makes the corruption shape diagnosable from the log
+                 * alone.  E.g. opcode=64 with raw_u32=0x80000a03 is the
+                 * halfswapped form of a real SetValRateBlock (opcode=5)
+                 * whose stream-level un-halfswap fixup was skipped. */
+                port_log("SSB64: gcParseDObjAnimJoint UNHANDLED opcode=%u ev=%p raw_u32=0x%08x — ending anim\n",
+                    command_kind, (void*)dobj->anim_joint.event32,
+                    *(u32*)dobj->anim_joint.event32);
+                dobj->anim_wait = AOBJ_ANIM_END;
+                return;
+#else
                 break;
+#endif
             }
-        } 
+        }
         while (dobj->anim_wait <= 0.0F);
     }
 }
@@ -722,6 +884,9 @@ void gcPlayDObjAnimJoint(DObj *dobj)
     f32 temp_f20;
     f32 temp_f22;
     f32 temp_f24;
+#ifdef PORT
+    static s32 sGCPlayDObjTraILogCount = 0;
+#endif
 
     if (dobj->anim_wait != AOBJ_ANIM_NULL) 
     {
@@ -789,6 +954,14 @@ void gcPlayDObjAnimJoint(DObj *dobj)
                         {
                             value = 1.0F;
                         }
+#ifdef PORT
+                        if (sGCPlayDObjTraILogCount < 16)
+                        {
+                            sGCPlayDObjTraILogCount++;
+                            port_log("SSB64: gcPlayDObjAnimJoint - TraI dobj=%p aobj=%p interp=%p value=%f kind=%u len=%f wait=%f speed=%f\n",
+                                dobj, aobj, aobj->interpolate, value, aobj->kind, aobj->length, dobj->anim_wait, dobj->anim_speed);
+                        }
+#endif
                         syInterpCubic(&dobj->translate.vec.f, aobj->interpolate, value);
                         break;
 
@@ -836,6 +1009,15 @@ void gcParseMObjMatAnimJoint(MObj *mobj)
     u32 command_kind;
     u32 flags;
     f32 payload;
+
+#ifdef PORT
+    /* See gcParseDObjAnimJoint — MObj matanim streams share the same
+     * AObjEvent32 layout and the same halfswap corruption. */
+    extern void port_aobj_event32_unhalfswap_stream(void *head);
+    if (mobj->matanim_joint.event32 != NULL) {
+        port_aobj_event32_unhalfswap_stream(mobj->matanim_joint.event32);
+    }
+#endif
 
     if (mobj->anim_wait != AOBJ_ANIM_NULL)
     {
@@ -1085,14 +1267,14 @@ void gcParseMObjMatAnimJoint(MObj *mobj)
             case nGCAnimEvent32SetAnim:
                 AObjAnimAdvance(mobj->matanim_joint.event32);
 
-                mobj->matanim_joint.event32 = mobj->matanim_joint.event32->p;
+                mobj->matanim_joint.event32 = PORT_RESOLVE(mobj->matanim_joint.event32->p);
                 mobj->anim_frame = -mobj->anim_wait;
                 break;
 
             case nGCAnimEvent32Jump:
                 AObjAnimAdvance(mobj->matanim_joint.event32);
 
-                mobj->matanim_joint.event32 = mobj->matanim_joint.event32->p;
+                mobj->matanim_joint.event32 = PORT_RESOLVE(mobj->matanim_joint.event32->p);
                 break;
 
             case ANIM_CMD_12:
@@ -1251,7 +1433,19 @@ void gcPlayMObjMatAnim(MObj *mobj)
     f32 temp_f14;
     f32 temp_f20;
     f32 temp_f22;
+#ifdef PORT
+    /* PORT: the inner switch in the color-track branch only handles
+     * nGCAnimKindLinear and nGCAnimKindStep.  If aobj->kind is any other
+     * value (Cubic, None, etc.), `color` is left uninitialized and the
+     * subsequent track switch writes garbage stack bytes into the mobj's
+     * primcolor/envcolor/etc.  N64 happens to land on a sensible stack
+     * residue most frames, but PC stack contents vary across runs and
+     * draw calls — observed as fighter colors that change between runs
+     * for the same frame.  Initialize to opaque white as a no-op default. */
+    SYColorPack color = { { 0xFF, 0xFF, 0xFF, 0xFF } };
+#else
     SYColorPack color; // color
+#endif
     f32 temp_f24;
     s32 interp;
     SYColorPack sp38; // sp38
@@ -1345,27 +1539,57 @@ void gcPlayMObjMatAnim(MObj *mobj)
                         break;
                     }
                 } 
-                else 
+                else
                 {
                     switch(aobj->kind)
                     {
-                    case nGCAnimKindLinear: 
+                    case nGCAnimKindLinear:
                         interp = (aobj->length * aobj->length_invert * 256.0F);
-                    
+
                         if (interp < 0)
-                        { 
-                            interp = 0; 
+                        {
+                            interp = 0;
                         }
-                        if (interp > 256) 
-                        { 
-                            interp = 256; 
+                        if (interp > 256)
+                        {
+                            interp = 256;
                         }
+#ifdef PORT
+                        /* PORT: the IDO original packs two color bytes into
+                         * non-adjacent positions of an SYColorPack union,
+                         * multiplies the pack u32 by interp to lerp both
+                         * bytes in parallel, then reads .s.r and .s.b out.
+                         * That trick depends on (a) the union field offsets
+                         * being in BE order so .s.r reads the high byte of
+                         * the pack u32 and (b) `((u8*)&value)[0]` reading
+                         * the BE-MSB of the source value.  Both fail on
+                         * little-endian PC: the multiplication overflows
+                         * lose the high bits, and the byte index reads the
+                         * wrong source byte.  Net effect for white input:
+                         * the matanim writes 0xFF00FF00 (rgba 0,255,0,255)
+                         * to mobj->sub.primcolor instead of 0xFFFFFFFF.
+                         *
+                         * Replacement does plain per-channel linear interp
+                         * with explicit bit shifts so the same code runs
+                         * the same way regardless of host endianness.  We
+                         * memcpy through u32 to type-pun safely from f32. */
+                        {
+                            u32 base_bits, targ_bits;
+                            s32 inv = 256 - interp;
+                            memcpy(&base_bits, &aobj->value_base,   4);
+                            memcpy(&targ_bits, &aobj->value_target, 4);
+                            color.s.r = (u8)((inv * (u8)(base_bits >> 24) + interp * (u8)(targ_bits >> 24)) >> 8);
+                            color.s.g = (u8)((inv * (u8)(base_bits >> 16) + interp * (u8)(targ_bits >> 16)) >> 8);
+                            color.s.b = (u8)((inv * (u8)(base_bits >>  8) + interp * (u8)(targ_bits >>  8)) >> 8);
+                            color.s.a = (u8)((inv * (u8)(base_bits      ) + interp * (u8)(targ_bits      )) >> 8);
+                        }
+#else
                         sp34.pack = 0;
                         sp38.pack = 0;
 
                         sp38.s.g = ((u8*)&aobj->value_base)[0];
                         sp38.s.a = ((u8*)&aobj->value_base)[1];
-                        
+
                         sp34.s.g = ((u8*)&aobj->value_target)[0];
                         sp34.s.a = ((u8*)&aobj->value_target)[1];
 
@@ -1375,10 +1599,10 @@ void gcPlayMObjMatAnim(MObj *mobj)
                         color.s.g = sp38.s.b;
 
                         sp38.pack = 0;
-                    
+
                         sp38.s.g = ((u8*)&aobj->value_base)[2];
                         sp38.s.a = ((u8*)&aobj->value_base)[3];
-                    
+
                         sp34.s.g = ((u8*)&aobj->value_target)[2];
                         sp34.s.a = ((u8*)&aobj->value_target)[3];
 
@@ -1386,11 +1610,66 @@ void gcPlayMObjMatAnim(MObj *mobj)
 
                         color.s.b = sp38.s.r;
                         color.s.a = sp38.s.b;
+#endif
                         break;
-                    
+
                     case nGCAnimKindStep:
+#ifdef PORT
+                        /* PORT: same byte-order issue as LINEAR.  N64 reads
+                         * the f32 bit pattern as SYColorPack via direct
+                         * cast, picking up r at memory byte 0 = BE MSB.
+                         * On LE PC the same cast picks up the LSB byte for
+                         * r, swapping the channel order.  Type-pun via
+                         * memcpy and use bit shifts so the channel layout
+                         * stays N64-BE regardless of host. */
+                        {
+                            u32 src_bits;
+                            if (aobj->length_invert <= aobj->length)
+                                memcpy(&src_bits, &aobj->value_target, 4);
+                            else
+                                memcpy(&src_bits, &aobj->value_base, 4);
+                            color.s.r = (u8)(src_bits >> 24);
+                            color.s.g = (u8)(src_bits >> 16);
+                            color.s.b = (u8)(src_bits >>  8);
+                            color.s.a = (u8)(src_bits      );
+                        }
+#else
                         color = (aobj->length_invert <= aobj->length) ? *(SYColorPack*)&aobj->value_target : *(SYColorPack*)&aobj->value_base;
+#endif
                         break;
+
+#ifdef PORT
+                    /* PORT: the IDO original has no case for nGCAnimKindCubic
+                     * on color tracks, so `color` falls through with whatever
+                     * stack residue happened to be sitting in that slot.  In
+                     * practice fighter costume scripts use SetVal0Rate*/
+                    /* SetValRate* (which the parser marks Cubic) to select
+                     * costume-specific colors — on N64 the stack residue
+                     * happened to hold a sensible previous color, so shoes/
+                     * hats/tunics came out right; on PC the `color = white`
+                     * init makes every such material render solid white.
+                     *
+                     * Cubic Hermite on a packed RGBA u32 isn't meaningful
+                     * per-channel, and when gcPlayMObjMatAnim fires after
+                     * the parser has advanced past the keyframe, `length`
+                     * is already at or past `1/length_invert`, so the
+                     * Hermite basis collapses to (base=0, target=1, rate*=0):
+                     * value = value_target.  Treat Cubic as Step-at-boundary
+                     * for color tracks. */
+                    case nGCAnimKindCubic:
+                        {
+                            u32 src_bits;
+                            if (aobj->length * aobj->length_invert >= 1.0F)
+                                memcpy(&src_bits, &aobj->value_target, 4);
+                            else
+                                memcpy(&src_bits, &aobj->value_base, 4);
+                            color.s.r = (u8)(src_bits >> 24);
+                            color.s.g = (u8)(src_bits >> 16);
+                            color.s.b = (u8)(src_bits >>  8);
+                            color.s.a = (u8)(src_bits      );
+                        }
+                        break;
+#endif
                     }
                     switch (aobj->track)
                     {
@@ -1820,7 +2099,11 @@ f32 gcGetDObjTempAnimTimeMax
 
     time_max = 0.0F;
 
+ #ifdef PORT
+    if ((anim_joints == NULL) || (*(u32*)anim_joints == 0))
+ #else
     if ((anim_joints == NULL) || (*anim_joints == NULL))
+ #endif
     {
         if (dobjdesc == NULL)
         {
@@ -1832,6 +2115,23 @@ f32 gcGetDObjTempAnimTimeMax
     root_aobj = dobj->aobj;
     dobj->aobj = NULL;
 
+ #ifdef PORT
+    if ((anim_joints != NULL) && (*(u32*)anim_joints != 0))
+    {
+        dobj->anim_joint.event32 = (AObjEvent32*)PORT_RESOLVE(*(u32*)anim_joints);
+
+        if (dobj->anim_joint.event32 != NULL)
+        {
+            dobj->anim_wait = AOBJ_ANIM_CHANGED;
+            dobj->anim_frame = anim_frame;
+
+            gcParseDObjAnimJoint(dobj);
+
+            parse_aobj = dobj->aobj;
+            dobj->aobj = NULL;
+        }
+    }
+ #else
     if ((anim_joints != NULL) && (*anim_joints != NULL))
     {
         dobj->anim_joint.event32 = *anim_joints;
@@ -1843,6 +2143,7 @@ f32 gcGetDObjTempAnimTimeMax
         parse_aobj = dobj->aobj;
         dobj->aobj = NULL;
     }
+ #endif
     for (i = nGCAnimTrackJointStart; i <= nGCAnimTrackJointEnd; i++)
     {
         if (i == nGCAnimTrackTraI)
@@ -1969,7 +2270,11 @@ f32 func_8000EC64_F864
             }
             if (anim_joints != NULL)
             {
+#ifdef PORT
+                anim_joints = (AObjEvent32**)(void*)(((u32*)anim_joints) + 1);
+#else
                 anim_joints++;
+#endif
             }
             if (dobjdesc != NULL)
             {
@@ -2000,7 +2305,11 @@ f32 func_8000EC64_F864
 
         if (anim_joints != NULL)
         {
+#ifdef PORT
+            anim_joints = (AObjEvent32**)(void*)(((u32*)anim_joints) + 1);
+#else
             anim_joints++;
+#endif
         }
         if (dobjdesc != NULL)
         {
@@ -2032,6 +2341,80 @@ void func_8000EE40_FA40(GObj *gobj, AObjEvent32 **anim_joints, f32 anim_frame, D
 
     while (dobj != NULL) 
     {
+#ifdef PORT
+        u32 anim_joint_token = *(u32*)anim_joints;
+
+        if (anim_joint_token != 0)
+        {
+            AObjEvent32 *anim_joint = (AObjEvent32*)PORT_RESOLVE(anim_joint_token);
+
+            if (anim_joint != NULL)
+            {
+                gcAddDObjAnimJoint(dobj, anim_joint, anim_frame);
+            
+                dobj->is_anim_root = is_anim_root;
+                is_anim_root = FALSE;
+
+                for (i = nGCAnimTrackJointStart; i <= nGCAnimTrackJointEnd; i++)
+                {
+                    if (i != nGCAnimTrackTraI)
+                    {
+                        gcCheckGetDObjNoAxisTrack
+                        (
+                            0, 
+                            dobj,
+                            &axis_value, 
+                            NULL, 
+                            dobj->aobj, 
+                            dobjdesc, 
+                            i, 
+                            0, 
+                            &translate, 
+                            &is_axis_ready
+                        );
+                        switch (i) 
+                        {
+                        case nGCAnimTrackRotX:
+                            dobj->rotate.vec.f.x = axis_value;
+                            break;
+                        
+                        case nGCAnimTrackRotY:
+                            dobj->rotate.vec.f.y = axis_value; 
+                            break;
+                        
+                        case nGCAnimTrackRotZ:
+                            dobj->rotate.vec.f.z = axis_value; 
+                            break;
+                        
+                        case nGCAnimTrackTraX:
+                            dobj->translate.vec.f.x = axis_value; 
+                            break;
+                        
+                        case nGCAnimTrackTraY:
+                            dobj->translate.vec.f.y = axis_value; 
+                            break;
+                        
+                        case nGCAnimTrackTraZ:
+                            dobj->translate.vec.f.z = axis_value; 
+                            break;
+                        
+                        case nGCAnimTrackScaX:
+                            dobj->scale.vec.f.x = axis_value; 
+                            break;
+                        
+                        case nGCAnimTrackScaY:
+                            dobj->scale.vec.f.y = axis_value; 
+                            break;
+                        
+                        case nGCAnimTrackScaZ:
+                            dobj->scale.vec.f.z = axis_value; 
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+#else
         if (*anim_joints != NULL)
         {
             gcAddDObjAnimJoint(dobj, *anim_joints, anim_frame);
@@ -2097,6 +2480,7 @@ void func_8000EE40_FA40(GObj *gobj, AObjEvent32 **anim_joints, f32 anim_frame, D
                 }
             }
         }
+#endif
         else
         {
             dobj->anim_wait = AOBJ_ANIM_NULL;
@@ -2109,7 +2493,11 @@ void func_8000EE40_FA40(GObj *gobj, AObjEvent32 **anim_joints, f32 anim_frame, D
                 dobj->scale.vec.f = dobjdesc->scale;
             }
         }
+#ifdef PORT
+        anim_joints = (AObjEvent32**)(void*)(((u32*)anim_joints) + 1);
+#else
         anim_joints++;
+#endif
 
         if (dobjdesc != NULL)
         {
@@ -2167,10 +2555,10 @@ void gcSetupCommonDObjs(GObj *gobj, DObjDesc *dobjdesc, DObj **dobjs)
 
         if (id != 0)
         {
-            dobj = array_dobjs[id] = gcAddChildForDObj(array_dobjs[id - 1], dobjdesc->dl);
+            dobj = array_dobjs[id] = gcAddChildForDObj(array_dobjs[id - 1], PORT_RESOLVE(dobjdesc->dl));
         }
-        else dobj = array_dobjs[0] = gcAddDObjForGObj(gobj, dobjdesc->dl);
-        
+        else dobj = array_dobjs[0] = gcAddDObjForGObj(gobj, PORT_RESOLVE(dobjdesc->dl));
+
         if (dobjdesc->id & 0xF000)
         {
             gcAddXObjForDObjFixed(dobj, nGCMatrixKindTra, 0);
@@ -2346,21 +2734,21 @@ void gcSetupCustomDObjs(GObj *gobj, DObjDesc *dobjdesc, DObj **dobjs, u8 tk1, u8
 
         if (id != 0)
         {
-            dobj = array_dobjs[id] = gcAddChildForDObj(array_dobjs[id - 1], dobjdesc->dl);
-        } 
-        else dobj = array_dobjs[0] = gcAddDObjForGObj(gobj, dobjdesc->dl);
-        
-        if (dobjdesc->id & 0xF000) 
+            dobj = array_dobjs[id] = gcAddChildForDObj(array_dobjs[id - 1], PORT_RESOLVE(dobjdesc->dl));
+        }
+        else dobj = array_dobjs[0] = gcAddDObjForGObj(gobj, PORT_RESOLVE(dobjdesc->dl));
+
+        if (dobjdesc->id & 0xF000)
         {
             gcDecideDObj3TransformsKind(dobj, tk1, tk2, tk3, dobjdesc->id & 0xF000);
-        } 
+        }
         else gcAddDObj3TransformsKind(dobj, tk1, tk2, tk3);
-        
+
         dobj->translate.vec.f = dobjdesc->translate;
         dobj->rotate.vec.f = dobjdesc->rotate;
         dobj->scale.vec.f = dobjdesc->scale;
 
-        if (dobjs != NULL) 
+        if (dobjs != NULL)
         {
             *dobjs++ = dobj;
         }
@@ -2380,15 +2768,15 @@ void gcSetupCustomDObjsWithMObj(GObj *gobj, DObjDesc *dobjdesc, MObjSub ***p_mob
     {
         array_dobjs[i] = NULL;
     }
-    while (dobjdesc->id != ARRAY_COUNT(array_dobjs)) 
+    while (dobjdesc->id != ARRAY_COUNT(array_dobjs))
     {
         id = dobjdesc->id & 0xFFF;
 
         if (id != 0)
         {
-            dobj = array_dobjs[id] = gcAddChildForDObj(array_dobjs[id - 1], dobjdesc->dl);
-        } 
-        else dobj = array_dobjs[0] = gcAddDObjForGObj(gobj, dobjdesc->dl);
+            dobj = array_dobjs[id] = gcAddChildForDObj(array_dobjs[id - 1], PORT_RESOLVE(dobjdesc->dl));
+        }
+        else dobj = array_dobjs[0] = gcAddDObjForGObj(gobj, PORT_RESOLVE(dobjdesc->dl));
         
         if (dobjdesc->id & 0xF000) 
         {
@@ -2402,6 +2790,34 @@ void gcSetupCustomDObjsWithMObj(GObj *gobj, DObjDesc *dobjdesc, MObjSub ***p_mob
 
         if (p_mobjsubs != NULL)
         {
+#ifdef PORT
+            u32 mobjsubs_token = *(u32*)p_mobjsubs;
+            if (mobjsubs_token != 0)
+            {
+                u32 *mobjsubs = (u32*)PORT_RESOLVE(mobjsubs_token);
+
+                if (mobjsubs != NULL)
+                {
+                    u32 mobjsub_token = *mobjsubs;
+
+                    while (mobjsub_token != 0)
+                    {
+                        MObjSub *mobjsub = (MObjSub*)PORT_RESOLVE(mobjsub_token);
+
+                        if (mobjsub == NULL)
+                        {
+                            break;
+                        }
+                        portFixupMObjSub(mobjsub);
+                        gcAddMObjForDObj(dobj, mobjsub);
+
+                        mobjsubs++;
+
+                        mobjsub_token = *mobjsubs;
+                    }
+                }
+            }
+#else
             if (*p_mobjsubs != NULL)
             {
                 MObjSub **mobjsubs = *p_mobjsubs;
@@ -2417,6 +2833,10 @@ void gcSetupCustomDObjsWithMObj(GObj *gobj, DObjDesc *dobjdesc, MObjSub ***p_mob
                 }
             }
             p_mobjsubs++;
+#endif
+#ifdef PORT
+            p_mobjsubs = (MObjSub***)(void*)(((u32*)p_mobjsubs) + 1);
+#endif
         }
         if (dobjs != NULL)
         {
@@ -2434,6 +2854,34 @@ void gcAddMObjAll(GObj *gobj, MObjSub ***p_mobjsubs)
     {
         if (p_mobjsubs != NULL)
         {
+#ifdef PORT
+            u32 mobjsubs_token = *(u32*)p_mobjsubs;
+            if (mobjsubs_token != 0)
+            {
+                u32 *mobjsubs = (u32*)PORT_RESOLVE(mobjsubs_token);
+
+                if (mobjsubs != NULL)
+                {
+                    u32 mobjsub_token = *mobjsubs;
+
+                    while (mobjsub_token != 0)
+                    {
+                        MObjSub *mobjsub = (MObjSub*)PORT_RESOLVE(mobjsub_token);
+
+                        if (mobjsub == NULL)
+                        {
+                            break;
+                        }
+                        portFixupMObjSub(mobjsub);
+                        gcAddMObjForDObj(dobj, mobjsub);
+
+                        mobjsubs++;
+
+                        mobjsub_token = *mobjsubs;
+                    }
+                }
+            }
+#else
             if (*p_mobjsubs != NULL)
             {
                 MObjSub **mobjsubs = *p_mobjsubs;
@@ -2449,6 +2897,10 @@ void gcAddMObjAll(GObj *gobj, MObjSub ***p_mobjsubs)
                 }
             }
             p_mobjsubs++;
+#endif
+#ifdef PORT
+            p_mobjsubs = (MObjSub***)(void*)(((u32*)p_mobjsubs) + 1);
+#endif
         }
         dobj = gcGetTreeDObjNext(dobj);
     }
@@ -2729,14 +3181,14 @@ void gcParseCObjCamAnimJoint(CObj *cobj)
 
             case nGCAnimEvent32SetAnim:
                 AObjAnimAdvance(cobj->camanim_joint.event32);
-                cobj->camanim_joint.event32 = cobj->camanim_joint.event32->p;
+                cobj->camanim_joint.event32 = PORT_RESOLVE(cobj->camanim_joint.event32->p);
                 cobj->anim_frame = -cobj->anim_wait;
                 cobj->parent_gobj->anim_frame = -cobj->anim_wait;
                 break;
 
             case nGCAnimEvent32Jump:
                 AObjAnimAdvance(cobj->camanim_joint.event32);
-                cobj->camanim_joint.event32 = cobj->camanim_joint.event32->p;
+                cobj->camanim_joint.event32 = PORT_RESOLVE(cobj->camanim_joint.event32->p);
                 break;
 
             case ANIM_CMD_12:
@@ -2773,7 +3225,7 @@ void gcParseCObjCamAnimJoint(CObj *cobj)
                             nGCAnimTrackEyeI
                         );
                     }
-                    track_aobjs[nGCAnimTrackEyeI - nGCAnimTrackCameraStart]->interpolate = cobj->camanim_joint.event32->p;
+                    track_aobjs[nGCAnimTrackEyeI - nGCAnimTrackCameraStart]->interpolate = PORT_RESOLVE(cobj->camanim_joint.event32->p);
 
                     AObjAnimAdvance(cobj->camanim_joint.event32);
                 }
@@ -2787,7 +3239,7 @@ void gcParseCObjCamAnimJoint(CObj *cobj)
                             nGCAnimTrackAtI
                         );
                     }
-                    track_aobjs[nGCAnimTrackAtI - nGCAnimTrackCameraStart]->interpolate = cobj->camanim_joint.event32->p;
+                    track_aobjs[nGCAnimTrackAtI - nGCAnimTrackCameraStart]->interpolate = PORT_RESOLVE(cobj->camanim_joint.event32->p);
 
                     AObjAnimAdvance(cobj->camanim_joint.event32);
                 }
@@ -2927,11 +3379,19 @@ s32 gcGetAnimTotalLength(AObjEvent32 **anim_joints)
     s32 total = 0;
     s32 i;
 
+#ifdef PORT
+    while (*(u32*)anim_joints == 0)
+    {
+        anim_joints = (AObjEvent32**)(void*)(((u32*)anim_joints) + 1);
+    }
+    anim_joint = (AObjEvent32*)PORT_RESOLVE(*(u32*)anim_joints);
+#else
     while (*anim_joints == NULL)
     {
         anim_joints++;
     }
     anim_joint = *anim_joints;
+#endif
 
     while (TRUE)
     {

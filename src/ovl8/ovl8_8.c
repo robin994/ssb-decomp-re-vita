@@ -5,25 +5,55 @@
 s32 func_ovl8_8037A6D4(db4Shorts *rect1, db4Shorts *rect2, db4Shorts *intersection);
 void func_ovl8_8037AA88(s32 arg0, s32 arg1, s32 arg2, s32 arg3, dbUnknown7* arg4);
 
+#ifdef PORT
+typedef struct dbUnknown8_SC {
+    s16 x0;
+    s16 y0;
+    s16 x1;
+    s16 y1;
+    s32 dbUnknown8_SC_0x8;
+} dbUnknown8_SC;
+
+#endif
 typedef struct UiLineStepper {
     s32 startX;                 // dbUnknown8_8_0x0
     s32 startY;                 // dbUnknown8_8_0x4
+#ifdef PORT
+
+#else
 	
+#endif
     s32* errorSub;              // dbUnknown8_8_0x8   (usually dx or dy)
     s32* errorAdd;              // dbUnknown8_8_0xC   (usually 2*minor)
 
     s32 endX;                   // dbUnknown8_8_0x10
     s32 endY;                   // dbUnknown8_8_0x14
+#ifdef PORT
+
+#else
 	
+#endif
     s32* stepPrimary;           // dbUnknown8_8_0x18  (dx or dy)
     s32* stepSecondary;         // dbUnknown8_8_0x1C  (other axis)
+#ifdef PORT
+
+#else
 	
+#endif
     s32 currentX;               // dbUnknown8_8_0x20
     s32 currentY;               // dbUnknown8_8_0x24
+#ifdef PORT
+
+#else
 	
+#endif
     s32* posPrimary;            // dbUnknown8_8_0x28  (&currentX or &currentY)
     s32* posSecondary;          // dbUnknown8_8_0x2C  (&currentY or &currentX)
+#ifdef PORT
+
+#else
 	
+#endif
     s32 stepsRemaining;         // dbUnknown8_8_0x30
     s32 totalSteps;             // dbUnknown8_8_0x34
 
@@ -144,7 +174,9 @@ char D_ovl8_80387F38[] = "Caption";
 extern s32 D_ovl8_80389F5C;
 extern s32 D_ovl8_80389F60;
 extern s32 D_ovl8_80389F64;
+#ifndef PORT
 extern Sprite D_ovl8_80389F70;    // Template sprite structure
+#endif
 extern dbUnknown8_SC* D_ovl8_80389FB4;
 extern dbUnknown8_SC* D_ovl8_8038A068;
 extern DBMenu D_ovl8_8038A11C;
@@ -584,6 +616,9 @@ void func_ovl8_803780B8(Sprite* arg0, DBMenuPosition* arg1)
 #pragma GLOBAL_ASM("asm/nonmatchings/ovl8/ovl8_8/func_ovl8_80379070.s")
 
 // 0x803798A0
+#ifdef PORT
+#pragma GLOBAL_ASM("asm/nonmatchings/ovl8/ovl8_8/func_ovl8_803798A0.s")
+#else
 void func_ovl8_803798A0(Sprite* sprite, u8* dst, s32 dst_w, s32 dst_h, s16* pos, s32 arg5)
 {
 	DBMenuPosition spB0;
@@ -676,6 +711,7 @@ void func_ovl8_803798A0(Sprite* sprite, u8* dst, s32 dst_w, s32 dst_h, s16* pos,
 		}
 	}
 }
+#endif
 
 // 0x80379D74
 #pragma GLOBAL_ASM("asm/nonmatchings/ovl8/ovl8_8/func_ovl8_80379D74.s")
@@ -1069,6 +1105,9 @@ s32 func_ovl8_8037ABDC(Vec2h* arg0, UiLineStepper* arg1)
 }
 
 // 0x8037ACAC
+#ifdef PORT
+#pragma GLOBAL_ASM("asm/nonmatchings/ovl8/ovl8_8/func_ovl8_8037ACAC.s")
+#else
 Sprite *func_ovl8_8037ACAC(s32 width, s32 height, s32 pixel_format, s32 tile_width, s32 tile_height)
 {
     s32 num_bitmaps;
@@ -1238,6 +1277,7 @@ Sprite *func_ovl8_8037ACAC(s32 width, s32 height, s32 pixel_format, s32 tile_wid
 
     return sprite;
 }
+#endif
 
 // 0x8037B3E4
 void func_ovl8_8037B3E4(dbUnknown3* arg0)

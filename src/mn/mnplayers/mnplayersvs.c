@@ -6,6 +6,10 @@
 #include <sys/video.h>
 #include <sys/rdp.h>
 #include <reloc_data.h>
+#include <sys/audio.h>
+extern void *func_800269C0_275C0(u16 id);
+extern void func_80026738_27338(void *arg0);
+extern void func_800266A0_272A0(void);
 
 
 // // // // // // // // // // // //
@@ -17,13 +21,13 @@
 // 0x8013B3A0
 u32 dMNPlayersVSFileIDs[/* */] =
 {
-	&llMNPlayersCommonFileID,
-	&llMNCommonFileID,
-	&llFTEmblemSpritesFileID,
-	&llMNSelectCommonFileID,
-	&llMNPlayersGameModesFileID,
-	&llMNPlayersPortraitsFileID,
-	&llMNPlayersSpotlightFileID
+	llMNPlayersCommonFileID,
+	llMNCommonFileID,
+	llFTEmblemSpritesFileID,
+	llMNSelectCommonFileID,
+	llMNPlayersGameModesFileID,
+	llMNPlayersPortraitsFileID,
+	llMNPlayersSpotlightFileID
 };
 
 // 0x8013B3BC
@@ -158,9 +162,13 @@ s32 mnPlayersVSGetShade(s32 player)
 		}
 	}
 	// WARNING: Undefined behavior. If sMNPlayersVSIsTeamBattle is FALSE, returned value is indeterminate.
-#ifdef AVOID_UB
+#if defined(AVOID_UB) || defined(PORT)
 	else return 0;
 #endif
+	/* PORT: also covers the case where TeamBattle is TRUE but every shade
+	 * slot is already taken — the original would fall off with an
+	 * indeterminate return. */
+	return 0;
 }
 
 // 0x80131C74
@@ -281,7 +289,7 @@ void mnPlayersVSPortraitAddCross(GObj *gobj, s32 portrait)
 	f32 x = sobj->pos.x;
 	f32 y = sobj->pos.y;
 
-	sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[5], &llMNPlayersPortraitsCrossSprite));
+	sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[5], llMNPlayersPortraitsCrossSprite));
 
 	sobj->pos.x = x + 4.0F;
 	sobj->pos.y = y + 12.0F;
@@ -379,17 +387,17 @@ void mnPlayersVSMakePortraitShadow(s32 portrait)
 	{
 		0x0, 									0x0,
 		0x0, 									0x0,
-		&llMNPlayersPortraitsLuigiShadowSprite, 0x0,
-		0x0, 									&llMNPlayersPortraitsCaptainShadowSprite,
+		llMNPlayersPortraitsLuigiShadowSprite, 0x0,
+		0x0, 									llMNPlayersPortraitsCaptainShadowSprite,
 		0x0, 									0x0,
-		&llMNPlayersPortraitsPurinShadowSprite, &llMNPlayersPortraitsNessShadowSprite
+		llMNPlayersPortraitsPurinShadowSprite, llMNPlayersPortraitsNessShadowSprite
 	};
 
 	gobj = gcMakeGObjSPAfter(0, NULL, 18, GOBJ_PRIORITY_DEFAULT);
 	gcAddGObjDisplay(gobj, lbCommonDrawSObjAttr, 27, GOBJ_PRIORITY_DEFAULT, ~0);
 	gcAddGObjProcess(gobj, mnPlayersVSPortraitProcUpdate, nGCProcessKindFunc, 1);
 
-	sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[5], &llMNPlayersPortraitsPortraitFireBgSprite));
+	sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[5], llMNPlayersPortraitsPortraitFireBgSprite));
 	sobj->pos.x = (((portrait >= 6) ? portrait - 6 : portrait) * 45) + 25;
 	sobj->pos.y = (((portrait >= 6) ? 1 : 0) * 43) + 36;
 
@@ -411,7 +419,7 @@ void mnPlayersVSMakePortraitShadow(s32 portrait)
 	gcAddGObjDisplay(gobj, lbCommonDrawSObjAttr, 27, GOBJ_PRIORITY_DEFAULT, ~0);
 	gcAddGObjProcess(gobj, mnPlayersVSPortraitProcUpdate, nGCProcessKindFunc, 1);
 
-	sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[5], &llMNPlayersPortraitsPortraitQuestionMarkSprite));
+	sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[5], llMNPlayersPortraitsPortraitQuestionMarkSprite));
 	sobj->sprite.attr &= ~SP_FASTCOPY;
 	sobj->sprite.attr |= SP_TRANSPARENT;
 	sobj->envcolor.r = 0x5B;
@@ -432,12 +440,12 @@ void mnPlayersVSMakePortrait(s32 portrait)
 	SObj *sobj;
 	intptr_t offsets[/* */] =
 	{
-		&llMNPlayersPortraitsMarioSprite,   &llMNPlayersPortraitsFoxSprite,
-		&llMNPlayersPortraitsDonkeySprite,  &llMNPlayersPortraitsSamusSprite,
-		&llMNPlayersPortraitsLuigiSprite,   &llMNPlayersPortraitsLinkSprite,
-		&llMNPlayersPortraitsYoshiSprite,   &llMNPlayersPortraitsCaptainSprite,
-		&llMNPlayersPortraitsKirbySprite,   &llMNPlayersPortraitsPikachuSprite,
-		&llMNPlayersPortraitsPurinSprite,   &llMNPlayersPortraitsNessSprite
+		llMNPlayersPortraitsMarioSprite,   llMNPlayersPortraitsFoxSprite,
+		llMNPlayersPortraitsDonkeySprite,  llMNPlayersPortraitsSamusSprite,
+		llMNPlayersPortraitsLuigiSprite,   llMNPlayersPortraitsLinkSprite,
+		llMNPlayersPortraitsYoshiSprite,   llMNPlayersPortraitsCaptainSprite,
+		llMNPlayersPortraitsKirbySprite,   llMNPlayersPortraitsPikachuSprite,
+		llMNPlayersPortraitsPurinSprite,   llMNPlayersPortraitsNessSprite
 	};
 
 	if (mnPlayersVSCheckFighterLocked(mnPlayersVSGetFighterKind(portrait)) != FALSE)
@@ -451,7 +459,7 @@ void mnPlayersVSMakePortrait(s32 portrait)
 		wallpaper_gobj->user_data.s = portrait;
 		gcAddGObjProcess(wallpaper_gobj, mnPlayersVSPortraitProcUpdate, nGCProcessKindFunc, 1);
 
-		sobj = lbCommonMakeSObjForGObj(wallpaper_gobj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[5], &llMNPlayersPortraitsPortraitFireBgSprite));
+		sobj = lbCommonMakeSObjForGObj(wallpaper_gobj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[5], llMNPlayersPortraitsPortraitFireBgSprite));
 
 		mnPlayersVSSetPortraitWallpaperPosition(sobj, portrait);
 
@@ -491,9 +499,9 @@ void mnPlayersVSMakeTeamSelect(s32 team, s32 player)
 
 	intptr_t offsets[/* */] =
 	{
-		&llMNPlayersCommonRedLabelSprite,
-		&llMNPlayersCommonBlueLabelSprite,
-		&llMNPlayersCommonGreenLabelSprite
+		llMNPlayersCommonRedLabelSprite,
+		llMNPlayersCommonBlueLabelSprite,
+		llMNPlayersCommonGreenLabelSprite
 	};
 
 	gobj = sMNPlayersVSSlots[player].team_color_button = gcMakeGObjSPAfter(0, NULL, 27, GOBJ_PRIORITY_DEFAULT);
@@ -560,9 +568,9 @@ void mnPlayersVSUpdatePlayerKindSelect(GObj *gobj, s32 player, s32 pkind)
 
 	intptr_t offsets[/* */] =
 	{
-		&llMNPlayersCommonHmnLabelSprite,
-		&llMNPlayersCommonCPLabelSprite,
-		&llMNPlayersCommonNALabelSprite
+		llMNPlayersCommonHmnLabelSprite,
+		llMNPlayersCommonCPLabelSprite,
+		llMNPlayersCommonNALabelSprite
 	};
 
 	gcRemoveSObjAll(gobj);
@@ -589,21 +597,21 @@ void mnPlayersVSMakeNameAndEmblem(GObj *gobj, s32 player, s32 fkind)
 	};
 	intptr_t emblem_offsets[/* */] =
 	{
-		&llFTEmblemSpritesMarioSprite,		&llFTEmblemSpritesFoxSprite,
-		&llFTEmblemSpritesDonkeySprite, 		&llFTEmblemSpritesMetroidSprite,
-		&llFTEmblemSpritesMarioSprite,		&llFTEmblemSpritesZeldaSprite,
-		&llFTEmblemSpritesYoshiSprite,		&llFTEmblemSpritesFZeroSprite,
-		&llFTEmblemSpritesKirbySprite, 		&llFTEmblemSpritesPMonstersSprite,
-		&llFTEmblemSpritesPMonstersSprite,	&llFTEmblemSpritesMotherSprite
+		llFTEmblemSpritesMarioSprite,		llFTEmblemSpritesFoxSprite,
+		llFTEmblemSpritesDonkeySprite, 		llFTEmblemSpritesMetroidSprite,
+		llFTEmblemSpritesMarioSprite,		llFTEmblemSpritesZeldaSprite,
+		llFTEmblemSpritesYoshiSprite,		llFTEmblemSpritesFZeroSprite,
+		llFTEmblemSpritesKirbySprite, 		llFTEmblemSpritesPMonstersSprite,
+		llFTEmblemSpritesPMonstersSprite,	llFTEmblemSpritesMotherSprite
 	};
 	intptr_t name_offsets[/* */] =
 	{
-		&llMNPlayersCommonMarioTextSprite,      &llMNPlayersCommonFoxTextSprite,
-		&llMNPlayersCommonDKTextSprite,         &llMNPlayersCommonSamusTextSprite,
-		&llMNPlayersCommonLuigiTextSprite,      &llMNPlayersCommonLinkTextSprite,
-		&llMNPlayersCommonYoshiTextSprite,      &llMNPlayersCommonCaptainFalconTextSprite,
-		&llMNPlayersCommonKirbyTextSprite,      &llMNPlayersCommonPikachuTextSprite,
-		&llMNPlayersCommonJigglypuffTextSprite, &llMNPlayersCommonNessTextSprite
+		llMNPlayersCommonMarioTextSprite,      llMNPlayersCommonFoxTextSprite,
+		llMNPlayersCommonDKTextSprite,         llMNPlayersCommonSamusTextSprite,
+		llMNPlayersCommonLuigiTextSprite,      llMNPlayersCommonLinkTextSprite,
+		llMNPlayersCommonYoshiTextSprite,      llMNPlayersCommonCaptainFalconTextSprite,
+		llMNPlayersCommonKirbyTextSprite,      llMNPlayersCommonPikachuTextSprite,
+		llMNPlayersCommonJigglypuffTextSprite, llMNPlayersCommonNessTextSprite
 	};
 
 	if (fkind != nFTKindNull)
@@ -902,13 +910,13 @@ void mnPlayersVSSetGateLUT(GObj *gobj, s32 player, s32 pkind)
 	SObj *sobj;
 	intptr_t man_offsets[/* */] =
 	{
-		&llMNPlayersCommonGateMan1PLUT, &llMNPlayersCommonGateMan2PLUT,
-		&llMNPlayersCommonGateMan3PLUT, &llMNPlayersCommonGateMan4PLUT
+		llMNPlayersCommonGateMan1PLUT, llMNPlayersCommonGateMan2PLUT,
+		llMNPlayersCommonGateMan3PLUT, llMNPlayersCommonGateMan4PLUT
 	};
 	intptr_t com_offsets[/* */] =
 	{
-		&llMNPlayersCommonGateCom1PLUT, &llMNPlayersCommonGateCom2PLUT,
-		&llMNPlayersCommonGateCom3PLUT, &llMNPlayersCommonGateCom4PLUT
+		llMNPlayersCommonGateCom1PLUT, llMNPlayersCommonGateCom2PLUT,
+		llMNPlayersCommonGateCom3PLUT, llMNPlayersCommonGateCom4PLUT
 	};
 	SYColorRGB colors[/* */] =
 	{
@@ -922,9 +930,9 @@ void mnPlayersVSSetGateLUT(GObj *gobj, s32 player, s32 pkind)
 
 	if (pkind == nFTPlayerKindMan)
 	{
-		SObjGetSprite(sobj)->LUT = lbRelocGetFileData(int*, sMNPlayersVSFiles[0], man_offsets[player]);
+		SObjGetSprite(sobj)->LUT = PORT_REGISTER(lbRelocGetFileData(void*, sMNPlayersVSFiles[0], man_offsets[player]));
 	}
-	else SObjGetSprite(sobj)->LUT = lbRelocGetFileData(int*, sMNPlayersVSFiles[0], com_offsets[player]);
+	else SObjGetSprite(sobj)->LUT = PORT_REGISTER(lbRelocGetFileData(void*, sMNPlayersVSFiles[0], com_offsets[player]));
 }
 
 // 0x80133378
@@ -934,9 +942,9 @@ void mnPlayersVSMakePlayerKindSelect(s32 player)
 
 	intptr_t offsets[/* */] =
 	{
-		&llMNPlayersCommonHmnLabelSprite,
-		&llMNPlayersCommonCPLabelSprite,
-		&llMNPlayersCommonNALabelSprite
+		llMNPlayersCommonHmnLabelSprite,
+		llMNPlayersCommonCPLabelSprite,
+		llMNPlayersCommonNALabelSprite
 	};
 
 	sMNPlayersVSSlots[player].type_button = gobj = lbCommonMakeSpriteGObj
@@ -973,8 +981,8 @@ void mnPlayersVSMakePlayerKind(s32 player)
 
 	intptr_t offsets[/* */] =
 	{
-		&llMNPlayersCommon1PTextSprite, &llMNPlayersCommon2PTextSprite,
-		&llMNPlayersCommon3PTextSprite, &llMNPlayersCommon4PTextSprite
+		llMNPlayersCommon1PTextSprite, llMNPlayersCommon2PTextSprite,
+		llMNPlayersCommon3PTextSprite, llMNPlayersCommon4PTextSprite
 	};
 	f32 pos_x[/* */] = { 8.0F, 5.0F, 5.0F, 5.0F };
 
@@ -983,7 +991,7 @@ void mnPlayersVSMakePlayerKind(s32 player)
 
 	if (sMNPlayersVSSlots[player].pkind == nFTPlayerKindCom)
 	{
-		sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[0], &llMNPlayersCommonCPTextSprite));
+		sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[0], llMNPlayersCommonCPTextSprite));
 		sobj->pos.x = ((player * 69) + 26);
 	}
 	else
@@ -1007,8 +1015,8 @@ void mnPlayersVSMakeGate(s32 player)
 
 	intptr_t offsets[/* */] =
 	{
-		&llMNPlayersCommon1PTextSprite, &llMNPlayersCommon2PTextSprite,
-		&llMNPlayersCommon3PTextSprite, &llMNPlayersCommon4PTextSprite
+		llMNPlayersCommon1PTextSprite, llMNPlayersCommon2PTextSprite,
+		llMNPlayersCommon3PTextSprite, llMNPlayersCommon4PTextSprite
 	};
 	f32 pos_x[/* */] = { 8.0F, 5.0F, 5.0F, 5.0F };
 	
@@ -1036,7 +1044,7 @@ void mnPlayersVSMakeGate(s32 player)
 		(
 			Sprite*,
 			sMNPlayersVSFiles[0],
-			&llMNPlayersCommonRedCardSprite
+			llMNPlayersCommonRedCardSprite
 		),
 		nGCProcessKindFunc,
 		NULL,
@@ -1081,7 +1089,7 @@ void mnPlayersVSMakeGate(s32 player)
 		(
 			Sprite*,
 			sMNPlayersVSFiles[0],
-			&llMNPlayersCommonSmashLogoCardLeftSprite
+			llMNPlayersCommonSmashLogoCardLeftSprite
 		),
 		nGCProcessKindFunc,
 		mnPlayersVSShutterProcUpdate,
@@ -1096,7 +1104,7 @@ void mnPlayersVSMakeGate(s32 player)
 
 	sMNPlayersVSSlots[player].panel_doors = gobj;
 
-	sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[0], &llMNPlayersCommonSmashLogoCardRightSprite));
+	sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[0], llMNPlayersCommonSmashLogoCardRightSprite));
 	sobj->pos.x = start_x + 88;
 	sobj->pos.y = 126.0F;
 	sobj->sprite.attr &= ~SP_FASTCOPY;
@@ -1108,6 +1116,9 @@ void mnPlayersVSMakeGate(s32 player)
 	mnPlayersVSMakePlayerKindSelect(player);
 
 	sMNPlayersVSSlots[player].name_emblem_gobj = gobj = gcMakeGObjSPAfter(0, NULL, 22, GOBJ_PRIORITY_DEFAULT);
+#ifdef PORT
+	sMNPlayersVSSlots[player].name_emblem_fkind = nFTKindNull;
+#endif
 	gcAddGObjDisplay(gobj, lbCommonDrawSObjAttr, 28, GOBJ_PRIORITY_DEFAULT, ~0);
 
 	mnPlayersVSUpdateNameAndEmblem(player);
@@ -1178,16 +1189,16 @@ void mnPlayersVSMakeGameRuleNumber(GObj *gobj, s32 number, f32 x, f32 y, u32 *co
 {
 	intptr_t offsets[/* */] =
 	{
-		&llMNPlayersCommon0DarkSprite,
-		&llMNPlayersCommon1DarkSprite,
-		&llMNPlayersCommon2DarkSprite,
-		&llMNPlayersCommon3DarkSprite,
-		&llMNPlayersCommon4DarkSprite,
-		&llMNPlayersCommon5DarkSprite,
-		&llMNPlayersCommon6DarkSprite,
-		&llMNPlayersCommon7DarkSprite,
-		&llMNPlayersCommon8DarkSprite,
-		&llMNPlayersCommon9DarkSprite
+		llMNPlayersCommon0DarkSprite,
+		llMNPlayersCommon1DarkSprite,
+		llMNPlayersCommon2DarkSprite,
+		llMNPlayersCommon3DarkSprite,
+		llMNPlayersCommon4DarkSprite,
+		llMNPlayersCommon5DarkSprite,
+		llMNPlayersCommon6DarkSprite,
+		llMNPlayersCommon7DarkSprite,
+		llMNPlayersCommon8DarkSprite,
+		llMNPlayersCommon9DarkSprite
 	};
 
 	SObj *sobj;
@@ -1229,7 +1240,7 @@ void mnPlayersVSMakeTimeSetting(s32 number)
 	}
 	if (number == 100)
 	{
-		sobj = lbCommonMakeSObjForGObj(sMNPlayersVSGameRuleGObj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[0], &llMNPlayersCommonInfinityDarkSprite));
+		sobj = lbCommonMakeSObjForGObj(sMNPlayersVSGameRuleGObj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[0], llMNPlayersCommonInfinityDarkSprite));
 		sobj->pos.x = 194.0F;
 		sobj->pos.y = 24.0F;
 		sobj->envcolor.r = colors[0];
@@ -1256,6 +1267,7 @@ void mnPlayersVSMakeTimeSelect(s32 number)
 	if (sMNPlayersVSGameRuleGObj != NULL)
 	{
 		gcEjectGObj(sMNPlayersVSGameRuleGObj);
+		sMNPlayersVSGameRuleGObj = NULL;
 	}
 	sMNPlayersVSGameRuleGObj = gobj = lbCommonMakeSpriteGObj
 	(
@@ -1271,7 +1283,7 @@ void mnPlayersVSMakeTimeSelect(s32 number)
 		(
 			Sprite*,
 			sMNPlayersVSFiles[0],
-			&llMNPlayersCommonTimeSelectorSprite
+			llMNPlayersCommonTimeSelectorSprite
 		),
 		nGCProcessKindFunc,
 		NULL,
@@ -1309,6 +1321,7 @@ void mnPlayersVSMakeStockSelect(s32 number)
 	if (sMNPlayersVSGameRuleGObj != NULL)
 	{
 		gcEjectGObj(sMNPlayersVSGameRuleGObj);
+		sMNPlayersVSGameRuleGObj = NULL;
 	}
 	sMNPlayersVSGameRuleGObj = gobj = lbCommonMakeSpriteGObj
 	(
@@ -1324,7 +1337,7 @@ void mnPlayersVSMakeStockSelect(s32 number)
 		(
 			Sprite*,
 			sMNPlayersVSFiles[0],
-			&llMNPlayersCommonStockSelectorSprite
+			llMNPlayersCommonStockSelectorSprite
 		),
 		nGCProcessKindFunc,
 		NULL,
@@ -1367,7 +1380,7 @@ void mnPlayersVSMakeWallpaper(void)
 
 	gobj = gcMakeGObjSPAfter(0, NULL, 17, GOBJ_PRIORITY_DEFAULT);
 	gcAddGObjDisplay(gobj, lbCommonDrawSObjAttr, 26, GOBJ_PRIORITY_DEFAULT, ~0);
-	sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[3], &llMNSelectCommonStoneBackgroundSprite));
+	sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[3], llMNSelectCommonStoneBackgroundSprite));
 	sobj->cms = G_TX_WRAP;
 	sobj->cmt = G_TX_WRAP;
 	sobj->masks = 6;
@@ -1387,8 +1400,8 @@ void mnPlayersVSMakeLabels(void)
 
 	intptr_t offsets[/* */] =
 	{
-		&llMNPlayersGameModesFreeForAllTextSprite,
-		&llMNPlayersGameModesTeamBattleTextSprite
+		llMNPlayersGameModesFreeForAllTextSprite,
+		llMNPlayersGameModesTeamBattleTextSprite
 	};
 	SYColorRGB colors[/* */] =
 	{
@@ -1441,7 +1454,7 @@ void mnPlayersVSMakeLabels(void)
 		(
 			Sprite*,
 			sMNPlayersVSFiles[0],
-			&llMNPlayersCommonBackButtonSprite
+			llMNPlayersCommonBackButtonSprite
 		),
 		nGCProcessKindFunc,
 		NULL,
@@ -1534,6 +1547,7 @@ s32 mnPlayersVSGetFreeCostumeRoyal(s32 fkind, s32 player)
 			return k;
 		}
 	}
+	return 0;
 }
 
 // 0x8013487C
@@ -1547,6 +1561,7 @@ s32 mnPlayersVSGetFreeCostume(s32 fkind, s32 player)
 	{
 		return ftParamGetCostumeTeamID(fkind, sMNPlayersVSSlots[player].team);
 	}
+	return 0;
 }
 
 // 0x801348EC
@@ -1640,6 +1655,9 @@ void mnPlayersVSMakeFighter(GObj *fighter_gobj, s32 player, s32 fkind, s32 costu
 		desc.shade = sMNPlayersVSSlots[player].shade;
 		desc.figatree_heap = sMNPlayersVSSlots[player].figatree_heap;
 		desc.player = player;
+#ifdef PORT
+		desc.is_skip_shadow_setup = TRUE;
+#endif
 		fighter_gobj = ftManagerMakeFighter(&desc);
 
 		sMNPlayersVSSlots[player].player = fighter_gobj;
@@ -1716,16 +1734,16 @@ void mnPlayersVSUpdateCursor(GObj *gobj, s32 player, s32 cursor_status)
 	};
 	intptr_t num_offsets[/* */] =
 	{
-		&llMNPlayersCommon1PTextGradientSprite,
-		&llMNPlayersCommon2PTextGradientSprite,
-		&llMNPlayersCommon3PTextGradientSprite,
-		&llMNPlayersCommon4PTextGradientSprite
+		llMNPlayersCommon1PTextGradientSprite,
+		llMNPlayersCommon2PTextGradientSprite,
+		llMNPlayersCommon3PTextGradientSprite,
+		llMNPlayersCommon4PTextGradientSprite
 	};
 	intptr_t cursor_offsets[/* */] =
 	{
-		&llMNPlayersCommonCursorHandPointSprite,
-		&llMNPlayersCommonCursorHandGrabSprite,
-		&llMNPlayersCommonCursorHandHoverSprite
+		llMNPlayersCommonCursorHandPointSprite,
+		llMNPlayersCommonCursorHandGrabSprite,
+		llMNPlayersCommonCursorHandHoverSprite
 	};
 	Vec2i pos[/* */] =
 	{
@@ -1898,8 +1916,8 @@ void mnPlayersVSUpdateGameMode(void)
 
 	intptr_t offsets[/* */] =
 	{
-		&llMNPlayersGameModesFreeForAllTextSprite,
-		&llMNPlayersGameModesTeamBattleTextSprite
+		llMNPlayersGameModesFreeForAllTextSprite,
+		llMNPlayersGameModesTeamBattleTextSprite
 	};
 	SYColorRGB colors[/* */] =
 	{
@@ -2339,6 +2357,9 @@ void mnPlayersVSUpdateFighter(s32 player)
 	sb32 is_skip_fighter = FALSE;
 	GObj *fighter_gobj = sMNPlayersVSSlots[player].player;
 
+	#ifdef PORT
+	s32 costume;
+#endif
 	if (fighter_gobj != NULL)
 	{
 		if (sMNPlayersVSSlots[player].pkind == nFTPlayerKindNot)
@@ -2356,6 +2377,30 @@ void mnPlayersVSUpdateFighter(s32 player)
 	{
 		sMNPlayersVSSlots[player].shade = mnPlayersVSGetShade(player);
 
+		#ifdef PORT
+		costume = mnPlayersVSGetFreeCostume(sMNPlayersVSSlots[player].fkind, player);
+
+		if (
+			(fighter_gobj != NULL) &&
+			(ftGetStruct(fighter_gobj)->fkind == sMNPlayersVSSlots[player].fkind))
+		{
+			if (sMNPlayersVSSlots[player].costume != costume)
+			{
+				sMNPlayersVSSlots[player].costume = costume;
+				ftParamInitAllParts(fighter_gobj, costume, sMNPlayersVSSlots[player].shade);
+			}
+			fighter_gobj->flags = GOBJ_FLAG_NONE;
+		}
+		else
+		{
+			mnPlayersVSMakeFighter
+			(
+				sMNPlayersVSSlots[player].player,
+				player,
+				sMNPlayersVSSlots[player].fkind, costume
+			);
+		}
+#else
 		mnPlayersVSMakeFighter
 		(
 			sMNPlayersVSSlots[player].player,
@@ -2363,6 +2408,7 @@ void mnPlayersVSUpdateFighter(s32 player)
 			sMNPlayersVSSlots[player].fkind,
 			mnPlayersVSGetFreeCostume(sMNPlayersVSSlots[player].fkind, player)
 		);
+#endif
 		sMNPlayersVSSlots[player].is_status_selected = FALSE;
 	}
 }
@@ -2408,7 +2454,15 @@ void mnPlayersVSUpdateNameAndEmblem(s32 player)
 	else
 	{
 		sMNPlayersVSSlots[player].name_emblem_gobj->flags = GOBJ_FLAG_NONE;
+#ifdef PORT
+		if (sMNPlayersVSSlots[player].name_emblem_fkind != sMNPlayersVSSlots[player].fkind)
+		{
+			sMNPlayersVSSlots[player].name_emblem_fkind = sMNPlayersVSSlots[player].fkind;
+			mnPlayersVSMakeNameAndEmblem(sMNPlayersVSSlots[player].name_emblem_gobj, player, sMNPlayersVSSlots[player].fkind);
+		}
+#else
 		mnPlayersVSMakeNameAndEmblem(sMNPlayersVSSlots[player].name_emblem_gobj, player, sMNPlayersVSSlots[player].fkind);
+#endif
 	}
 }
 
@@ -2461,7 +2515,7 @@ void mnPlayersVSMakePortraitFlash(s32 player)
 	gobj->user_data.s = player;
 	gcAddGObjProcess(gobj, mnPlayersVSPortraitFlashThreadUpdate, nGCProcessKindThread, 1);
 
-	sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[5], &llMNPlayersPortraitsWhiteSquareSprite));
+	sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[5], llMNPlayersPortraitsWhiteSquareSprite));
 	sobj->pos.x = (((portrait >= 6) ? portrait - 6 : portrait) * 45) + 26;
 	sobj->pos.y = (((portrait >= 6) ? 1 : 0) * 43) + 37;
 }
@@ -2652,7 +2706,7 @@ void mnPlayersVSArrowThreadUpdate(GObj *gobj)
 		}
 		else if (mnPlayersVSGetArrowSObj(gobj, 0) == NULL)
 		{
-			sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[0], &llMNPlayersCommonArrowLSprite));
+			sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[0], llMNPlayersCommonArrowLSprite));
 			sobj->pos.x = (player * 69) + 25;
 			sobj->pos.y = 201.0F;
 			sobj->sprite.attr &= ~SP_FASTCOPY;
@@ -2670,7 +2724,7 @@ void mnPlayersVSArrowThreadUpdate(GObj *gobj)
 		}
 		else if (mnPlayersVSGetArrowSObj(gobj, 1) == NULL)
 		{
-			sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[0], &llMNPlayersCommonArrowRSprite));
+			sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[0], llMNPlayersCommonArrowRSprite));
 			sobj->pos.x = (player * 69) + 79;
 			sobj->pos.y = 201.0F;
 			sobj->sprite.attr &= ~SP_FASTCOPY;
@@ -2714,13 +2768,13 @@ void mnPlayersVSMakeHandicapLevel(s32 player)
 
 	if (sMNPlayersVSSlots[player].pkind == nFTPlayerKindMan)
 	{
-		sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[0], &llMNPlayersCommonHandicapTextSprite));
+		sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[0], llMNPlayersCommonHandicapTextSprite));
 		sobj->pos.x = (player * 69) + 35;
 		sobj->user_data.s = nFTPlayerKindMan;
 	}
 	else
 	{
-		sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[0], &llMNPlayersCommonCPLevelTextSprite));
+		sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[0], llMNPlayersCommonCPLevelTextSprite));
 		sobj->pos.x = (player * 69) + 34;
 		sobj->user_data.s = nFTPlayerKindCom;
 	}
@@ -2731,7 +2785,7 @@ void mnPlayersVSMakeHandicapLevel(s32 player)
 	sobj->sprite.attr &= ~SP_FASTCOPY;
 	sobj->sprite.attr |= SP_TRANSPARENT;
 
-	sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[1], &llMNCommonColonSprite));
+	sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[1], llMNCommonColonSprite));
 	sobj->pos.x = (player * 69) + 61;
 	sobj->pos.y = 202.0F;
 	sobj->sprite.red = 0xFF;
@@ -2746,16 +2800,16 @@ void mnPlayersVSMakeHandicapLevelValue(s32 player)
 {
 	intptr_t offsets[/* */] =
 	{
-        &llMNCommonDigit0Sprite,
-        &llMNCommonDigit1Sprite,
-        &llMNCommonDigit2Sprite,
-        &llMNCommonDigit3Sprite,
-        &llMNCommonDigit4Sprite,
-        &llMNCommonDigit5Sprite,
-        &llMNCommonDigit6Sprite,
-        &llMNCommonDigit7Sprite,
-        &llMNCommonDigit8Sprite,
-        &llMNCommonDigit9Sprite
+        llMNCommonDigit0Sprite,
+        llMNCommonDigit1Sprite,
+        llMNCommonDigit2Sprite,
+        llMNCommonDigit3Sprite,
+        llMNCommonDigit4Sprite,
+        llMNCommonDigit5Sprite,
+        llMNCommonDigit6Sprite,
+        llMNCommonDigit7Sprite,
+        llMNCommonDigit8Sprite,
+        llMNCommonDigit9Sprite
     };
 
 	GObj *gobj;
@@ -2916,6 +2970,7 @@ s32 mnPlayersVSUpdateCursorPlacementPriorities(s32 player, s32 puck)
 			unheld_id--;
 		}
 	}
+	return 0;
 }
 
 // 0x801375A8
@@ -3431,11 +3486,11 @@ void mnPlayersVSUpdatePuck(GObj *gobj, s32 puck)
 	f32 pos_x, pos_y;
 	intptr_t offsets[/* */] =
 	{
-		&llMNPlayersCommon1PPuckSprite,
-		&llMNPlayersCommon2PPuckSprite,
-		&llMNPlayersCommon3PPuckSprite,
-		&llMNPlayersCommon4PPuckSprite,
-		&llMNPlayersCommonCPPuckSprite
+		llMNPlayersCommon1PPuckSprite,
+		llMNPlayersCommon2PPuckSprite,
+		llMNPlayersCommon3PPuckSprite,
+		llMNPlayersCommon4PPuckSprite,
+		llMNPlayersCommonCPPuckSprite
 	};
 
 	pos_x = SObjGetStruct(gobj)->pos.x;
@@ -3675,10 +3730,10 @@ void mnPlayersVSMakeCursor(s32 player)
 
 	intptr_t unused_offsets[/* */] =
 	{
-		&llMNPlayersCommon1PTextGradientSprite,
-		&llMNPlayersCommon2PTextGradientSprite,
-		&llMNPlayersCommon3PTextGradientSprite,
-		&llMNPlayersCommon4PTextGradientSprite
+		llMNPlayersCommon1PTextGradientSprite,
+		llMNPlayersCommon2PTextGradientSprite,
+		llMNPlayersCommon3PTextGradientSprite,
+		llMNPlayersCommon4PTextGradientSprite
 	};
 	Vec2f pos[/* */] =
 	{
@@ -3703,7 +3758,7 @@ void mnPlayersVSMakeCursor(s32 player)
 		(
 			Sprite*,
 			sMNPlayersVSFiles[0],
-			&llMNPlayersCommonCursorHandGrabSprite
+			llMNPlayersCommonCursorHandGrabSprite
 		),
 		nGCProcessKindFunc,
 		mnPlayersVSCursorProcUpdate,
@@ -3747,10 +3802,10 @@ void mnPlayersVSMakePuck(s32 player)
 
 	intptr_t offsets[/* */] =
 	{
-		&llMNPlayersCommon1PPuckSprite,
-		&llMNPlayersCommon2PPuckSprite,
-		&llMNPlayersCommon3PPuckSprite,
-		&llMNPlayersCommon4PPuckSprite
+		llMNPlayersCommon1PPuckSprite,
+		llMNPlayersCommon2PPuckSprite,
+		llMNPlayersCommon3PPuckSprite,
+		llMNPlayersCommon4PPuckSprite
 	};
 
 	s32 dropped_priorities[/* */] = { 3, 2, 1, 0 };
@@ -4062,12 +4117,12 @@ void mnPlayersVSMakeSpotlight(void)
 	for (i = 0, x = -1250, y = -850.0F; i < 4; i++, x += 840)
 	{
 		gobj = gcMakeGObjSPAfter(0, NULL, 21, GOBJ_PRIORITY_DEFAULT);
-		gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMNPlayersVSFiles[6], &llMNPlayersSpotlightDObjDesc), NULL);
+		gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMNPlayersVSFiles[6], llMNPlayersSpotlightDObjDesc), NULL);
 		gcAddGObjDisplay(gobj, gcDrawDObjTreeDLLinksForGObj, 9, GOBJ_PRIORITY_DEFAULT, ~0);
 
 		gobj->user_data.s = i;
 
-		gcAddMObjAll(gobj, lbRelocGetFileData(MObjSub***, sMNPlayersVSFiles[6], &llMNPlayersSpotlightMObjSub));
+		gcAddMObjAll(gobj, lbRelocGetFileData(MObjSub***, sMNPlayersVSFiles[6], llMNPlayersSpotlightMObjSub));
 		gcAddGObjProcess(gobj, mnPlayersVSSpotlightProcUpdate, nGCProcessKindFunc, 1);
 		gcPlayAnimAll(gobj);
 
@@ -4113,7 +4168,7 @@ void mnPlayersVSMakeReady(void)
 	gcAddGObjDisplay(gobj, lbCommonDrawSObjAttr, 38, GOBJ_PRIORITY_DEFAULT, ~0);
 	gcAddGObjProcess(gobj, mnPlayersVSReadyProcUpdate, nGCProcessKindFunc, 1);
 
-	sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[0], &llMNPlayersCommonReadyBannerSprite));
+	sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[0], llMNPlayersCommonReadyBannerSprite));
 	sobj->sprite.attr &= ~SP_FASTCOPY;
 	sobj->sprite.attr |= SP_TRANSPARENT;
 	sobj->envcolor.r = 0x00;
@@ -4131,7 +4186,7 @@ void mnPlayersVSMakeReady(void)
 	sobj->pos.x = 0.0F;
 	sobj->pos.y = 71.0F;
 
-	sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[0], &llMNPlayersCommonReadyToFightTextSprite));
+	sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[0], llMNPlayersCommonReadyToFightTextSprite));
 	sobj->sprite.attr &= ~SP_FASTCOPY;
 	sobj->sprite.attr |= SP_TRANSPARENT;
 	sobj->envcolor.r = 0xFF;
@@ -4148,9 +4203,9 @@ void mnPlayersVSMakeReady(void)
 	gcAddGObjProcess(gobj, mnPlayersVSReadyProcUpdate, nGCProcessKindFunc, 1);
 
 #if defined(REGION_US)
-	sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[0], &llMNPlayersCommonPressTextSprite));
+	sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[0], llMNPlayersCommonPressTextSprite));
 #else
-	sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[0], &llMNPlayersCommonPushTextSprite));
+	sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[0], llMNPlayersCommonPushTextSprite));
 #endif
 	sobj->sprite.attr &= ~SP_FASTCOPY;
 	sobj->sprite.attr |= SP_TRANSPARENT;
@@ -4164,7 +4219,7 @@ void mnPlayersVSMakeReady(void)
 #endif
 	sobj->pos.y = 219.0F;
 	
-	sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[0], &llMNPlayersCommonStartTextSprite));
+	sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[0], llMNPlayersCommonStartTextSprite));
 	sobj->sprite.attr &= ~SP_FASTCOPY;
 	sobj->sprite.attr |= SP_TRANSPARENT;
 	sobj->sprite.red = 0xFF;
@@ -4178,7 +4233,7 @@ void mnPlayersVSMakeReady(void)
 	sobj->pos.y = 219.0F;
 
 #if defined(REGION_JP)
-	sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[0], &llMNPlayersCommonButtonTextSprite));
+	sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[0], llMNPlayersCommonButtonTextSprite));
 	sobj->sprite.attr &= ~SP_FASTCOPY;
 	sobj->sprite.attr |= SP_TRANSPARENT;
 	sobj->sprite.red = 0xD6;
@@ -4586,6 +4641,23 @@ void mnPlayersVSInitPlayer(s32 player)
 	sMNPlayersVSSlots[player].p_sfx = NULL;
 	sMNPlayersVSSlots[player].sfx_id = 0;
 	sMNPlayersVSSlots[player].player = NULL;
+#ifdef PORT
+	/* Issue #103: the original decomp clears `player` and the secondary GObj
+	 * pointers above but leaves the seven primary GObj fields below pointing
+	 * at the previous CSS scene's GObjs. On N64 the old GObj pool is reset
+	 * before re-entry so those addresses are harmless; on the port the pool
+	 * lives in the prior scene's arena which taskman.c now frees, so any
+	 * stale pointer here is a freed-arena deref next time something reads it.
+	 * Clear them on every slot init. */
+	sMNPlayersVSSlots[player].cursor = NULL;
+	sMNPlayersVSSlots[player].puck = NULL;
+	sMNPlayersVSSlots[player].type_button = NULL;
+	sMNPlayersVSSlots[player].name_emblem_gobj = NULL;
+	sMNPlayersVSSlots[player].panel_doors = NULL;
+	sMNPlayersVSSlots[player].panel = NULL;
+	sMNPlayersVSSlots[player].type = NULL;
+	sMNPlayersVSSlots[player].figatree_heap = NULL;
+#endif
 	sMNPlayersVSSlots[player].fkind = gSCManagerTransferBattleState.players[player].fkind;
 
 	if ((gSCManagerTransferBattleState.players[player].pkind == nFTPlayerKindMan) && (sMNPlayersVSControllerOrders[player] == -1))
@@ -4679,6 +4751,8 @@ void mnPlayersVSInitVars(void)
 	sMNPlayersVSIsTeamBattle = gSCManagerTransferBattleState.is_team_battle;
 	sMNPlayersVSGameRule = gSCManagerTransferBattleState.game_rules;
 	sMNPlayersVSIsResetPlayers = gSCManagerTransferBattleState.is_reset_players;
+	sMNPlayersVSGameRuleGObj = NULL;
+	sMNPlayersVSGameModeGObj = NULL;
 
 	for (i = 0; i < GMCOMMON_PLAYERS_MAX; i++)
 	{
@@ -4735,7 +4809,7 @@ void mnPlayersVSFuncStart(void)
 	s32 i, j;
 
 	rl_setup.table_addr = (uintptr_t)&lLBRelocTableAddr;
-	rl_setup.table_files_num = (u32)&llRelocFileCount;
+	rl_setup.table_files_num = (u32)llRelocFileCount;
 	rl_setup.file_heap = NULL;
 	rl_setup.file_heap_size = 0;
 	rl_setup.status_buffer = sMNPlayersVSStatusBuffer;

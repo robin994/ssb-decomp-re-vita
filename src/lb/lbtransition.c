@@ -16,89 +16,155 @@ LBTransitionDesc dLBTransitionDescs[/* */] =
 {
     // Paper Plane
     {
+#ifdef PORT
+        llLBTransitionAeroplaneFileID,
+        llLBTransitionAeroplaneDObjDesc,
+        llLBTransitionAeroplaneAnimJoint,
+#else
         &llLBTransitionAeroplaneFileID,
         &llLBTransitionAeroplaneDObjDesc,
         &llLBTransitionAeroplaneAnimJoint,
+#endif
         0
     },
 
     // Checkered Board
     {
+#ifdef PORT
+        llLBTransitionCheckFileID,
+        llLBTransitionCheckDObjDesc,
+        llLBTransitionCheckAnimJoint,
+#else
         &llLBTransitionCheckFileID,
         &llLBTransitionCheckDObjDesc,
         &llLBTransitionCheckAnimJoint,
+#endif
         0
     },
 
     // Falling Board
     {
+#ifdef PORT
+        llLBTransitionGakubuthiFileID,
+        llLBTransitionGakubuthiDObjDesc,
+        llLBTransitionGakubuthiAnimJoint,
+#else
         &llLBTransitionGakubuthiFileID,
         &llLBTransitionGakubuthiDObjDesc,
         &llLBTransitionGakubuthiAnimJoint,
+#endif
         0
     },
 
     // Doors
     {
+#ifdef PORT
+        llLBTransitionKannonFileID,
+        llLBTransitionKannonDObjDesc,
+        llLBTransitionKannonAnimJoint,
+#else
         &llLBTransitionKannonFileID,
         &llLBTransitionKannonDObjDesc,
         &llLBTransitionKannonAnimJoint,
+#endif
         0
     },
 
     // Star
     {
+#ifdef PORT
+        llLBTransitionStarFileID,
+        llLBTransitionStarDObjDesc,
+        llLBTransitionStarAnimJoint,
+#else
         &llLBTransitionStarFileID,
         &llLBTransitionStarDObjDesc,
         &llLBTransitionStarAnimJoint,
+#endif
         0
     },
 
     // Vertical Lines
     {
+#ifdef PORT
+        llLBTransitionSudare1FileID,
+        llLBTransitionSudare1DObjDesc,
+        llLBTransitionSudare1AnimJoint,
+#else
         &llLBTransitionSudare1FileID,
         &llLBTransitionSudare1DObjDesc,
         &llLBTransitionSudare1AnimJoint,
+#endif
         0
     },
 
     // Diagonal Lines
     {
+#ifdef PORT
+        llLBTransitionSudare2FileID,
+        llLBTransitionSudare2DObjDesc,
+        llLBTransitionSudare2AnimJoint,
+#else
         &llLBTransitionSudare2FileID,
         &llLBTransitionSudare2DObjDesc,
         &llLBTransitionSudare2AnimJoint,
+#endif
         0
     },
 
     // Camera Shutter
     {
+#ifdef PORT
+        llLBTransitionCameraFileID,
+        llLBTransitionCameraDObjDesc,
+        llLBTransitionCameraAnimJoint,
+#else
         &llLBTransitionCameraFileID,
         &llLBTransitionCameraDObjDesc,
         &llLBTransitionCameraAnimJoint,
+#endif
         0
     },
 
     // Collapsing Blocks
     {
+#ifdef PORT
+        llLBTransitionBlockFileID,
+        llLBTransitionBlockDObjDesc,
+        llLBTransitionBlockAnimJoint,
+#else
         &llLBTransitionBlockFileID,
         &llLBTransitionBlockDObjDesc,
         &llLBTransitionBlockAnimJoint,
+#endif
         0
     },
 
     // Rotating Frame Zooming Out
     {
+#ifdef PORT
+        llLBTransitionRotScaleFileID,
+        llLBTransitionRotScaleDObjDesc,
+        llLBTransitionRotScaleAnimJoint,
+#else
         &llLBTransitionRotScaleFileID,
         &llLBTransitionRotScaleDObjDesc,
         &llLBTransitionRotScaleAnimJoint,
+#endif
         0
     },
 
     // Curtain
     {
+#ifdef PORT
+        llLBTransitionCurtainFileID,
+        llLBTransitionCurtainDObjDesc,
+        llLBTransitionCurtainAnimJoint,
+#else
         &llLBTransitionCurtainFileID,
         &llLBTransitionCurtainDObjDesc,
         &llLBTransitionCurtainAnimJoint,
+#endif
         0
     }
 };

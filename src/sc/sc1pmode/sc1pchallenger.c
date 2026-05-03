@@ -3,6 +3,10 @@
 #include <sys/video.h>
 #include <sys/rdp.h>
 #include <reloc_data.h>
+#ifdef PORT
+#include <sys/audio.h>
+extern void *func_800269C0_275C0(u16 id);
+#endif
 
 
 // // // // // // // // // // // //
@@ -12,7 +16,11 @@
 // // // // // // // // // // // //
 
 // 0x80132370
+#ifdef PORT
+u32 dSC1PChallengerFileIDs[/* */] = { llSC1PChallengerFileID };
+#else
 u32 dSC1PChallengerFileIDs[/* */] = { &llSC1PChallengerFileID };
+#endif
 
 // 0x80132378
 Lights1 dSC1PChallengerLights1 = gdSPDefLights1(0x20, 0x20, 0x20, 0xFF, 0xFF, 0xFF, 0x3C, 0x3C, 0x3C);
@@ -146,7 +154,11 @@ void sc1PChallengerMakeDecals(void)
     gobj = gcMakeGObjSPAfter(0, NULL, 2, GOBJ_PRIORITY_DEFAULT);
     gcAddGObjDisplay(gobj, sc1PChallengerDecalsProcDisplay, 0, GOBJ_PRIORITY_DEFAULT, ~0);
     
+#ifdef PORT
+    sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sSC1PChallengerFiles[0], llSC1PChallengerDecalExclaimSprite));
+#else
     sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sSC1PChallengerFiles[0], &llSC1PChallengerDecalExclaimSprite));
+#endif
     
     sobj->sprite.attr &= ~SP_FASTCOPY;
     sobj->sprite.attr |= SP_TRANSPARENT;
@@ -154,7 +166,11 @@ void sc1PChallengerMakeDecals(void)
     sobj->pos.x = 139.0F;
     sobj->pos.y = 22.0F;
     
+#ifdef PORT
+    sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sSC1PChallengerFiles[0], llSC1PChallengerWarningTextSprite));
+#else
     sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sSC1PChallengerFiles[0], &llSC1PChallengerWarningTextSprite));
+#endif
     
     sobj->sprite.attr &= ~SP_FASTCOPY;
     sobj->sprite.attr |= SP_TRANSPARENT;
@@ -166,7 +182,11 @@ void sc1PChallengerMakeDecals(void)
     sobj->pos.x = 100.0F;
     sobj->pos.y = 63.0F;
     
+#ifdef PORT
+    sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sSC1PChallengerFiles[0], llSC1PChallengerChallengerTextSprite));
+#else
     sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sSC1PChallengerFiles[0], &llSC1PChallengerChallengerTextSprite));
+#endif
 
     sobj->sprite.attr &= ~SP_FASTCOPY;
     sobj->sprite.attr |= SP_TRANSPARENT;
@@ -178,7 +198,11 @@ void sc1PChallengerMakeDecals(void)
     sobj->pos.x = 55.0F;
     sobj->pos.y = 127.0F;
     
+#ifdef PORT
+    sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sSC1PChallengerFiles[0], llSC1PChallengerApproachingTextSprite));
+#else
     sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sSC1PChallengerFiles[0], &llSC1PChallengerApproachingTextSprite));
+#endif
     
     sobj->sprite.attr &= ~SP_FASTCOPY;
     sobj->sprite.attr |= SP_TRANSPARENT;
@@ -341,7 +365,11 @@ void sc1PChallengerFuncStart(void)
     s32 unused;
 
     rl_setup.table_addr = (uintptr_t)&lLBRelocTableAddr;
+#ifdef PORT
+    rl_setup.table_files_num = (u32)llRelocFileCount;
+#else
     rl_setup.table_files_num = (u32)&llRelocFileCount;
+#endif
     rl_setup.file_heap = NULL;
     rl_setup.file_heap_size = 0;
     rl_setup.status_buffer = sSC1PChallengerStatusBuffer;

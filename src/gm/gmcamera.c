@@ -4,6 +4,9 @@
 #include <if/interface.h>
 #include <sc/scene.h>
 #include <sys/rdp.h>
+#ifdef PORT
+#include <sys/debug.h>
+#endif
 // #include <sys/taskman.h>
 
 // // // // // // // // // // // //

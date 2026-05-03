@@ -1,3 +1,10 @@
+#ifdef PORT
+#include <port_log.h>
+#ifdef PORT
+extern char *getenv(const char *name);
+extern int atoi(const char *s);
+#endif
+#endif
 #include <ft/fighter.h>
 #include <wp/weapon.h>
 #include <it/item.h>
@@ -11,6 +18,8 @@
 #include <sys/audio.h>
 #include <sys/video.h>
 #include <sys/controller.h>
+#include <sys/netpeer.h>
+#include <sys/netreplay.h>
 
 extern void mnVSModeStartScene();
 
@@ -837,6 +846,20 @@ void scManagerRunLoop(sb32 arg)
 	ftManagerSetupFileSize();
 	dSYAudioPublicSettings.unk31 = 72;
 
+#ifdef PORT
+	/* Audio is stubbed on PC — skip the spin-waits that would hang.
+	 * The audio thread would normally clear these flags. */
+	syAudioSetSettingsUpdated();
+	syAudioSetFXType(AL_FX_CUSTOM);
+	/* Skip framebuffer clear — no physical N64 framebuffers on PC.
+	 * Fast3D handles framebuffer management. */
+	port_log("SSB64: scManagerRunLoop — past audio/FB setup\n");
+	/* SRAM is backed by a real file in the user's app-data dir
+	 * (port_save.cpp). Load it so unlocks/options persist across runs
+	 * — without this the backup struct stays at defaults forever. */
+	lbBackupIsSramValid();
+	lbBackupApplyOptions();
+#else
 	syAudioSetSettingsUpdated();
 
 	while (syAudioGetSettingsUpdated() != FALSE)
@@ -859,12 +882,81 @@ void scManagerRunLoop(sb32 arg)
 	{
 		*framebuffer++ = GPACK_RGBA5551(0x00, 0x00, 0x00, 0x01);
 	}
+#endif
 	if (gSYControllerConnectedNum == 0)
 	{
 		gSCManagerSceneData.scene_curr = nSCKindNoController;
 	}
+#ifdef PORT_STAGE_CYCLE_DEMO
+	gSCManagerSceneData.scene_curr    = nSCKindAutoDemo;
+	gSCManagerSceneData.scene_prev    = nSCKindAutoDemo;
+	gSCManagerSceneData.demo_fkind[0] = nFTKindMario;
+	gSCManagerSceneData.demo_fkind[1] = nFTKindFox;
+#endif
+#ifdef PORT
+	{
+		const char *env = getenv("SSB64_START_SCENE");
+		if (env != NULL)
+		{
+			int n = atoi(env);
+			gSCManagerSceneData.scene_curr = n;
+			gSCManagerSceneData.scene_prev = n;
+			/* The override jumps the player into a scene that they may
+			 * not have unlocked yet (e.g. nSCKindSoundTest requires
+			 * LBBACKUP_UNLOCK_MASK_SOUNDTEST). Several menus assume
+			 * scene_prev only ever names a reachable scene, and gate
+			 * GObj creation on the matching unlock bit. Visiting Sound
+			 * Test on a fresh save and pressing B otherwise drops back
+			 * into the Data menu with sMNDataOption=SoundTest but
+			 * sMNDataOptionSoundTestGObj=NULL → SIGSEGV. Granting all
+			 * unlocks alongside the scene override keeps backup-mask
+			 * state consistent with where the user told us to start. */
+			gSCManagerBackupData.unlock_mask |= LBBACKUP_UNLOCK_MASK_ALL;
+			port_log("SSB64: SSB64_START_SCENE override → scene=%d (unlock_mask |= ALL)\n", n);
+		}
+		const char *stage_env = getenv("SSB64_SPGAME_STAGE");
+		if (stage_env != NULL)
+		{
+			int s = atoi(stage_env);
+			gSCManagerSceneData.spgame_stage = s;
+			port_log("SSB64: SSB64_SPGAME_STAGE override → spgame_stage=%d (13=Boss/MasterHand)\n", s);
+		}
+		const char *fkind_env = getenv("SSB64_SPGAME_FKIND");
+		if (fkind_env != NULL)
+		{
+			int f = atoi(fkind_env);
+			gSCManagerSceneData.fkind = f;
+			port_log("SSB64: SSB64_SPGAME_FKIND override → fkind=%d\n", f);
+		}
+		syNetReplayInitDebugEnv();
+		syNetPeerInitDebugEnv();
+	}
+	port_log("SSB64: scManagerRunLoop — controllers=%d scene=%d\n",
+	         (int)gSYControllerConnectedNum, (int)gSCManagerSceneData.scene_curr);
+#endif
 	while (TRUE)
 	{
+#ifdef PORT
+		port_log("SSB64: scManagerRunLoop — entering scene %d\n",
+		         (int)gSCManagerSceneData.scene_curr);
+
+		/* Issue #103 defence: clear cross-scene GObj pointers in the three
+		 * persistent battle-state structs before dispatching the next scene.
+		 * `fighter_gobj` is the only field in SCPlayerData that holds a host
+		 * pointer; it's set at fighter spawn (ftparam.c:197 in movie scenes,
+		 * and via FTStruct linkage in the regular battle path), survives the
+		 * battle scene's arena, and is read across scenes in callbacks like
+		 * ftshadow.c:107 and ftcomputer.c:5623. With taskman.c's prev-arena
+		 * free in place those reads now SIGSEGV at the read site instead of
+		 * hitting plausible-looking stale data. NULL the slot at the scene
+		 * boundary so the read just yields NULL (which the consumers already
+		 * gate on, e.g. controller.c:208). */
+		for (s32 _p = 0; _p < GMCOMMON_PLAYERS_MAX; _p++) {
+			gSCManager1PGameBattleState.players[_p].fighter_gobj = NULL;
+			gSCManagerVSBattleState.players[_p].fighter_gobj = NULL;
+			gSCManagerTransferBattleState.players[_p].fighter_gobj = NULL;
+		}
+#endif
 		switch (gSCManagerSceneData.scene_curr)
 		{
 			case nSCKindNoController:
@@ -1465,7 +1557,11 @@ void scManagerInspectGObj(GObj *gobj)
         ep = efGetStruct(gobj);
 
         // Check if address is within base RDRAM + expansion pak bounds (why though!?)
+#ifdef PORT
+        if (ep != NULL)
+#else
         if (((uintptr_t)ep >= 0x80000000) && ((uintptr_t)ep < 0x80800000))
+#endif
         {
             syDebugDebugPrintf("effect\n");
             syDebugDebugPrintf("fgobj:%x", ep->fighter_gobj);

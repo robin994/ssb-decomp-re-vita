@@ -3,6 +3,11 @@
 
 #define guardNull(in, alt, out) ((out = in), (in != NULL) ? (out = alt) : (out))
 
+#ifdef PORT
+extern dbUnknownLinkStruct D_ovl8_8038C790;
+extern dbFunction D_ovl8_8038C890;
+extern dbUnknownLink D_ovl8_8038C9E8;
+#else
 
 
 extern sb32 func_ovl8_803718FC();
@@ -159,12 +164,17 @@ dbFunction D_ovl8_8038C9E8[] = {
 	{0, func_ovl8_8037C358},
 	{0, NULL},
 };
+#endif
 
 dbUnknown5* func_ovl8_80382EA8(dbUnknown5* arg0, dbUnknownLinkStruct* arg1, dbUnknownLink* arg2, s32 arg3, s32 arg4, s32 arg5);
 
 extern void syRdpSetViewport(Vp*, f32, f32, f32, f32);
 
+#ifdef PORT
+// 0x80382D90
+#else
 // 80382D90
+#endif
 s32 func_ovl8_80382D90(s32 arg0, dbUnknown3* arg1)
 {
 	s32 sp24;
@@ -181,9 +191,26 @@ s32 func_ovl8_80382D90(s32 arg0, dbUnknown3* arg1)
 	return sp24;
 }
 
+#ifdef PORT
+// 0x80382DF4
+#else
 // 80382DF4
+#endif
 dbUnknown5* func_ovl8_80382DF4(dbUnknown5* arg0, dbUnknownLinkStruct* arg1, dbUnknownLink* arg2)
 {
+#ifdef PORT
+    if (arg0 != NULL || ((arg0 = func_ovl8_803717A0(0xAC)) != NULL))
+    {
+        if (arg1 == NULL)
+        {
+            arg1 = &arg0->unk_dbunk5_0x50;\
+            arg2 = &arg0->unk_dbunk5_0x44;
+            #line 37
+            func_ovl8_803717E0(arg1);
+            func_ovl8_8037C2D0(arg2);
+            #line 44
+        }
+#else
 	if (arg0 != NULL || ((arg0 = func_ovl8_803717A0(0xAC)) != NULL))
 	{
 		if (arg1 == NULL)
@@ -195,22 +222,57 @@ dbUnknown5* func_ovl8_80382DF4(dbUnknown5* arg0, dbUnknownLinkStruct* arg1, dbUn
 			func_ovl8_8037C2D0(arg2);
 			#line 197
 		}
+#endif
 
+#ifdef PORT
+        func_ovl8_80373C10(arg0, arg1, arg2);
+#else
 		func_ovl8_80373C10(arg0, arg1, arg2);
+#endif
 
+#ifdef PORT
+        arg0->unk_dbunk5_0x30 = &D_ovl8_8038C790,
+        arg1->db_func = &D_ovl8_8038C890;
+        arg2->unk_dbunklink_0x8 = &D_ovl8_8038C9E8;
+        arg0->unk_dbunk5_0x40.ls = NULL;
+        arg0->unk_dbunk5_0x3C.s_16 = 3;
+    }
+#else
 		arg0->unk_dbunk5_0x30 = &D_ovl8_8038C790,
 		arg1->db_func = &D_ovl8_8038C890;
 		arg2->unk_dbunklink_0x8 = &D_ovl8_8038C9E8;
 		arg0->unk_dbunk5_0x40.ls = NULL;
 		arg0->unk_dbunk5_0x3C.s_16 = 3;
 	}
+#endif
 
+#ifdef PORT
+    return arg0;
+#else
 	return arg0;
+#endif
 }
 
+#ifdef PORT
+// 0x80382EA8
+#else
 // 80382EA8
+#endif
 dbUnknown5* func_ovl8_80382EA8(dbUnknown5* arg0, dbUnknownLinkStruct* arg1, dbUnknownLink* arg2, s32 arg3, s32 arg4, s32 arg5)
 {
+#ifdef PORT
+    if (arg0 != NULL || ((arg0 = func_ovl8_803717A0(0xAC)) != NULL))
+    {
+        if (arg1 == NULL)
+        {
+            arg1 = &arg0->unk_dbunk5_0x50;\
+            arg2 = &arg0->unk_dbunk5_0x44;
+            #line 64
+            func_ovl8_803717E0(arg1);
+            func_ovl8_8037C2D0(arg2);
+            #line 71
+        }
+#else
 	if (arg0 != NULL || ((arg0 = func_ovl8_803717A0(0xAC)) != NULL))
 	{
 		if (arg1 == NULL)
@@ -222,30 +284,76 @@ dbUnknown5* func_ovl8_80382EA8(dbUnknown5* arg0, dbUnknownLinkStruct* arg1, dbUn
 			func_ovl8_8037C2D0(arg2);
 			#line 224
 		}
+#endif
 
+#ifdef PORT
+        func_ovl8_80373CC4(arg0, arg1, arg2, arg3, arg4);
+#else
 		func_ovl8_80373CC4(arg0, arg1, arg2, arg3, arg4);
+#endif
 
+#ifdef PORT
+        arg0->unk_dbunk5_0x30 = &D_ovl8_8038C790,
+        arg1->db_func = &D_ovl8_8038C890;
+        arg2->unk_dbunklink_0x8 = &D_ovl8_8038C9E8;
+        arg0->unk_dbunk5_0x40.ls = arg5;
+        arg0->unk_dbunk5_0x3C.s_16 = 3;
+    }
+#else
 		arg0->unk_dbunk5_0x30 = &D_ovl8_8038C790,
 		arg1->db_func = &D_ovl8_8038C890;
 		arg2->unk_dbunklink_0x8 = &D_ovl8_8038C9E8;
 		arg0->unk_dbunk5_0x40.ls = arg5;
 		arg0->unk_dbunk5_0x3C.s_16 = 3;
 	}
+#endif
 
+#ifdef PORT
+    return arg0;
+#else
 	return arg0;
+#endif
 }
 
+#ifdef PORT
+// 0x80382F70
+#else
 // 80382F70
+#endif
 void func_ovl8_80382F70(dbUnknown5* arg0, s32 arg1)
 {
+#ifdef PORT
+    if (arg0 != NULL)
+    {
+        arg0->unk_dbunk5_0x30 = &D_ovl8_8038C790,
+        arg0->unk_dbunk5_0x38->db_func = &D_ovl8_8038C890;
+        arg0->unk_dbunk5_0x34->unk_dbunklink_0x8 = &D_ovl8_8038C9E8;
+#else
 	if (arg0 != NULL)
 	{
 		arg0->unk_dbunk5_0x30 = &D_ovl8_8038C790,
 		arg0->unk_dbunk5_0x38->db_func = &D_ovl8_8038C890;
 		arg0->unk_dbunk5_0x34->unk_dbunklink_0x8 = &D_ovl8_8038C9E8;
+#endif
 
+#ifdef PORT
+        func_ovl8_80373D88(arg0, 0);
+#else
 		func_ovl8_80373D88(arg0, 0);
+#endif
 
+#ifdef PORT
+        if (arg1 != 0)
+        {
+            func_ovl8_8037C30C(arg0->unk_dbunk5_0x34, 0);
+            func_ovl8_803718C4(arg0->unk_dbunk5_0x38, 0);
+        }
+        if (arg1 & 1)
+        {
+            func_ovl8_803717C0(arg0);
+        }
+    }
+#else
 		if (arg1 != 0)
 		{
 			func_ovl8_8037C30C(arg0->unk_dbunk5_0x34, 0);
@@ -256,22 +364,60 @@ void func_ovl8_80382F70(dbUnknown5* arg0, s32 arg1)
 			func_ovl8_803717C0(arg0);
 		}
 	}
+#endif
 }
 
+#ifdef PORT
+// 0x8038300C
+#else
 // 8038300C
+#endif
 void func_ovl8_8038300C(s32 arg0) {}
 
+#ifdef PORT
+// 0x80383014
+#else
 // 80383014
+#endif
 void func_ovl8_80383014(dbUnknownLinkStruct *arg0, GObj *arg1) 
 {
+#ifdef PORT
+    u32 *v0;
+    DBMenuPosition sp34;
+    void *a3;
+    void *v1;
+    void *a2;
+#else
 	u32 *v0;
 	DBMenuPosition sp34;
 	void *a3;
 	void *v1;
 	void *a2;
+#endif
 
+#ifdef PORT
+    arg0->unk_dbunkstruct_0x40 = arg1;
+#else
 	arg0->unk_dbunkstruct_0x40 = arg1;
+#endif
 
+#ifdef PORT
+    if (arg0->unk_dbunkstruct_0x40 != NULL) 
+    {
+        ((dbUnknownLinkStruct *)v1) = arg0->unk_dbunkstruct_0x38;
+        v0 = ((dbUnknownLinkStruct *)v1)->db_func;
+        ((dbFunction *)v0)[20].unk_dbfunc_0x4(((dbFunction *)v0)[20].unk_dbfunc_0x0 + (uintptr_t)v1, &sp34);
+        
+        if (1);
+        
+        a3 = arg0->unk_dbunkstruct_0x38;
+        v0 = ((dbUnknownLinkStruct *)a3)->unk_dbunkstruct_0x4C;
+        a2 = ((dbUnknownLinkStruct *)v0)->unk_dbunkstruct_0x20;
+        v1 = ((dbUnknownLinkStruct *)a2)->db_func;
+        ((dbFunction *)v1)[9].unk_dbfunc_0x4(((dbFunction *)v1)[9].unk_dbfunc_0x0 + (uintptr_t)a2, &sp34);
+        
+        syRdpSetViewport(&CObjGetStruct((GObj*)arg0->unk_dbunkstruct_0x40)->viewport, sp34.x, sp34.y, (sp34.x + sp34.w), (sp34.y + sp34.h));
+#else
 	if (arg0->unk_dbunkstruct_0x40 != NULL) 
 	{
 		((dbUnknownLinkStruct *)v1) = arg0->unk_dbunkstruct_0x38;
@@ -287,14 +433,44 @@ void func_ovl8_80383014(dbUnknownLinkStruct *arg0, GObj *arg1)
 		((dbFunction *)v1)[9].unk_dbfunc_0x4(((dbFunction *)v1)[9].unk_dbfunc_0x0 + (uintptr_t)a2, &sp34);
 		
 		syRdpSetViewport(&CObjGetStruct((GObj*)arg0->unk_dbunkstruct_0x40)->viewport, sp34.x, sp34.y, (sp34.x + sp34.w), (sp34.y + sp34.h));
+#endif
 
+#ifdef PORT
+        CObjGetStruct((GObj*)arg0->unk_dbunkstruct_0x40)->projection.persp.aspect = (sp34.w / (f32) sp34.h);
+        
+        a3 = arg0->unk_dbunkstruct_0x38;
+        v0 = ((dbUnknownLinkStruct*)a3)->unk_dbunkstruct_0x4C;
+        v1 = ((dbUnknownS38*)v0)->unk_dbunks38_0x18;
+        func_8000A2B4(arg0->unk_dbunkstruct_0x40, ((dbFunction *)v1)[6].unk_dbfunc_0x4(((dbFunction *)v1)[6].unk_dbfunc_0x0 + (uintptr_t)v0));
+#else
 		CObjGetStruct((GObj*)arg0->unk_dbunkstruct_0x40)->projection.persp.aspect = (sp34.w / (f32) sp34.h);
 		
 		a3 = arg0->unk_dbunkstruct_0x38;
 		v0 = ((dbUnknownLinkStruct*)a3)->unk_dbunkstruct_0x4C;
 		v1 = ((dbUnknownS38*)v0)->unk_dbunks38_0x18;
 		func_8000A2B4(arg0->unk_dbunkstruct_0x40, ((dbFunction *)v1)[6].unk_dbfunc_0x4(((dbFunction *)v1)[6].unk_dbfunc_0x0 + (uintptr_t)v0));
+#endif
 
+#ifdef PORT
+        if (1);
+        
+        if (guardNull(arg0, arg0->unk_dbunkstruct_0x38, ((dbUnknownLinkStruct *)v0))->bg_color.a != 0) 
+        {
+            func_ovl8_80376B60(3, &arg0->unk_dbunkstruct_0x38->bg_color, &CObjGetStruct((GObj*)arg0->unk_dbunkstruct_0x40)->color);
+        
+            if (1);
+            
+            v0 = &CObjGetStruct((GObj*)arg0->unk_dbunkstruct_0x40)->flags;
+            *v0 |= COBJ_FLAG_FILLCOLOR;
+        }
+        
+        if (guardNull(arg0, arg0->unk_dbunkstruct_0x38, ((dbUnknownLinkStruct *)v0))->unk_dbunkstruct_0x1C.link == NULL)
+        {
+            v0 = &((GObj*)arg0->unk_dbunkstruct_0x40)->flags;
+            *v0 |= 1;
+        }
+    }
+#else
 		if (1);
 		
 		if (guardNull(arg0, arg0->unk_dbunkstruct_0x38, ((dbUnknownLinkStruct *)v0))->bg_color.a != 0) 
@@ -313,11 +489,30 @@ void func_ovl8_80383014(dbUnknownLinkStruct *arg0, GObj *arg1)
 			*v0 |= 1;
 		}
 	}
+#endif
 }
 
+#ifdef PORT
+// 0x803831C8
+#else
 // 803831C8
+#endif
 void func_ovl8_803831C8(dbUnknown5 *arg0) 
 {
+#ifdef PORT
+    f32 viewport_ulx;
+    f32 viewport_uly;
+    Vp *vp;
+    dbFunction *temp_v0;
+    Vec2h sp3C;
+    DBMenuPosition sp34;
+    dbUnknownLinkStruct *temp_a3;
+    dbUnknownLinkStruct *temp_a2;
+    dbUnknownLinkStruct *temp_v1;
+    dbUnknownLinkStruct *foo;
+    
+    ((dbUnknownLinkStruct*) temp_v0) = arg0->unk_dbunk5_0x38;
+#else
 	f32 viewport_ulx;
 	f32 viewport_uly;
 	Vp *vp;
@@ -330,7 +525,28 @@ void func_ovl8_803831C8(dbUnknown5 *arg0)
 	dbUnknownLinkStruct *foo;
 	
 	((dbUnknownLinkStruct*) temp_v0) = arg0->unk_dbunk5_0x38;
+#endif
 
+#ifdef PORT
+    if (arg0->unk_dbunk5_0x40.gobj != NULL) 
+    {
+        if (1);
+        temp_a3 = arg0->unk_dbunk5_0x38;
+        temp_a2 = temp_a3->unk_dbunkstruct_0x4C;
+        temp_v1 = temp_a2->unk_dbunkstruct_0x20;
+        temp_v0 = temp_v1->db_func;
+        temp_v0[20].unk_dbfunc_0x4(temp_v0[20].unk_dbfunc_0x0 + (uintptr_t)temp_v1, &sp3C);
+        
+        ((dbUnknownLinkStruct*)temp_v0) = arg0->unk_dbunk5_0x38;
+        ((dbFunction*)temp_a2) = ((dbUnknownLinkStruct*)temp_v0)->db_func;
+        ((dbFunction*)temp_a2)[20].unk_dbfunc_0x4(((dbFunction*)temp_a2)[20].unk_dbfunc_0x0 + (uintptr_t)temp_v0, &sp34);
+        
+        viewport_ulx = sp3C.x + sp34.x;
+        viewport_uly = sp3C.y + sp34.y;
+        vp = &CObjGetStruct((GObj*)arg0->unk_dbunk5_0x40.gobj)->viewport;
+        syRdpSetViewport(vp, viewport_ulx, viewport_uly, (sp3C.x + sp34.x + sp34.w), (sp3C.y + sp34.y + sp34.h));
+    }
+#else
 	if (arg0->unk_dbunk5_0x40.gobj != NULL) 
 	{
 		if (1);
@@ -349,26 +565,54 @@ void func_ovl8_803831C8(dbUnknown5 *arg0)
 		vp = &CObjGetStruct((GObj*)arg0->unk_dbunk5_0x40.gobj)->viewport;
 		syRdpSetViewport(vp, viewport_ulx, viewport_uly, (sp3C.x + sp34.x + sp34.w), (sp3C.y + sp34.y + sp34.h));
 	}
+#endif
 }
 
+#ifdef PORT
+// 0x803832A4
+#else
 // 803832A4
+#endif
 void func_ovl8_803832A4(dbUnknownLinkStruct* arg0)
 {
+#ifdef PORT
+    dbUnknownLinkStruct* temp_a1;
+    dbUnknownS38* temp_v0;
+    dbFunction* db_func;
+#else
 	dbUnknownLinkStruct* temp_a1;
 	dbUnknownS38* temp_v0;
 	dbFunction* db_func;
+#endif
 
+#ifdef PORT
+    if (arg0->unk_dbunkstruct_0x40 != 0)
+    {
+        temp_a1 = arg0->unk_dbunkstruct_0x38;
+        temp_v0 = (dbUnknownS38*)temp_a1->unk_dbunkstruct_0x4C;
+        db_func = temp_v0->unk_dbunks38_0x18;
+#else
 	if (arg0->unk_dbunkstruct_0x40 != 0)
 	{
 		temp_a1 = arg0->unk_dbunkstruct_0x38;
 		temp_v0 = (dbUnknownS38*)temp_a1->unk_dbunkstruct_0x4C;
 		db_func = temp_v0->unk_dbunks38_0x18;
+#endif
 
+#ifdef PORT
+        func_8000A2B4(arg0->unk_dbunkstruct_0x40, db_func[6].unk_dbfunc_0x4(db_func[6].unk_dbfunc_0x0 + (uintptr_t)temp_v0, temp_a1, arg0));
+    }
+#else
 		func_8000A2B4(arg0->unk_dbunkstruct_0x40, db_func[6].unk_dbfunc_0x4(db_func[6].unk_dbfunc_0x0 + (uintptr_t)temp_v0, temp_a1, arg0));
 	}
+#endif
 }
 
+#ifdef PORT
+// 0x80383300
+#else
 // 80383300
+#endif
 void func_ovl8_80383300(dbUnknownLinkStruct* arg0)
 {
 	s32 temp_v1;
@@ -381,7 +625,11 @@ void func_ovl8_80383300(dbUnknownLinkStruct* arg0)
 		*temp_v0 &= ~1;
 }
 
+#ifdef PORT
+// 0x80383344
+#else
 // 80383344
+#endif
 void func_ovl8_80383344(dbUnknownLinkStruct* arg0)
 {
 	s32 temp_v1;
@@ -392,4 +640,8 @@ void func_ovl8_80383344(dbUnknownLinkStruct* arg0)
 
 	if (temp_v1 != 0)
 		*temp_v0 |= 1;
+#ifdef PORT
 }
+#else
+}
+#endif

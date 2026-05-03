@@ -25,6 +25,13 @@ typedef struct {
 	s32 unk54;
 } unkStructB;
 
+#ifdef PORT
+extern dbUnknownLinkStruct D_ovl8_8038CA10;
+extern dbFunction D_ovl8_8038CB58;
+extern dbUnknownLink D_ovl8_8038CCB0;
+extern s32 D_ovl8_8038CCD8;
+extern char D_ovl8_8038CD8C[4];
+#else
 extern void func_ovl8_803718FC();
 extern void func_ovl8_80371930();
 extern void func_ovl8_80371960();
@@ -83,7 +90,9 @@ extern void func_ovl8_80373BC0();
 extern void func_ovl8_80373BD4();
 extern void func_ovl8_8037C344();
 extern void func_ovl8_8037C358();
+#endif
 
+#ifndef PORT
 void func_ovl8_80383510(dbUnknown5* arg0, s32 arg1);
 s32 func_ovl8_803835C4(s32* arg0, s32 arg1);
 void func_ovl8_80383618(unkStructB* arg0, u8 arg1);
@@ -96,7 +105,9 @@ void func_ovl8_803838E0(unkStructB* arg0);
 void func_ovl8_803839D0(unkStructB* arg0, u8* arg1);
 s32 func_ovl8_80383A78(s32* arg0);
 s32 func_ovl8_80383A80(unkStructB* arg0, s32 arg1);
+#endif
 void func_ovl8_80383B58(unkStructB* arg0);
+#ifndef PORT
 void func_ovl8_80383BC4(dbUnknown5* arg0);
 void func_ovl8_80383D4C(dbUnknown5* arg0);
 void func_ovl8_80383DD4(dbUnknown5* arg0, DBMenuPosition* arg1, s32 arg2);
@@ -253,6 +264,7 @@ s32 D_ovl8_8038CCD8[] = {
 
 char D_ovl8_8038CD8C[] = {(char)0xFF, (char)0xFF, (char)0xFF, 0x00};
 
+#endif
 
 // 0x803833A0
  dbUnknown5* func_ovl8_803833A0(dbUnknown5* arg0, dbUnknownLinkStruct* arg1, dbUnknownLink* arg2)
@@ -263,10 +275,18 @@ char D_ovl8_8038CD8C[] = {(char)0xFF, (char)0xFF, (char)0xFF, 0x00};
           {
               arg1 = &arg0->unk_dbunk5_0x58;
               arg2 = &arg0->unk_dbunk5_0xB4;
+#ifdef PORT
+              #line 42
+#else
               #line 263
+#endif
               func_ovl8_803717E0(arg1);
               func_ovl8_8037C2D0(arg2);
+#ifdef PORT
+              #line 49
+#else
               #line 270
+#endif
           }
           func_ovl8_803733AC(arg0, arg1, arg2);
           arg0->unk_dbunk5_0x30 = &D_ovl8_8038CA10;
@@ -286,10 +306,18 @@ dbUnknown5* func_ovl8_80383450(dbUnknown5* arg0, dbUnknownLinkStruct* arg1, dbUn
         {
             arg1 = &arg0->unk_dbunk5_0x58;
             arg2 = &arg0->unk_dbunk5_0xB4;
+#ifdef PORT
+            #line 57
+#else
             #line 278
+#endif
             func_ovl8_803717E0(arg1);
             func_ovl8_8037C2D0(arg2);
+#ifdef PORT
+            #line 64
+#else
             #line 285
+#endif
         }
         func_ovl8_8037345C(arg0, arg1, arg2, arg3, arg4);
         arg0->unk_dbunk5_0x30 = &D_ovl8_8038CA10;

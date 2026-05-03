@@ -19,74 +19,74 @@ MNCongraPicture dMNCongraPictures[/* */] =
 {
 	// Mario
 	{ 
-		&llMNCongraMarioBottomFileID,         &llMNCongraMarioBottomSprite, 
-		&llMNCongraMarioTopFileID,         &llMNCongraMarioTopSprite 
+		llMNCongraMarioBottomFileID,         llMNCongraMarioBottomSprite, 
+		llMNCongraMarioTopFileID,         llMNCongraMarioTopSprite 
 	},
 
 	// Fox
 	{ 
-		&llMNCongraFoxBottomFileID, &llMNCongraFoxBottomSprite,
-		&llMNCongraFoxTopFileID,    &llMNCongraFoxTopSprite
+		llMNCongraFoxBottomFileID, llMNCongraFoxBottomSprite,
+		llMNCongraFoxTopFileID,    llMNCongraFoxTopSprite
 	},
 
 	// Donkey Kong
 	{ 
-		&llMNCongraDonkeyBottomFileID, &llMNCongraDonkeyBottomSprite,
-		&llMNCongraDonkeyTopFileID,    &llMNCongraDonkeyTopSprite
+		llMNCongraDonkeyBottomFileID, llMNCongraDonkeyBottomSprite,
+		llMNCongraDonkeyTopFileID,    llMNCongraDonkeyTopSprite
 	},
 
 	// Samus
 	{ 
-		&llMNCongraSamusBottomFileID, &llMNCongraSamusBottomSprite,
-		&llMNCongraSamusTopFileID,    &llMNCongraSamusTopSprite
+		llMNCongraSamusBottomFileID, llMNCongraSamusBottomSprite,
+		llMNCongraSamusTopFileID,    llMNCongraSamusTopSprite
 	},
 
 	// Luigi
 	{ 
-		&llMNCongraLuigiBottomFileID, &llMNCongraLuigiBottomSprite,
-		&llMNCongraLuigiTopFileID,    &llMNCongraLuigiTopSprite
+		llMNCongraLuigiBottomFileID, llMNCongraLuigiBottomSprite,
+		llMNCongraLuigiTopFileID,    llMNCongraLuigiTopSprite
 	},
 
 	// Link
 	{
-		&llMNCongraLinkBottomFileID, &llMNCongraLinkBottomSprite,
-		&llMNCongraLinkTopFileID,    &llMNCongraLinkTopSprite
+		llMNCongraLinkBottomFileID, llMNCongraLinkBottomSprite,
+		llMNCongraLinkTopFileID,    llMNCongraLinkTopSprite
 	},
 
 	// Yoshi
 	{
-		&llMNCongraYoshiBottomFileID, &llMNCongraYoshiBottomSprite,
-		&llMNCongraYoshiTopFileID,    &llMNCongraYoshiTopSprite
+		llMNCongraYoshiBottomFileID, llMNCongraYoshiBottomSprite,
+		llMNCongraYoshiTopFileID,    llMNCongraYoshiTopSprite
 	},
 
 	// Captain Falcon
 	{ 
-		&llMNCongraCaptainBottomFileID, &llMNCongraCaptainBottomSprite,
-		&llMNCongraCaptainTopFileID,    &llMNCongraCaptainTopSprite
+		llMNCongraCaptainBottomFileID, llMNCongraCaptainBottomSprite,
+		llMNCongraCaptainTopFileID,    llMNCongraCaptainTopSprite
 	},
 
 	// Kirby
 	{
-		&llMNCongraKirbyBottomFileID, &llMNCongraKirbyBottomSprite,
-		&llMNCongraKirbyTopFileID,    &llMNCongraKirbyTopSprite
+		llMNCongraKirbyBottomFileID, llMNCongraKirbyBottomSprite,
+		llMNCongraKirbyTopFileID,    llMNCongraKirbyTopSprite
 	},
 
 	// Pikachu
 	{
-		&llMNCongraPikachuBottomFileID, &llMNCongraPikachuBottomSprite,
-		&llMNCongraPikachuTopFileID,    &llMNCongraPikachuTopSprite
+		llMNCongraPikachuBottomFileID, llMNCongraPikachuBottomSprite,
+		llMNCongraPikachuTopFileID,    llMNCongraPikachuTopSprite
 	},
 
 	// Jigglypuff
 	{
-		&llMNCongraPurinBottomFileID, &llMNCongraPurinBottomSprite,
-		&llMNCongraPurinTopFileID,    &llMNCongraPurinTopSprite
+		llMNCongraPurinBottomFileID, llMNCongraPurinBottomSprite,
+		llMNCongraPurinTopFileID,    llMNCongraPurinTopSprite
 	},
 
 	// Ness
 	{
-		&llMNCongraNessBottomFileID, &llMNCongraNessBottomSprite,
-		&llMNCongraNessTopFileID,    &llMNCongraNessTopSprite
+		llMNCongraNessBottomFileID, llMNCongraNessBottomSprite,
+		llMNCongraNessTopFileID,    llMNCongraNessTopSprite
 	}
 };
 
@@ -110,9 +110,9 @@ Gfx dMNCongraDisplayList[/* */] =
 // 0x80132208
 SYVideoSetup dMNCongraVideoSetup =
 {
-	SYVIDEO_DEFINE_FRAMEBUFFER_ADDR(320, 230, 0, 10, u32, 0),
-	SYVIDEO_DEFINE_FRAMEBUFFER_ADDR(320, 230, 0, 10, u32, 1),
-	SYVIDEO_DEFINE_FRAMEBUFFER_ADDR(320, 230, 0, 10, u32, 2),
+	(void *) SYVIDEO_DEFINE_FRAMEBUFFER_ADDR(320, 230, 0, 10, u32, 0),
+	(void *) SYVIDEO_DEFINE_FRAMEBUFFER_ADDR(320, 230, 0, 10, u32, 1),
+	(void *) SYVIDEO_DEFINE_FRAMEBUFFER_ADDR(320, 230, 0, 10, u32, 2),
 	NULL,
 	320,
 	240, 
@@ -269,7 +269,7 @@ void mnCongraFuncStart(void)
 	sMNCongraIsProceedScene = 0;
 
 	rl_setup.table_addr = (uintptr_t)&lLBRelocTableAddr;
-	rl_setup.table_files_num = (u32)&llRelocFileCount;
+	rl_setup.table_files_num = (u32)llRelocFileCount;
 	rl_setup.file_heap = NULL;
 	rl_setup.file_heap_size = 0;
 	rl_setup.status_buffer = sMNCongraStatusBuffer;
@@ -406,7 +406,9 @@ void mnCongraStartScene(void)
 
 	fb32 = (u32*)SYVIDEO_DEFINE_FRAMEBUFFER_ADDR(320, 230, 0, 10, u32, 0);
 
+#ifndef PORT
 	while ((uintptr_t)fb32 < 0x80400000) { *fb32++ = GPACK_RGBA8888(0x00, 0x00, 0x00, 0xFF); } // WARNING: Newline memes!
+#endif
 
 	switch (gSCManagerSceneData.scene_prev)
 	{
@@ -428,5 +430,7 @@ void mnCongraStartScene(void)
 	dMNCongraTaskmanSetup.scene_setup.arena_size = (size_t) (SYVIDEO_DEFINE_FRAMEBUFFER_ADDR(320, 230, 0, 10, u32, 0) - (uintptr_t)&ovl57_BSS_END);
 	syTaskmanStartTask(&dMNCongraTaskmanSetup); fb16 = (u16*) gSYFramebufferSets; // WARNING: Newline memes!
 
+#ifndef PORT
 	while ((uintptr_t)fb16 < 0x80400000) { *fb16++ = GPACK_RGBA5551(0x00, 0x00, 0x00, 0x01); }
+#endif
 }

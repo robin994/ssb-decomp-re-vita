@@ -3,6 +3,9 @@
 #include <db/debug.h>
 
 
+#ifdef PORT
+extern dbUnknownLink D_ovl8_8038A170;
+#else
 /* ************************************************************************** */
 /*                                DATA                                        */
 /* ************************************************************************** */
@@ -1195,23 +1198,40 @@ dbFunction D_ovl8_8038A170[] = {
 /* ************************************************************************** */
 /*                              FUNCTIONS                                     */
 /* ************************************************************************** */
+#endif
 
 // 0x8037C2D0
+#ifdef PORT
+void* func_ovl8_8037C2D0(void** arg0)
+#else
 void *func_ovl8_8037C2D0(void **arg0)
+#endif
 {
 	if (arg0 != NULL || (arg0 = func_ovl8_803717A0(0xC)))
+#ifdef PORT
+		arg0[0x8/4] = &D_ovl8_8038A170;
+#else
 		arg0[0x8 / 4] = &D_ovl8_8038A170;
+#endif
 
 	return arg0;
 }
 
 // 0x8037C30C
+#ifdef PORT
+void func_ovl8_8037C30C(dbUnknownLink* arg0, s32 arg1)
+#else
 void func_ovl8_8037C30C(dbUnknownLink *arg0, s32 arg1)
+#endif
 {
 	if (arg0 == NULL)
 		return;
 
+#ifdef PORT
+	arg0->unk_dbunklink_0x8 = &D_ovl8_8038A170;
+#else
 	arg0->unk_dbunklink_0x8 = (dbUnknownLink *)&D_ovl8_8038A170;
+#endif
 
 	if (arg1 & 1)
 		func_ovl8_803717C0(arg0);
@@ -1224,7 +1244,11 @@ s32 func_ovl8_8037C344(s32 arg0, s32 arg1, s32 arg2)
 }
 
 // 0x8037C358
+#ifdef PORT
+s32 func_ovl8_8037C358(dbUnknown5_2* arg0, s32 arg1, s32 arg2)
+#else
 s32 func_ovl8_8037C358(dbUnknown5_2 *arg0, s32 arg1, s32 arg2)
+#endif
 {
 	dbUnknown5_2 *temp_a3;
 	dbFunction *temp_v0;
@@ -1247,7 +1271,15 @@ s32 func_ovl8_8037C358(dbUnknown5_2 *arg0, s32 arg1, s32 arg2)
 }
 
 // 0x8037C3AC
+#ifdef PORT
+void func_ovl8_8037C3AC(s32* arg0, s32 arg1)
+#else
 void func_ovl8_8037C3AC(s32 *arg0, s32 arg1)
+#endif
 {
 	arg0[1] = arg1;
+#ifdef PORT
 }
+#else
+}
+#endif

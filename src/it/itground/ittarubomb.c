@@ -23,7 +23,11 @@ ITDesc dITTaruBombItemDesc =
 {
     nITKindTaruBomb,                            // Item Kind
     &gGRCommonStruct.bonus3.item_head,          // Pointer to item file data?
+#ifdef PORT
+    llGRBonus3MapTaruBombItemAttributes,       // Offset of item attributes in file?
+#else
     &llGRBonus3MapTaruBombItemAttributes,       // Offset of item attributes in file?
+#endif
 
     // DObj transformation struct
     {
@@ -148,7 +152,11 @@ void itTaruBombContainerSmashMakeEffect(Vec3f *pos)
         {
             gcAddGObjDisplay(effect_gobj, gcDrawDObjTreeForGObj, 11, GOBJ_PRIORITY_DEFAULT, ~0);
 
+#ifdef PORT
+            dl = (Gfx*) ((*(uintptr_t*)((uintptr_t)*dITTaruBombItemDesc.p_file + dITTaruBombItemDesc.o_attributes) - (uintptr_t)llGRBonus3MapTaruBombDataStart) + (uintptr_t)llGRBonus3MapTaruBombEffectDisplayList);
+#else
             dl = (Gfx*) ((*(uintptr_t*)((uintptr_t)*dITTaruBombItemDesc.p_file + dITTaruBombItemDesc.o_attributes) - (uintptr_t)&llGRBonus3MapTaruBombDataStart) + (uintptr_t)&llGRBonus3MapTaruBombEffectDisplayList);
+#endif
 
             for (i = 0; i < ITTARUBOMB_EFFECT_COUNT; i++)
             {
@@ -293,7 +301,11 @@ sb32 itTaruBombExplodeProcUpdate(GObj *item_gobj)
     {
         return TRUE;
     }
+#ifdef PORT
+    else itMainUpdateAttackEvent(item_gobj, itGetAttackEvent(dITTaruBombItemDesc, llGRBonus3MapTaruBombAttackEvents));
+#else
     else itMainUpdateAttackEvent(item_gobj, itGetAttackEvent(dITTaruBombItemDesc, &llGRBonus3MapTaruBombAttackEvents));
+#endif
 
     return FALSE;
 }
@@ -373,7 +385,11 @@ void itTaruBombExplodeInitVars(GObj *item_gobj)
     ip->damage_coll.hitstatus = nGMHitStatusNone;
 
     itMainRefreshAttackColl(item_gobj);
+#ifdef PORT
+    itMainUpdateAttackEvent(item_gobj, itGetAttackEvent(dITTaruBombItemDesc, llGRBonus3MapTaruBombAttackEvents));
+#else
     itMainUpdateAttackEvent(item_gobj, itGetAttackEvent(dITTaruBombItemDesc, &llGRBonus3MapTaruBombAttackEvents));
+#endif
 }
 
 // 0x80185284

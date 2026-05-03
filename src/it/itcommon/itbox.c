@@ -1,6 +1,9 @@
 #include <it/item.h>
 #include <sc/scene.h>
 #include <reloc_data.h>
+#ifdef PORT
+extern void *func_800269C0_275C0(u16 id);
+#endif
 
 // // // // // // // // // // // //
 //                               //
@@ -24,7 +27,11 @@ ITDesc dITBoxItemDesc =
 {
     nITKindBox,                             // Item Kind
     &gITManagerCommonData,                  // Pointer to item file data?
+#ifdef PORT
+    llITCommonDataBoxItemAttributes,       // Offset of item attributes in file?
+#else
     &llITCommonDataBoxItemAttributes,       // Offset of item attributes in file?
+#endif
 
     // DObj transformation struct
     {
@@ -189,7 +196,11 @@ void itBoxContainerSmashMakeEffect(Vec3f *pos)
         {
             gcAddGObjDisplay(effect_gobj, gcDrawDObjTreeForGObj, 11, GOBJ_PRIORITY_DEFAULT, ~0);
 
+#ifdef PORT
+            dl = (Gfx*) ((*(uintptr_t*) ((uintptr_t)*dITBoxItemDesc.p_file + dITBoxItemDesc.o_attributes) - (intptr_t)llITCommonDataBoxDataStart) + (intptr_t)llITCommonDataBoxEffectDisplayList);
+#else
             dl = (Gfx*) ((*(uintptr_t*) ((uintptr_t)*dITBoxItemDesc.p_file + dITBoxItemDesc.o_attributes) - (intptr_t)&llITCommonDataBoxDataStart) + (intptr_t)&llITCommonDataBoxEffectDisplayList);
+#endif
 
             for (i = 0; i < ITCONTAINER_EFFECT_COUNT; i++)
             {
@@ -437,7 +448,11 @@ sb32 itBoxExplodeProcUpdate(GObj *item_gobj)
     {
         return TRUE;
     }
+#ifdef PORT
+    else itMainUpdateAttackEvent(item_gobj, itGetAttackEvent(dITBoxItemDesc, llITCommonDataBoxAttackEvents));
+#else
     else itMainUpdateAttackEvent(item_gobj, itGetAttackEvent(dITBoxItemDesc, &llITCommonDataBoxAttackEvents));
+#endif
 
     return FALSE;
 }
@@ -484,7 +499,11 @@ void itBoxExplodeInitVars(GObj *item_gobj)
 
     itMainClearOwnerStats(item_gobj);
     itMainRefreshAttackColl(item_gobj);
+#ifdef PORT
+    itMainUpdateAttackEvent(item_gobj, itGetAttackEvent(dITBoxItemDesc, llITCommonDataBoxAttackEvents));
+#else
     itMainUpdateAttackEvent(item_gobj, itGetAttackEvent(dITBoxItemDesc, &llITCommonDataBoxAttackEvents));
+#endif
 }
 
 // 0x80179AD4

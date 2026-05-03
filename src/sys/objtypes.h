@@ -81,13 +81,21 @@ union AObjEvent16
     s16 s;
     u16 u;
 
+#if IS_BIG_ENDIAN
     struct
     {
         u16 opcode : 5;
         u16 flags : 10;
         u16 toggle : 1;
-
     } command;
+#else
+    struct
+    {
+        u16 toggle : 1;
+        u16 flags : 10;
+        u16 opcode : 5;
+    } command;
+#endif
 };
 
 // Normal-sized AObj event struct for common animation scripts
@@ -96,15 +104,27 @@ union AObjEvent32
     f32 f;
     s32 s;
     u32 u;
+#ifdef PORT
+    u32 p;      // Relocation token — use PORT_RESOLVE(event->p)
+#else
     void *p;
+#endif
 
+#if IS_BIG_ENDIAN
     struct
     {
         u32 opcode : 7;
         u32 flags : 10;
         u32 payload : 15;
-        
     } command;
+#else
+    struct
+    {
+        u32 payload : 15;
+        u32 flags : 10;
+        u32 opcode : 7;
+    } command;
+#endif
 };
 
 /*
@@ -302,7 +322,11 @@ struct MObjSub
     u16 pad00;
     u8 fmt;
     u8 siz;
+#ifdef PORT
+    u32 sprites;    // Relocation token — array of texture image tokens
+#else
     void **sprites; // should this be a pointer to an array of images (sprite set)?
+#endif
     u16 unk08;
     u16 unk0A;
     u16 unk0C;
@@ -314,7 +338,11 @@ struct MObjSub
     f32 scav;       // V-Scale?
     f32 unk24;
     f32 unk28;
+#ifdef PORT
+    u32 palettes;   // Relocation token — array of palette tokens
+#else
     void **palettes;  // palette pointers?
+#endif
     u16 flags;      // command flags?
     u8 block_fmt;   // texture image format?
     u8 block_siz;
@@ -365,10 +393,40 @@ struct DObjTransformTypes
     u8 tk3;
 };
 
+// // // // // // // // // // // //
+//                               //
+//    PORT TOKEN RESOLUTION      //
+//                               //
+// // // // // // // // // // // //
+
+// File-data structs use u32 tokens in place of pointers on 64-bit PC.
+// The relocation bridge writes tokens into 4-byte slots; game code
+// resolves them back to real pointers via PORT_RESOLVE().
+// PORT_REGISTER() converts a runtime pointer to a token for storage
+// in a token field (e.g. when overriding a sprite LUT at runtime).
+// On non-PORT builds both macros are no-op passthroughs.
+#ifdef PORT
+extern void *portRelocResolvePointer(unsigned int token);
+extern void *portRelocResolvePointerDebug(unsigned int token, const char *file, int line);
+extern unsigned int portRelocRegisterPointer(void *ptr);
+extern void *portRelocResolveArrayEntry(const void *array_ptr, unsigned int index);
+#define PORT_RESOLVE(token) portRelocResolvePointerDebug((unsigned int)(token), __FILE__, __LINE__)
+#define PORT_REGISTER(ptr) portRelocRegisterPointer((void*)(ptr))
+#define PORT_RESOLVE_ARRAY(array_ptr, index) portRelocResolveArrayEntry((const void*)(array_ptr), (unsigned int)(index))
+#else
+#define PORT_RESOLVE(token) (token)
+#define PORT_REGISTER(ptr) (ptr)
+#define PORT_RESOLVE_ARRAY(array_ptr, index) (((array_ptr) != NULL) ? ((void *const*)(array_ptr))[index] : NULL)
+#endif
+
 struct DObjDesc
 {
     s32 id;
+#ifdef PORT
+    u32 dl;     // Relocation token — use PORT_RESOLVE(dobjdesc->dl)
+#else
     void *dl;
+#endif
     Vec3f translate;
     Vec3f rotate;
     Vec3f scale;
@@ -377,33 +435,64 @@ struct DObjDesc
 struct DObjTraDesc
 {
     s32 id;
+#ifdef PORT
+    u32 dl;     // Relocation token
+#else
     void *dl;
+#endif
     Vec3f translate;
 };
 
 struct DObjMultiList
 {
     s32 id;
+#ifdef PORT
+    u32 dl1, dl2;   // Relocation tokens
+#else
     Gfx *dl1, *dl2;
+#endif
 };
 
 struct DObjDLLink
 {
     s32 list_id;
+#ifdef PORT
+    u32 dl;     // Relocation token
+#else
     Gfx *dl;
+#endif
 };
 
 struct DObjDistDL
 {
     f32 target_dist;
+#ifdef PORT
+    u32 dl;     // Relocation token
+#else
     Gfx *dl;
+#endif
 };
 
 struct DObjDistDLLink
 {
     f32 target_dist;
+#ifdef PORT
+    u32 dl_link;    // Relocation token
+#else
     DObjDLLink *dl_link;
+#endif
 };
+
+#ifdef PORT
+_Static_assert(sizeof(DObjDesc) == 44, "DObjDesc must be 44 bytes to match file data layout");
+_Static_assert(sizeof(DObjTraDesc) == 20, "DObjTraDesc must be 20 bytes to match file data layout");
+_Static_assert(sizeof(DObjMultiList) == 12, "DObjMultiList must be 12 bytes to match file data layout");
+_Static_assert(sizeof(DObjDLLink) == 8, "DObjDLLink must be 8 bytes to match file data layout");
+_Static_assert(sizeof(DObjDistDL) == 8, "DObjDistDL must be 8 bytes to match file data layout");
+_Static_assert(sizeof(DObjDistDLLink) == 8, "DObjDistDLLink must be 8 bytes to match file data layout");
+_Static_assert(sizeof(AObjEvent32) == 4, "AObjEvent32 must be 4 bytes to match file data layout");
+_Static_assert(sizeof(MObjSub) == 0x78, "MObjSub must be 0x78 bytes to match file data layout");
+#endif
 
 struct GCGfxLink
 {

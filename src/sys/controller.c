@@ -4,6 +4,9 @@
 #include <sys/scheduler.h>
 #include <missing_libultra.h>
 #include <PR/os.h>
+#include "enhancements/enhancements.h"
+#include "sc/scmanager.h"
+#include "sc/sctypes.h"
 
 // 0x800450F0
 OSMesgQueue sSYControllerInitMesgQueue; // Queue for OS controller Init, Status, and Read
@@ -180,6 +183,42 @@ void syControllerUpdateGlobalData(void)
             gSYControllerDevices[i].stick_range.x = sSYControllerDescs[i].unk0E;
             gSYControllerDevices[i].stick_range.y = sSYControllerDescs[i].unk0F;
 
+            // NRage-style per-axis stick remap. Runs unconditionally (also in
+            // menus / CSS) because the formula is the user's chosen stick
+            // shaping. No-op when the per-player toggle is off — LUS's stock
+            // octagon-clamped output flows through unchanged in that case.
+            // Must come BEFORE c_stick_smash so the synthetic ±80 values that
+            // c_stick_smash writes into stick_range are not subsequently
+            // re-rescaled by our deadzone/range formula.
+            port_enhancement_analog_remap(i,
+                &gSYControllerDevices[i].stick_range.x,
+                &gSYControllerDevices[i].stick_range.y);
+
+            // Apply input remap enhancements only during gameplay. The
+            // BattleState->players[] array is only valid in VS / 1P scenes;
+            // it's NULL in menus / CSS / opening / staffroll, and we must
+            // not deref it. Bound `i` against GMCOMMON_PLAYERS_MAX explicitly
+            // because the loop limit is `(ARRAY_COUNT(descs)+ARRAY_COUNT(devs))/2`
+            // — equal to GMCOMMON_PLAYERS_MAX today but the math is fragile
+            // and `players[]` overruns would clobber the next BattleState
+            // field on LP64 with the same fingerprint as past per-player-
+            // array bugs (see docs/bugs/per_gkind_table_inishie_short).
+            if (i < GMCOMMON_PLAYERS_MAX
+                && gSCManagerBattleState != NULL
+                && gSCManagerBattleState->players[i].fighter_gobj != NULL) {
+                port_enhancement_c_stick_smash(i,
+                    &gSYControllerDevices[i].button_hold,
+                    &gSYControllerDevices[i].button_tap,
+                    &gSYControllerDevices[i].stick_range.x,
+                    &gSYControllerDevices[i].stick_range.y,
+                    sSYControllerDescs[i].unk04);
+
+                port_enhancement_dpad_jump(i,
+                    &gSYControllerDevices[i].button_hold,
+                    &gSYControllerDevices[i].button_tap,
+                    sSYControllerDescs[i].unk04);
+            }
+
             sSYControllerDescs[i].unk04 = sSYControllerDescs[i].unk08 = sSYControllerDescs[i].unk0C = 0;
         }
     }
@@ -312,6 +351,7 @@ void syControllerSetStatusDelay(s32 delay)
 void syControllerUpdateRumbleEvent(s32 port, s32 ev_kind)
 {
     s32 i;
+    OSMesg msg;
 
     for (i = 0; i < MAXCONTROLLERS; i++)
     {
@@ -322,13 +362,32 @@ void syControllerUpdateRumbleEvent(s32 port, s32 ev_kind)
     }
     if (i == MAXCONTROLLERS)
     {
-        osRecvMesg(&sSYControllerDeviceMesgQueue, (OSMesg*)&i, OS_MESG_BLOCK);
+        osRecvMesg(&sSYControllerDeviceMesgQueue, &msg, OS_MESG_BLOCK);
+        i = (s32)(intptr_t)msg;
     }
     else D_80045268[i].unk00 = 1;
     
     D_80045268[i].unk10 = port;
     D_80045268[i].unk14 = ev_kind;
+#ifdef PORT
+    /* N64 punned &D_80045268[i].unk04 as a ContMotorEvt* because the
+     * fixed-4-byte pointer N64 ABI let (unk04,unk08,unk0C,unk10,unk14)
+     * line up exactly with (type,mesg,cbQueue,contID,cmd).  On LP64 that
+     * pun is broken — OSMesg / OSMesgQueue* grow to 8 bytes and the
+     * receiver's `((ContMotorEvt*)evt)->cbQueue` ends up reading unrelated
+     * memory (typically decoding to 0x1, which crashes in osSendMesg at
+     * &mq->validCount == 0x11).  Populate the dedicated port_motor_evt
+     * field and dispatch that address instead so the struct layout is
+     * natural on both ABIs. */
+    D_80045268[i].port_motor_evt.evt.type    = CONT_EVENT_MOTOR;
+    D_80045268[i].port_motor_evt.evt.mesg    = (OSMesg)(intptr_t)i;
+    D_80045268[i].port_motor_evt.evt.cbQueue = &sSYControllerDeviceMesgQueue;
+    D_80045268[i].port_motor_evt.contID      = port;
+    D_80045268[i].port_motor_evt.cmd         = (MotorCmd)ev_kind;
+    osSendMesg(&sSYControllerEventMesgQueue, (OSMesg)&D_80045268[i].port_motor_evt, OS_MESG_NOBLOCK);
+#else
     osSendMesg(&sSYControllerEventMesgQueue, (OSMesg)&D_80045268[i].unk04, OS_MESG_NOBLOCK);
+#endif
 }
 
 // 0x80004474

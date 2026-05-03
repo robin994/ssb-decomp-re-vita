@@ -2,6 +2,10 @@
 #include <lb/library.h>
 #include <sc/scene.h>
 #include <sys/video.h>
+#ifdef PORT
+#include <sys/audio.h>
+#include <sys/dma.h>
+#endif
 
 // // // // // // // // // // // //
 //                               //

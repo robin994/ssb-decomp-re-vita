@@ -1,11 +1,13 @@
 #include "common.h"
 #include <sys/develop.h>
 #include <db/debug.h>
+#ifndef PORT
 
 typedef union {
     s64 i;
     f32 f;
 } S64F32;
+#endif
 
 extern s32 D_803903D0_1ACC20;
 extern dbUnknown5* D_803903D4_1ACC24;
@@ -14,9 +16,21 @@ extern s32 D_ovl8_80387F40;
 extern s32 D_ovl8_80388298;
 dbUnknown5* func_ovl8_803867E8(void* arg0, DBMenu* arg1);
 dbUnknown5* func_ovl8_80386994(void* arg0, DBMenu* arg1);
+#ifndef PORT
 u32 stringFromNumber(char* string, s64 number);
 s32 func_ovl8_80387540(u8*, f32, s32);
+#endif
 
+#ifdef PORT
+extern dbFunction D_ovl8_8038E5A0;
+extern dbFunction D_ovl8_8038E660;
+extern dbFunction D_ovl8_8038E7B8;
+extern s32 D_ovl8_8038E7E0;
+extern dbFunction D_ovl8_8038E840;
+extern dbFunction D_ovl8_8038E900;
+extern dbUnknownLink D_ovl8_8038EA58;
+extern s32 D_ovl8_8038EA80;
+#else
 extern void func_ovl8_803718FC();
 extern void func_ovl8_80371930();
 extern void func_ovl8_80371960();
@@ -80,6 +94,7 @@ extern dbFunction D_ovl8_8038E840[];
 extern dbFunction D_ovl8_8038E900[];
 extern dbFunction D_ovl8_8038EA58[];
 extern dbFunction D_ovl8_8038EA80[];
+#endif
 
 void dbUiNodeTypeRegisterHandler(s32, s32*);
 s32 func_ovl8_803865D0(DBMenuPosition*, s32, char*);
@@ -215,10 +230,18 @@ dbUnknown5* func_ovl8_803867E8(void* arg0, DBMenu* arg1)
             {
                 sp34 = &temp_v0->unk_dbunk5_0xB0;\
                 sp30 = &temp_v0->unk_dbunk5_0x10C;
+#ifdef PORT
+                #line 154
+#else
                 #line 216
+#endif
                 func_ovl8_803717E0(sp34);
                 func_ovl8_8037C2D0(sp30);
+#ifdef PORT
+                #line 160
+#else
                 #line 222
+#endif
             }
             
             func_ovl8_80376010(temp_v0, sp34, sp30, arg1, 1);
@@ -254,9 +277,17 @@ void func_ovl8_803868EC(dbUnknownS38* arg0, s32 arg1)
         arg0->unk_dbunks38_0x1C->unk_dbunklink_0x8 = &D_ovl8_8038E7B8;
         arg0->unk_dbunks38_0x38.unk_dbunkstruct_0xC = &D_ovl8_8038E7E0;
 
+#ifdef PORT
+        #line 192
+#else
         #line 254
+#endif
         func_ovl8_803761F4(arg0, 0);
+#ifdef PORT
+        #line 198
+#else
         #line 260
+#endif
 
         if (arg1 != 0)
         {
@@ -296,10 +327,18 @@ dbUnknown5* func_ovl8_80386994(void* arg0, DBMenu* arg1)
             {
                 sp3C = &temp_v0->unk_dbunk5_0xBC;\
                 sp38 = &temp_v0->unk_dbunk5_0xB0;
+#ifdef PORT
+                #line 234
+#else
                 #line 296
+#endif
                 func_ovl8_803717E0(sp3C);
                 func_ovl8_8037C2D0(sp38);
+#ifdef PORT
+                #line 241
+#else
                 #line 303
+#endif
             }
             
             var_s1 = temp_v0;
@@ -312,10 +351,18 @@ dbUnknown5* func_ovl8_80386994(void* arg0, DBMenu* arg1)
                 {
                     sp30 = &var_s1->unk_dbunk5_0xB0;\
                     sp2C = &var_s1->unk_dbunk5_0x10C;
+#ifdef PORT
+                    #line 251
+#else
                     #line 313
+#endif
                     func_ovl8_803717E0(sp30);
                     func_ovl8_8037C2D0(sp2C);
+#ifdef PORT
+                    #line 257
+#else
                     #line 319
+#endif
                 }
                 
                 func_ovl8_80376010(var_s1, sp30, sp2C, arg1, 1);
@@ -372,6 +419,7 @@ void func_ovl8_80386AFC(dbUnknownS38* arg0, s32 arg1)
 }
 
 // 0x80386BE0
+#ifndef PORT
 #ifdef NON_MATCHING
 void func_ovl8_80386BE0(u8* out, u8** argList)
 {
@@ -599,7 +647,10 @@ void func_ovl8_80386BE0(u8* out, u8** argList)
     *outPtr = '\0';
 }
 #else
+#endif
 #pragma GLOBAL_ASM("asm/nonmatchings/ovl8/ovl8_31/func_ovl8_80386BE0.s")
+#ifndef PORT
+#endif
 #endif
 
 // 0x80386F90
@@ -663,6 +714,9 @@ s32 func_ovl8_80386FE0(char* out, char* src, sb32 leftAlign, s32 width, s32 maxL
 }
 
 // 0x80387154
+#ifdef PORT
+#pragma GLOBAL_ASM("asm/nonmatchings/ovl8/ovl8_31/func_ovl8_80387154.s")
+#else
 s32 func_ovl8_80387154(u8* output_str, s64 value, sb32 is_float, s32 align_left, sb32 show_sign, s32 width, s32 precision)
 {
     u8* read_ptr;
@@ -742,6 +796,7 @@ s32 func_ovl8_80387154(u8* output_str, s64 value, sb32 is_float, s32 align_left,
     force_sign = (width < total_length) ? total_length : width;
     return force_sign;
 }
+#endif
 
 // 0x80387420
 void stringCopyPartial(char* target, char* source, s32 count)
@@ -793,6 +848,9 @@ u32 stringFromNumber(char* string, s64 number)
 }
 
 // 0x80387540
+#ifdef PORT
+#pragma GLOBAL_ASM("asm/nonmatchings/ovl8/ovl8_31/func_ovl8_80387540.s")
+#else
 #pragma GLOBAL_ASM("asm/nonmatchings/ovl8/ovl8_31/func_ovl8_80387540.s")
 
 dbFunction D_ovl8_8038E5A0[] = {
@@ -986,3 +1044,4 @@ dbFunction D_ovl8_8038EA80[] = {
 	{0, func_ovl8_80372360},
 	{0, NULL},
 };
+#endif

@@ -7,6 +7,7 @@
 #include <sys/audio.h>
 #include <sys/rdp.h>
 #include <reloc_data.h>
+extern void func_800266A0_272A0(void);
 
 extern void* func_800269C0_275C0(u16);
 
@@ -71,14 +72,14 @@ s32 dMNVSResultsUnused0x80138F50[/* */] =
 // 0x80138F70
 u32 dMNVSResultsFileIDs[/* */] =
 {
-	&llMNVSResultsFileID,
-	&llIFCommonPlayerTagsFileID,
-	&llMNPlayersGameModesFileID,
-	&llIFCommonPlayerDamageFileID,
-	&llFTEmblemModelsFileID,
-	&llIFCommonDigitsFileID,
-	&llIFCommonAnnounceCommonFileID,
-	&llFTStocksZakoFileID
+	llMNVSResultsFileID,
+	llIFCommonPlayerTagsFileID,
+	llMNPlayersGameModesFileID,
+	llIFCommonPlayerDamageFileID,
+	llFTEmblemModelsFileID,
+	llIFCommonDigitsFileID,
+	llIFCommonAnnounceCommonFileID,
+	llFTStocksZakoFileID
 };
 
 // 0x80138F90
@@ -571,6 +572,7 @@ s32 mnVSResultsGetWinPlayer(void)
 		}
 		return win_player;
 	}
+	return 0;
 }
 
 // 0x80132A2C
@@ -621,30 +623,30 @@ void mnVSResultsMakeEmblem(void)
 
 	intptr_t dobjdescs[/* */] =
 	{
-		&llFTEmblemModelsMarioDObjDesc,     &llFTEmblemModelsFoxDObjDesc,
-		&llFTEmblemModelsDonkeyDObjDesc,    &llFTEmblemModelsMetroidDObjDesc,
-		&llFTEmblemModelsMarioDObjDesc,     &llFTEmblemModelsZeldaDObjDesc,
-		&llFTEmblemModelsYoshiDObjDesc,     &llFTEmblemModelsFZeroDObjDesc,
-		&llFTEmblemModelsKirbyDObjDesc,     &llFTEmblemModelsPMonstersDObjDesc,
-		&llFTEmblemModelsPMonstersDObjDesc, &llFTEmblemModelsMotherDObjDesc
+		llFTEmblemModelsMarioDObjDesc,     llFTEmblemModelsFoxDObjDesc,
+		llFTEmblemModelsDonkeyDObjDesc,    llFTEmblemModelsMetroidDObjDesc,
+		llFTEmblemModelsMarioDObjDesc,     llFTEmblemModelsZeldaDObjDesc,
+		llFTEmblemModelsYoshiDObjDesc,     llFTEmblemModelsFZeroDObjDesc,
+		llFTEmblemModelsKirbyDObjDesc,     llFTEmblemModelsPMonstersDObjDesc,
+		llFTEmblemModelsPMonstersDObjDesc, llFTEmblemModelsMotherDObjDesc
 	};
 	intptr_t mobjsubs[/* */] =
 	{
-		&llFTEmblemModelsMarioMObjSub,     &llFTEmblemModelsFoxMObjSub,
-		&llFTEmblemModelsDonkeyMObjSub,    &llFTEmblemModelsMetroidMObjSub,
-		&llFTEmblemModelsMarioMObjSub,     &llFTEmblemModelsZeldaMObjSub,
-		&llFTEmblemModelsYoshiMObjSub,     &llFTEmblemModelsFZeroMObjSub,
-		&llFTEmblemModelsKirbyMObjSub,     &llFTEmblemModelsPMonstersMObjSub,
-		&llFTEmblemModelsPMonstersMObjSub, &llFTEmblemModelsMotherMObjSub
+		llFTEmblemModelsMarioMObjSub,     llFTEmblemModelsFoxMObjSub,
+		llFTEmblemModelsDonkeyMObjSub,    llFTEmblemModelsMetroidMObjSub,
+		llFTEmblemModelsMarioMObjSub,     llFTEmblemModelsZeldaMObjSub,
+		llFTEmblemModelsYoshiMObjSub,     llFTEmblemModelsFZeroMObjSub,
+		llFTEmblemModelsKirbyMObjSub,     llFTEmblemModelsPMonstersMObjSub,
+		llFTEmblemModelsPMonstersMObjSub, llFTEmblemModelsMotherMObjSub
 	};
 	intptr_t matanim_joints[/* */] =
 	{
-		&llFTEmblemModelsMarioMatAnimJoint,     &llFTEmblemModelsFoxMatAnimJoint,
-		&llFTEmblemModelsDonkeyMatAnimJoint,    &llFTEmblemModelsMetroidMatAnimJoint,
-		&llFTEmblemModelsMarioMatAnimJoint,     &llFTEmblemModelsZeldaMatAnimJoint,
-		&llFTEmblemModelsYoshiMatAnimJoint,     &llFTEmblemModelsFZeroMatAnimJoint,
-		&llFTEmblemModelsKirbyMatAnimJoint,     &llFTEmblemModelsPMonstersMatAnimJoint,
-		&llFTEmblemModelsPMonstersMatAnimJoint, &llFTEmblemModelsMotherMatAnimJoint
+		llFTEmblemModelsMarioMatAnimJoint,     llFTEmblemModelsFoxMatAnimJoint,
+		llFTEmblemModelsDonkeyMatAnimJoint,    llFTEmblemModelsMetroidMatAnimJoint,
+		llFTEmblemModelsMarioMatAnimJoint,     llFTEmblemModelsZeldaMatAnimJoint,
+		llFTEmblemModelsYoshiMatAnimJoint,     llFTEmblemModelsFZeroMatAnimJoint,
+		llFTEmblemModelsKirbyMatAnimJoint,     llFTEmblemModelsPMonstersMatAnimJoint,
+		llFTEmblemModelsPMonstersMatAnimJoint, llFTEmblemModelsMotherMatAnimJoint
 	};
 	s32 colors[/* */] = { 0, 1, 3 };
 
@@ -761,7 +763,7 @@ void mnVSResultsMakeWallpaper(void)
 	gobj = gcMakeGObjSPAfter(0, NULL, 17, GOBJ_PRIORITY_DEFAULT);
 	gcAddGObjDisplay(gobj, mnVSResultsWallpaperProcDisplay, 26, GOBJ_PRIORITY_DEFAULT, ~0);
 
-	sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNVSResultsFiles[0], &llMNVSResultsWallpaperSprite));
+	sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNVSResultsFiles[0], llMNVSResultsWallpaperSprite));
 
 	SObjGetStruct(gobj)->pos.x = 10.0F;
 	SObjGetStruct(gobj)->pos.y = 10.0F;
@@ -1059,8 +1061,8 @@ void mnVSResultsMakePlayerTag(s32 player, s32 color_id)
 	};
 	intptr_t offsets[/* */] =
 	{
-		&llIFCommonPlayerTags1PSprite, &llIFCommonPlayerTags2PSprite,
-		&llIFCommonPlayerTags3PSprite, &llIFCommonPlayerTags4PSprite
+		llIFCommonPlayerTags1PSprite, llIFCommonPlayerTags2PSprite,
+		llIFCommonPlayerTags3PSprite, llIFCommonPlayerTags4PSprite
 	};
 
 	gobj = gcMakeGObjSPAfter(0, NULL, 18, GOBJ_PRIORITY_DEFAULT);
@@ -1080,7 +1082,7 @@ void mnVSResultsMakePlayerTag(s32 player, s32 color_id)
 	}
 	else
 	{
-		sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNVSResultsFiles[1], &llIFCommonPlayerTagsCPSprite));
+		sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNVSResultsFiles[1], llIFCommonPlayerTagsCPSprite));
 		sobj->sprite.attr &= ~SP_FASTCOPY;
 		sobj->sprite.attr |= SP_TRANSPARENT;
 		sobj->envcolor.r = dIFCommonPlayerTagEnvColorsR[color_id];
@@ -1154,22 +1156,22 @@ void mnVSResultsMakeString(const char *str, f32 x, f32 y, s32 color_id, f32 scal
 	};
 	intptr_t offsets[/* */] =
 	{
-		&llIFCommonAnnounceCommonLetterASprite, &llIFCommonAnnounceCommonLetterBSprite,
-		&llIFCommonAnnounceCommonLetterCSprite, &llIFCommonAnnounceCommonLetterDSprite,
-		&llIFCommonAnnounceCommonLetterESprite, &llIFCommonAnnounceCommonLetterFSprite,
-		&llIFCommonAnnounceCommonLetterGSprite, &llIFCommonAnnounceCommonLetterHSprite,
-		&llIFCommonAnnounceCommonLetterISprite, &llIFCommonAnnounceCommonLetterJSprite,
-		&llIFCommonAnnounceCommonLetterKSprite, &llIFCommonAnnounceCommonLetterLSprite,
-		&llIFCommonAnnounceCommonLetterMSprite, &llIFCommonAnnounceCommonLetterNSprite,
-		&llIFCommonAnnounceCommonLetterOSprite, &llIFCommonAnnounceCommonLetterPSprite,
-		&llIFCommonAnnounceCommonLetterQSprite, &llIFCommonAnnounceCommonLetterRSprite,
-		&llIFCommonAnnounceCommonLetterSSprite, &llIFCommonAnnounceCommonLetterTSprite,
-		&llIFCommonAnnounceCommonLetterUSprite, &llIFCommonAnnounceCommonLetterVSprite,
-		&llIFCommonAnnounceCommonLetterWSprite, &llIFCommonAnnounceCommonLetterXSprite,
-		&llIFCommonAnnounceCommonLetterYSprite, &llIFCommonAnnounceCommonLetterZSprite,
+		llIFCommonAnnounceCommonLetterASprite, llIFCommonAnnounceCommonLetterBSprite,
+		llIFCommonAnnounceCommonLetterCSprite, llIFCommonAnnounceCommonLetterDSprite,
+		llIFCommonAnnounceCommonLetterESprite, llIFCommonAnnounceCommonLetterFSprite,
+		llIFCommonAnnounceCommonLetterGSprite, llIFCommonAnnounceCommonLetterHSprite,
+		llIFCommonAnnounceCommonLetterISprite, llIFCommonAnnounceCommonLetterJSprite,
+		llIFCommonAnnounceCommonLetterKSprite, llIFCommonAnnounceCommonLetterLSprite,
+		llIFCommonAnnounceCommonLetterMSprite, llIFCommonAnnounceCommonLetterNSprite,
+		llIFCommonAnnounceCommonLetterOSprite, llIFCommonAnnounceCommonLetterPSprite,
+		llIFCommonAnnounceCommonLetterQSprite, llIFCommonAnnounceCommonLetterRSprite,
+		llIFCommonAnnounceCommonLetterSSprite, llIFCommonAnnounceCommonLetterTSprite,
+		llIFCommonAnnounceCommonLetterUSprite, llIFCommonAnnounceCommonLetterVSprite,
+		llIFCommonAnnounceCommonLetterWSprite, llIFCommonAnnounceCommonLetterXSprite,
+		llIFCommonAnnounceCommonLetterYSprite, llIFCommonAnnounceCommonLetterZSprite,
 
-		&llIFCommonAnnounceCommonSymbolExclaimSprite,
-		&llIFCommonAnnounceCommonSymbolPeriodSprite
+		llIFCommonAnnounceCommonSymbolExclaimSprite,
+		llIFCommonAnnounceCommonSymbolPeriodSprite
 	};
 	SYColorRGBPair colors[/* */] =
 	{
@@ -1510,11 +1512,11 @@ SObj* mnVSResultsMakeDigit(GObj *gobj, s32 digit, s32 color_id)
 
 	intptr_t offsets[/* */] =
 	{
-		&llIFCommonDigits0Sprite, &llIFCommonDigits1Sprite,
-		&llIFCommonDigits2Sprite, &llIFCommonDigits3Sprite,
-		&llIFCommonDigits4Sprite, &llIFCommonDigits5Sprite,
-		&llIFCommonDigits6Sprite, &llIFCommonDigits7Sprite,
-		&llIFCommonDigits8Sprite, &llIFCommonDigits9Sprite
+		llIFCommonDigits0Sprite, llIFCommonDigits1Sprite,
+		llIFCommonDigits2Sprite, llIFCommonDigits3Sprite,
+		llIFCommonDigits4Sprite, llIFCommonDigits5Sprite,
+		llIFCommonDigits6Sprite, llIFCommonDigits7Sprite,
+		llIFCommonDigits8Sprite, llIFCommonDigits9Sprite
 	};
 	SYColorRGBPair unused_colors[/* */] =
 	{
@@ -1540,11 +1542,11 @@ SObj* mnVSResultsMakePlaceNumber(GObj *gobj, s32 player, s32 place, s32 color_id
 
 	intptr_t offsets[/* */] =
 	{
-		&llIFCommonPlayerDamageDigit0Sprite, &llIFCommonPlayerDamageDigit1Sprite,
-		&llIFCommonPlayerDamageDigit2Sprite, &llIFCommonPlayerDamageDigit3Sprite,
-		&llIFCommonPlayerDamageDigit4Sprite, &llIFCommonPlayerDamageDigit5Sprite,
-		&llIFCommonPlayerDamageDigit6Sprite, &llIFCommonPlayerDamageDigit7Sprite,
-		&llIFCommonPlayerDamageDigit8Sprite, &llIFCommonPlayerDamageDigit9Sprite
+		llIFCommonPlayerDamageDigit0Sprite, llIFCommonPlayerDamageDigit1Sprite,
+		llIFCommonPlayerDamageDigit2Sprite, llIFCommonPlayerDamageDigit3Sprite,
+		llIFCommonPlayerDamageDigit4Sprite, llIFCommonPlayerDamageDigit5Sprite,
+		llIFCommonPlayerDamageDigit6Sprite, llIFCommonPlayerDamageDigit7Sprite,
+		llIFCommonPlayerDamageDigit8Sprite, llIFCommonPlayerDamageDigit9Sprite
 	};
 	SYColorRGBPair unused_colors[/* */] =
 	{
@@ -1561,19 +1563,19 @@ SObj* mnVSResultsMakePlaceNumber(GObj *gobj, s32 player, s32 place, s32 color_id
 		{
 			if ((mnVSResultsGetWinPlayer() == player) || (sMNVSResultsIsSharedWinner[player] != FALSE))
 			{
-				sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNVSResultsFiles[0], &llMNVSResultsWinnerSprite));
+				sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNVSResultsFiles[0], llMNVSResultsWinnerSprite));
 				sobj->user_data.s = 1;
 			}
 			else
 			{
-				sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNVSResultsFiles[3], &llIFCommonPlayerDamageDigit1Sprite));
+				sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNVSResultsFiles[3], llIFCommonPlayerDamageDigit1Sprite));
 				sobj->user_data.s = 0;
 				mnVSResultsSetNumberColor(sobj, color_id);
 			}
 		}
 		else
 		{
-			sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNVSResultsFiles[0], &llMNVSResultsWinnerSprite));
+			sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNVSResultsFiles[0], llMNVSResultsWinnerSprite));
 			sobj->user_data.s = 1;
 		}
 		sobj->sprite.attr &= ~SP_FASTCOPY;
@@ -1598,7 +1600,7 @@ SObj* mnVSResultsMakeNumber(GObj *gobj, f32 x, f32 y, s32 number, s32 color_id)
 
 	if (number < 0)
 	{
-		sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNVSResultsFiles[5], &llIFCommonDigitsDashSprite));
+		sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNVSResultsFiles[5], llIFCommonDigitsDashSprite));
 
 		if (mnVSResultsGetHundredsDigit(number) != 0)
 		{
@@ -1858,8 +1860,8 @@ void mnVSResultsMakeHeader(void)
 
 	intptr_t offsets[/* */] =
 	{
-		&llMNVSResults1PArrowSprite, &llMNVSResults2PArrowSprite,
-		&llMNVSResults3PArrowSprite, &llMNVSResults4PArrowSprite
+		llMNVSResults1PArrowSprite, llMNVSResults2PArrowSprite,
+		llMNVSResults3PArrowSprite, llMNVSResults4PArrowSprite
 	};
 	s32 i;
 	FTStruct *fp;
@@ -1878,8 +1880,17 @@ void mnVSResultsMakeHeader(void)
 
 			fp = ftGetStruct(sMNVSResultsFighterGObjs[i]);
 
+#ifdef PORT
+			{
+				FTSprites *_spr = (FTSprites*)PORT_RESOLVE(fp->attr->sprites);
+				stock_sobj = lbCommonMakeSObjForGObj(gobj, (Sprite*)PORT_RESOLVE(_spr->stock_sprite));
+				u32 *_luts = (u32*)PORT_RESOLVE(_spr->stock_luts);
+				stock_sobj->sprite.LUT = _luts[fp->costume];
+			}
+#else
 			stock_sobj = lbCommonMakeSObjForGObj(gobj, fp->attr->sprites->stock_sprite);
 			stock_sobj->sprite.LUT = fp->attr->sprites->stock_luts[fp->costume];
+#endif
 			stock_sobj->sprite.attr &= ~SP_FASTCOPY;
 			stock_sobj->sprite.attr |= SP_TRANSPARENT;
 			stock_sobj->pos.x = arrow_sobj->pos.x - 10.0F;
@@ -1915,7 +1926,7 @@ void mnVSResultsMakeKOs(s32 y)
 		(
 			Sprite*,
 			sMNVSResultsFiles[0],
-			&llMNVSResultsKOsTextSprite
+			llMNVSResultsKOsTextSprite
 		),
 		nGCProcessKindFunc,
 		NULL,
@@ -1977,7 +1988,7 @@ void mnVSResultsMakeTKO(s32 y)
 		(
 			Sprite*,
 			sMNVSResultsFiles[0],
-			&llMNVSResultsTKOTextSprite
+			llMNVSResultsTKOTextSprite
 		),
 		nGCProcessKindFunc,
 		NULL,
@@ -1996,7 +2007,7 @@ void mnVSResultsMakeTKO(s32 y)
 
 	if (sMNVSResultsKind != nMNVSResultsKindNoContest)
 	{
-		SObj *sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNVSResultsFiles[5], &llIFCommonDigitsDashSprite));
+		SObj *sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNVSResultsFiles[5], llIFCommonDigitsDashSprite));
 		sobj->pos.x = 90.0F;
 		sobj->pos.y = y + 3;
 		sobj->sprite.attr &= ~SP_FASTCOPY;
@@ -2073,7 +2084,7 @@ void mnVSResultsMakePointsRow(void)
 		(
 			Sprite*,
 			sMNVSResultsFiles[0],
-			&llMNVSResultsPtsTextSprite
+			llMNVSResultsPtsTextSprite
 		),
 		nGCProcessKindFunc,
 		NULL,
@@ -2165,7 +2176,7 @@ void mnVSResultsMakePlaceRow(s32 y)
 		(
 			Sprite*,
 			sMNVSResultsFiles[0],
-			&llMNVSResultsPlaceTextSprite
+			llMNVSResultsPlaceTextSprite
 		),
 		nGCProcessKindFunc,
 		NULL,
@@ -2358,7 +2369,7 @@ void mnVSResultsMakeLabel(void)
 
 	intptr_t offsets[/* */] =
 	{
-		&llMNPlayersGameModesFreeForAllTextSprite, &llMNPlayersGameModesTeamBattleTextSprite
+		llMNPlayersGameModesFreeForAllTextSprite, llMNPlayersGameModesTeamBattleTextSprite
 	};
 	void (*procs[/* */])(GObj*) =
 	{
@@ -3323,8 +3334,23 @@ void mnVSResultsFuncStart(void)
 	LBRelocSetup rl_setup;
 	s32 i;
 
+#ifdef PORT
+	/* Issue #103: sMNVSResultsFighterGObjs and sMNVSResultsFigatreeHeaps are
+	 * static (BSS) arrays that survive scene transitions. The previous
+	 * results-screen instance left them holding pointers into that scene's
+	 * arena, which taskman.c now frees at the next scene transition — any
+	 * read before mnVSResultsMakeFighter rewrites the slot at line 993
+	 * dereferences freed host memory. Clear them here before any other
+	 * results-scene state is set up. */
+	for (i = 0; i < ARRAY_COUNT(sMNVSResultsFighterGObjs); i++)
+	{
+		sMNVSResultsFighterGObjs[i] = NULL;
+		sMNVSResultsFigatreeHeaps[i] = NULL;
+	}
+#endif
+
 	rl_setup.table_addr = (uintptr_t)&lLBRelocTableAddr;
-	rl_setup.table_files_num = (u32)&llRelocFileCount;
+	rl_setup.table_files_num = (u32)llRelocFileCount;
 	rl_setup.file_heap = NULL;
 	rl_setup.file_heap_size = 0;
 	rl_setup.status_buffer = sMNVSResultsStatusBuffer;

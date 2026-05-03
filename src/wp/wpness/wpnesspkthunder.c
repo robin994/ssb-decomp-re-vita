@@ -14,7 +14,11 @@ WPDesc dWPNessPKThunderHeadWeaponDesc =
     0x03,                                   // Render flags?
     nWPKindPKThunderHead,                   // Weapon Kind
     &gFTNessFileMain,                       // Pointer to character's loaded files?
+#ifdef PORT
+    llNessMainPKThunderWeaponAttributes,   // Offset of weapon attributes in loaded files
+#else
     &llNessMainPKThunderWeaponAttributes,   // Offset of weapon attributes in loaded files
+#endif
 
     // DObj transformation struct
     {
@@ -38,7 +42,11 @@ WPDesc dWPNessPKThunderTrailWeaponDesc =
     0x02,                                      // Render flags?
     nWPKindPKThunderTrail,                     // Weapon Kind
     &gFTNessFileMain,                          // Pointer to character's loaded files?
+#ifdef PORT
+    llNessMainPKThunderTrailWeaponAttributes, // Offset of weapon attributes in loaded files
+#else
     &llNessMainPKThunderTrailWeaponAttributes, // Offset of weapon attributes in loaded files
+#endif
 
     // DObj transformation struct
     {
@@ -62,7 +70,11 @@ WPDesc dWPNessPKReflectHeadWeaponDesc =
     0x03,                                   // Render flags?
     nWPKindPKThunderHead,                   // Weapon Kind
     &gFTNessFileMain,                       // Pointer to character's loaded files?
+#ifdef PORT
+    llNessMainPKThunderWeaponAttributes,   // Offset of weapon attributes in loaded files
+#else
     &llNessMainPKThunderWeaponAttributes,   // Offset of weapon attributes in loaded files
+#endif
 
     // DObj transformation struct
     {
@@ -86,7 +98,11 @@ WPDesc dWPNessPKReflectTrailWeaponDesc =
     0x02,                                      // Render flags?
     nWPKindPKThunderTrail,                     // Weapon Kind
     &gFTNessFileMain,                          // Pointer to character's loaded files?
+#ifdef PORT
+    llNessMainPKThunderTrailWeaponAttributes, // Offset of weapon attributes in loaded files
+#else
     &llNessMainPKThunderTrailWeaponAttributes, // Offset of weapon attributes in loaded files
+#endif
 
     // DObj transformation struct
     {

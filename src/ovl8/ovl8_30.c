@@ -4,6 +4,14 @@
 
 extern DBMenuPosition D_ovl8_80389F48;
 extern db4Bytes D_ovl8_80389F4C;
+#ifdef PORT
+extern DBMenu D_ovl8_8038E1E0[3];
+extern DBMenu D_ovl8_8038E2D4;
+extern DBMenu D_ovl8_8038E564;
+extern s32 D_ovl8_8038E58C;
+extern s32* D_ovl8_8038E590;
+extern s32* D_ovl8_8038E594;
+#endif
 extern s32 D_803903C0_1ACC10;
 extern s32 D_803903C4_1ACC14;
 extern s32 D_803903C8_1ACC18;
@@ -16,6 +24,7 @@ void func_ovl8_803863A4(s32, s32, const char*);
 s32 func_ovl8_80386488(s32, s32);
 void func_ovl8_8038649C();
 void func_ovl8_803864CC(s32, DBMenu*);
+#ifndef PORT
 
 /* ************************************************************************** */
 /*                                DATA                                        */
@@ -119,6 +128,7 @@ char D_ovl8_8038E590[3] = "YES";
 
 // 0x8038E594
 char D_ovl8_8038E594[3] = "N O";
+#endif
 
 // 0x80385E10
 void func_ovl8_80385E10(s32 arg0, ...)

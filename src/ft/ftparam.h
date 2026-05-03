@@ -4,6 +4,9 @@
 #include <ssb_types.h>
 #include <sys/objdef.h>
 #include <ft/ftdef.h>
+#ifdef PORT
+#include <ef/efdef.h>
+#endif
 #include <gm/gmdef.h>
 
 extern s32 ftParamGetItemMusicLength(u32 bgm_id);
@@ -98,7 +101,11 @@ extern void ftParamClearAnimLocks(FTStruct *fp);
 extern void func_ovl2_800EB924(CObj *cobj, Mtx44f mtx, Vec3f *vec, f32 *rx, f32 *ry);
 extern f32 func_ovl2_800EBA6C(Vec3f *arg0, Vec3f *arg1);
 extern f32 func_ovl2_800EBB3C(Vec3f *arg0, Vec3f *arg1, Vec3f *arg2);
+#ifdef PORT
+extern void func_ovl2_800EBC0C(FTStruct *arg0, Vec3f *arg1, f32 *arg2, f32 arg3, DObj *dobj);
+#else
 extern void func_ovl2_800EBC0C(s32 arg0, Vec3f *arg1, f32 *arg2, f32 arg3, DObj *dobj);
+#endif
 extern void func_ovl2_800EBD08(DObj *root_dobj, f32 arg1, Vec3f *vec, f32 arg3);
 extern s32 ftParamGetCostumeCommonID(s32 fkind, s32 color);
 extern s32 ftParamGetCostumeTeamID(s32 fkind, s32 color);

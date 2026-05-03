@@ -5,6 +5,8 @@
 #include <sys/video.h>
 #include <sys/rdp.h>
 #include <reloc_data.h>
+#include <sys/audio.h>
+extern void *func_800269C0_275C0(u16 id);
 
 // // // // // // // // // // // //
 //                               //
@@ -36,11 +38,11 @@ mnCommonCheckGetOptionStickInputLR(sMN1PContinueOptionChangeWait, stick_range, m
 // 0x80134160
 u32 dMN1PContinueFileIDs[/* */] =
 {
-    &llMN1PContinueFileID,
-    &llSC1PStageClear2FileID,
-    &llIFCommonAnnounceCommonFileID,
-    &llIFCommonPlayerDamageFileID,
-    &llSC1PStageClear1FileID
+    llMN1PContinueFileID,
+    llSC1PStageClear2FileID,
+    llIFCommonAnnounceCommonFileID,
+    llIFCommonPlayerDamageFileID,
+    llSC1PStageClear1FileID
 };
 
 // 0x80134178
@@ -224,16 +226,16 @@ Sprite* mnPlayers1PGameContinueScoreDigitGetSprite(s32 digit)
     // 0x80134534
     intptr_t offsets[/* */] =
     {
-        &llIFCommonPlayerDamageDigit0Sprite,
-        &llIFCommonPlayerDamageDigit1Sprite,
-        &llIFCommonPlayerDamageDigit2Sprite,
-        &llIFCommonPlayerDamageDigit3Sprite,
-        &llIFCommonPlayerDamageDigit4Sprite,
-        &llIFCommonPlayerDamageDigit5Sprite,
-        &llIFCommonPlayerDamageDigit6Sprite,
-        &llIFCommonPlayerDamageDigit7Sprite,
-        &llIFCommonPlayerDamageDigit8Sprite,
-        &llIFCommonPlayerDamageDigit9Sprite
+        llIFCommonPlayerDamageDigit0Sprite,
+        llIFCommonPlayerDamageDigit1Sprite,
+        llIFCommonPlayerDamageDigit2Sprite,
+        llIFCommonPlayerDamageDigit3Sprite,
+        llIFCommonPlayerDamageDigit4Sprite,
+        llIFCommonPlayerDamageDigit5Sprite,
+        llIFCommonPlayerDamageDigit6Sprite,
+        llIFCommonPlayerDamageDigit7Sprite,
+        llIFCommonPlayerDamageDigit8Sprite,
+        llIFCommonPlayerDamageDigit9Sprite
     };
     return lbRelocGetFileData(Sprite*, sMN1PContinueFiles[3], offsets[digit]);
 }
@@ -291,7 +293,7 @@ void mnPlayers1PGameContinueMakeScoreDisplay(s32 points)
     sMN1PContinueScoreGObj = gobj = gcMakeGObjSPAfter(0, NULL, 20, GOBJ_PRIORITY_DEFAULT);
     gcAddGObjDisplay(gobj, lbCommonDrawSObjAttr, 28, GOBJ_PRIORITY_DEFAULT, ~0);
 
-    sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMN1PContinueFiles[1], &llSC1PStageClear2ScoreTextSprite));
+    sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMN1PContinueFiles[1], llSC1PStageClear2ScoreTextSprite));
 
     sobj->sprite.attr &= ~SP_FASTCOPY;
     sobj->sprite.attr |= SP_TRANSPARENT;
@@ -454,7 +456,7 @@ void mnPlayers1PGameContinueMakeRoom(void)
     sMN1PContinueRoomGObj = gobj = gcMakeGObjSPAfter(0, NULL, 19, GOBJ_PRIORITY_DEFAULT);
 
     gcAddGObjDisplay(gobj, lbCommonDrawSObjAttr, 29, GOBJ_PRIORITY_DEFAULT, ~0);
-    sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMN1PContinueFiles[0], &llMN1PContinueRoomSprite));
+    sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMN1PContinueFiles[0], llMN1PContinueRoomSprite));
 
     sobj->pos.x = 30.0F;
     sobj->pos.y = 28.0F;
@@ -468,7 +470,7 @@ void mnPlayers1PGameContinueMakeSpotlight(void)
 
     sMN1PContinueShadowGObj = gobj = gcMakeGObjSPAfter(0, NULL, 21, GOBJ_PRIORITY_DEFAULT);
     gcAddGObjDisplay(gobj, lbCommonDrawSObjAttr, 30, GOBJ_PRIORITY_DEFAULT, ~0);
-    sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMN1PContinueFiles[0], &llMN1PContinueShadowSprite));
+    sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMN1PContinueFiles[0], llMN1PContinueShadowSprite));
 
     sobj->sprite.attr &= ~SP_FASTCOPY;
     sobj->sprite.attr |= SP_TRANSPARENT;
@@ -482,7 +484,7 @@ void mnPlayers1PGameContinueMakeSpotlight(void)
 
     sMN1PContinueSpotlightGObj = gobj = gcMakeGObjSPAfter(0, NULL, 21, GOBJ_PRIORITY_DEFAULT);
     gcAddGObjDisplay(gobj, lbCommonDrawSObjAttr, 30, GOBJ_PRIORITY_DEFAULT, ~0);
-    sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMN1PContinueFiles[0], &llMN1PContinueSpotlightSprite));
+    sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMN1PContinueFiles[0], llMN1PContinueSpotlightSprite));
 
     sobj->sprite.attr &= ~SP_FASTCOPY;
     sobj->sprite.attr |= SP_TRANSPARENT;
@@ -503,7 +505,7 @@ void mnPlayers1PGameContinueMakeContinue(void)
 
     sMN1PContinueContinueGObj = gobj = gcMakeGObjSPAfter(0, NULL, 20, GOBJ_PRIORITY_DEFAULT);
     gcAddGObjDisplay(gobj, lbCommonDrawSObjAttr, 28, GOBJ_PRIORITY_DEFAULT, ~0);
-    sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMN1PContinueFiles[0], &llMN1PContinueContinueTextSprite));
+    sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMN1PContinueFiles[0], llMN1PContinueContinueTextSprite));
 
     sobj->sprite.attr &= ~SP_FASTCOPY;
     sobj->sprite.attr |= SP_TRANSPARENT;
@@ -574,7 +576,7 @@ void mnPlayers1PGameContinueMakeOptions(void)
     gcAddGObjDisplay(gobj, lbCommonDrawSObjAttr, 28, GOBJ_PRIORITY_DEFAULT, ~0);
     gcAddGObjProcess(gobj, MN1PContinueOptionProcUpdate, nGCProcessKindFunc, 1);
 
-    sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMN1PContinueFiles[0], &llMN1PContinueYesTextSprite));
+    sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMN1PContinueFiles[0], llMN1PContinueYesTextSprite));
 
     sobj->sprite.attr &= ~SP_FASTCOPY;
     sobj->sprite.attr |= SP_TRANSPARENT;
@@ -582,7 +584,7 @@ void mnPlayers1PGameContinueMakeOptions(void)
     sobj->pos.x = 84.0F;
     sobj->pos.y = 129.0F;
 
-    sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMN1PContinueFiles[0], &llMN1PContinueNoTextSprite));
+    sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMN1PContinueFiles[0], llMN1PContinueNoTextSprite));
 
     sobj->sprite.attr &= ~SP_FASTCOPY;
     sobj->sprite.attr |= SP_TRANSPARENT;
@@ -626,7 +628,7 @@ void mnPlayers1PGameContinueMakeCursor(void)
 
     gcAddGObjDisplay(gobj, lbCommonDrawSObjAttr, 28, GOBJ_PRIORITY_DEFAULT, ~0);
     gcAddGObjProcess(gobj, mnPlayers1PGameContinueCursorProcUpdate, nGCProcessKindFunc, 1);
-    sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMN1PContinueFiles[0], &llMN1PContinueCursorSprite));
+    sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMN1PContinueFiles[0], llMN1PContinueCursorSprite));
 
     sobj->sprite.attr &= ~SP_FASTCOPY;
     sobj->sprite.attr |= SP_TRANSPARENT;
@@ -697,14 +699,14 @@ void mnPlayers1PGameContinueMakeGameOverText(void)
     // 0x801341F8
     intptr_t letters[/* */] =
     { 
-        &llIFCommonAnnounceCommonLetterGSprite,
-        &llIFCommonAnnounceCommonLetterASprite,
-        &llIFCommonAnnounceCommonLetterMSprite,
-        &llIFCommonAnnounceCommonLetterESprite,
-        &llIFCommonAnnounceCommonLetterOSprite,
-        &llIFCommonAnnounceCommonLetterVSprite,
-        &llIFCommonAnnounceCommonLetterESprite,
-        &llIFCommonAnnounceCommonLetterRSprite
+        llIFCommonAnnounceCommonLetterGSprite,
+        llIFCommonAnnounceCommonLetterASprite,
+        llIFCommonAnnounceCommonLetterMSprite,
+        llIFCommonAnnounceCommonLetterESprite,
+        llIFCommonAnnounceCommonLetterOSprite,
+        llIFCommonAnnounceCommonLetterVSprite,
+        llIFCommonAnnounceCommonLetterESprite,
+        llIFCommonAnnounceCommonLetterRSprite
     };
 
     // 0x80134218
@@ -1189,8 +1191,17 @@ void mnPlayers1PGameContinueFuncStart(void)
     s32 unused;
     LBRelocSetup rl_setup;
 
+#ifdef PORT
+    /* Issue #103: sMN1PContinueFighterGObj and sMN1PContinueFigatreeHeap are
+     * static globals that survive scene transitions; the previous instance
+     * left them holding pointers into a now-freed scene arena. Clear before
+     * mnPlayers1PGameContinueFuncRun assigns the new fighter at line 348. */
+    sMN1PContinueFighterGObj = NULL;
+    sMN1PContinueFigatreeHeap = NULL;
+#endif
+
     rl_setup.table_addr = (uintptr_t)&lLBRelocTableAddr;
-    rl_setup.table_files_num = (u32)&llRelocFileCount;
+    rl_setup.table_files_num = (u32)llRelocFileCount;
     rl_setup.file_heap = NULL;
     rl_setup.file_heap_size = 0;
     rl_setup.status_buffer = sMN1PContinueStatusBuffer;

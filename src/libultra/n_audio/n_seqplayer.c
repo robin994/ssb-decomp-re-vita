@@ -1,6 +1,11 @@
 #include "common.h"
 #include <n_audio/n_libaudio.h>
 
+#ifdef PORT
+#include <assert.h>
+extern char __alSeqNextDelta(ALSeq *seq, s32 *pDeltaTicks);
+#endif
+
 void __n_seqpStopOsc(N_ALSeqPlayer *seqp, N_ALVoiceState *vs);
 void __n_initChanState(N_ALSeqPlayer *seqp);
 void __n_postNextSeqEvent(N_ALSeqPlayer *seqp);

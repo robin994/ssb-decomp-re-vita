@@ -14,9 +14,19 @@
 #include <ssb_types.h>
 #include <stddef.h>
 
+#ifdef PORT
+#include <stdlib.h>
+extern void port_log(const char *fmt, ...);
+#endif
+
 #include <PR/mbi.h>
 #include <PR/ucode.h>
 #include <PR/ultratypes.h>
+
+#ifdef PORT
+#include "port_log.h"
+_Static_assert(sizeof(uintptr_t) == 8, "PORT build requires 64-bit uintptr_t");
+#endif
 
 // externs
 extern void syTaskmanCheckBufferLengths();
@@ -105,7 +115,11 @@ OSMesgQueue D_800454C8;
 SYClient sSYTaskmanClient;
 
 // 0x800454E8
+#ifdef PORT
+uintptr_t *sSYTaskmanSegmentFBase; // pointer to Gfx.w1 (segment base addr?)
+#else
 unsigned int *sSYTaskmanSegmentFBase; // pointer to Gfx.w1 (segment base addr?)
+#endif
 
 // 0x800454F0
 OSMesg sSYTaskmanContextMesgs[3];
@@ -257,13 +271,43 @@ void unref_80004934(u16 arg0, u16 arg1)
 // 0x80004950
 void syTaskmanInitGeneralHeap(void *start, u32 size)
 {
+#ifdef PORT
+	if ((start == NULL) || (size == 0))
+	{
+		port_log("SSB64: syTaskmanInitGeneralHeap received invalid PORT heap start=%p size=0x%x\n",
+		         start, (unsigned)size);
+		while (TRUE);
+	}
 	syMallocInit(&gSYTaskmanGeneralHeap, 0x10000, start, size);
+#else
+	syMallocInit(&gSYTaskmanGeneralHeap, 0x10000, start, size);
+#endif
 }
 
 // 0x80004980
 void* syTaskmanMalloc(size_t size, u32 align) // alloc_with_alignment
 {
+#ifdef PORT
+	static s32 sMallocDebugCount = 0;
+	void *result = syMallocSet(&gSYTaskmanGeneralHeap, size, align);
+	if (result == NULL)
+	{
+		port_log("SSB64: syTaskmanMalloc returned NULL (size=%u align=%u start=%p ptr=%p end=%p)\n",
+		         (unsigned)size, (unsigned)align,
+		         gSYTaskmanGeneralHeap.start, gSYTaskmanGeneralHeap.ptr, gSYTaskmanGeneralHeap.end);
+		syDebugPrintf("gtl : syTaskmanMalloc returned NULL (size=%d align=%d)\n", size, align);
+		while (TRUE);
+	}
+	if (sMallocDebugCount < 30) {
+		port_log("SSB64: syTaskmanMalloc(size=%u align=%u) = %p (heap ptr=%p end=%p)\n",
+		         (unsigned)size, (unsigned)align, result,
+		         gSYTaskmanGeneralHeap.ptr, gSYTaskmanGeneralHeap.end);
+		sMallocDebugCount++;
+	}
+	return result;
+#else
 	return syMallocSet(&gSYTaskmanGeneralHeap, size, align);
+#endif
 }
 
 // 0x800049B0
@@ -323,14 +367,31 @@ void syTaskmanCheckBufferLengths(void)
 	{
 		if (sSYTaskmanDLBuffers[gSYTaskmanTaskID][i].length + (uintptr_t)sSYTaskmanDLBuffers[gSYTaskmanTaskID][i].start < (uintptr_t)gSYTaskmanDLHeads[i])
 		{
+#ifdef PORT
+			port_log("SSB64: DLBuffer OVERFLOW kind=%d used=%llu alloc=%u start=%p head=%p\n",
+				i,
+				(unsigned long long)((uintptr_t)gSYTaskmanDLHeads[i] - (uintptr_t)sSYTaskmanDLBuffers[gSYTaskmanTaskID][i].start),
+				(unsigned int)sSYTaskmanDLBuffers[gSYTaskmanTaskID][i].length,
+				sSYTaskmanDLBuffers[gSYTaskmanTaskID][i].start,
+				gSYTaskmanDLHeads[i]);
+#else
 			syDebugPrintf("gtl : DLBuffer over flow !  kind = %d  vol = %d byte\n", i, (uintptr_t)gSYTaskmanDLHeads[i] - (uintptr_t)sSYTaskmanDLBuffers[gSYTaskmanTaskID][i].start);
 			while (TRUE);
+#endif
 		}
 	}
 	if ((uintptr_t)gSYTaskmanGraphicsHeap.end < (uintptr_t)gSYTaskmanGraphicsHeap.ptr)
 	{
+#ifdef PORT
+		port_log("SSB64: DynamicBuffer OVERFLOW used=%llu start=%p end=%p ptr=%p\n",
+			(unsigned long long)((uintptr_t)gSYTaskmanGraphicsHeap.ptr - (uintptr_t)gSYTaskmanGraphicsHeap.start),
+			gSYTaskmanGraphicsHeap.start,
+			gSYTaskmanGraphicsHeap.end,
+			gSYTaskmanGraphicsHeap.ptr);
+#else
 		syDebugPrintf("gtl : DynamicBuffer over flow !  %d byte\n", (uintptr_t)gSYTaskmanGraphicsHeap.ptr - (uintptr_t)gSYTaskmanGraphicsHeap.start);
 		while (TRUE);
+#endif
 	}
 }
 
@@ -841,12 +902,14 @@ void syTaskmanUpdateDLBuffers(void)
 // 0x80005AE4
 sb32 syTaskmanSwitchContext(s32 arg0)
 {
-	s32 msg;
+	OSMesg msg;
+	s32 msg_id;
 	s32 i;
 
-	while (osRecvMesg(&sSYTaskmanContextMesgQueue, (OSMesg*)&msg, OS_MESG_NOBLOCK) != -1)
+	while (osRecvMesg(&sSYTaskmanContextMesgQueue, &msg, OS_MESG_NOBLOCK) != -1)
 	{
-		D_80046638[msg] = 0;
+		msg_id = (s32)(intptr_t)msg;
+		D_80046638[msg_id] = 0;
 	}
 	do
 	{
@@ -861,8 +924,9 @@ sb32 syTaskmanSwitchContext(s32 arg0)
 		}
 		if (arg0 == 0)
 		{
-			osRecvMesg(&sSYTaskmanContextMesgQueue, (OSMesg*)&msg, OS_MESG_BLOCK);
-			D_80046638[msg] = 0;
+			osRecvMesg(&sSYTaskmanContextMesgQueue, &msg, OS_MESG_BLOCK);
+			msg_id = (s32)(intptr_t)msg;
+			D_80046638[msg_id] = 0;
 		}
 	}
 	while (arg0 == 0);
@@ -1017,6 +1081,19 @@ void syTaskmanRunTask(SYTaskFunction *tfunc)
 		func_80005D10();
 		syMainVerifyStackProbes();
 
+#ifdef PORT
+		{
+			static s32 sTaskmanLoopCount = 0;
+			if (sTaskmanLoopCount < 5) {
+				port_log("SSB64: syTaskmanRunTask — waiting for game tick (mq=%p cap=%d valid=%d) loop=%d\n",
+				         (void *)&sSYTaskmanGameTicMesgQueue,
+				         (int)sSYTaskmanGameTicMesgQueue.msgCount,
+				         (int)sSYTaskmanGameTicMesgQueue.validCount,
+				         (int)sTaskmanLoopCount);
+			}
+			sTaskmanLoopCount++;
+		}
+#endif
 		for (i = 0; i < sSYTaskmanUpdateInterval; i++)
 		{
 			osRecvMesg(&sSYTaskmanGameTicMesgQueue, NULL, OS_MESG_BLOCK);
@@ -1122,7 +1199,8 @@ void syTaskmanCommonTaskDraw(SYTaskFunction *tfunc)
 // 0x8000641C
 void unref_8000641C(GObj *gobj)
 {
-	s32 id;
+	OSMesg id;
+	s32 id_index;
 	SYTaskGfxEnd *task;
 
 	syTaskmanSwitchContext(0);
@@ -1145,8 +1223,9 @@ void unref_8000641C(GObj *gobj)
 
 	do
 	{
-		osRecvMesg(&sSYTaskmanContextMesgQueue, (OSMesg*)&id, OS_MESG_BLOCK);
-		D_80046638[id] = 0;
+		osRecvMesg(&sSYTaskmanContextMesgQueue, &id, OS_MESG_BLOCK);
+		id_index = (s32)(intptr_t)id;
+		D_80046638[id_index] = 0;
 	}
 	while (D_80046638[gSYTaskmanTaskID] != 0);
 
@@ -1207,10 +1286,16 @@ void syTaskmanLoadScene(SYTaskmanSceneSetup *tscene, void (*func_start)(void))
 
 	dSYTaskmanUpdateCount = dSYTaskmanFrameCount = 0;
 
+#ifdef PORT
+	port_log("SSB64: syTaskmanLoadScene — about to call func_start=%p\n", (void *)func_start);
+#endif
 	if (func_start != NULL)
 	{
 		func_start();
 	}
+#ifdef PORT
+	port_log("SSB64: syTaskmanLoadScene — func_start returned, entering syTaskmanRunTask\n");
+#endif
 	syTaskmanRunTask(&sSYTaskmanDefaultFunction);
 }
 
@@ -1228,7 +1313,55 @@ void syTaskmanStartTask(SYTaskmanSetup *tsetup)
 {
 	GCSetup gcsetup;
 
+#ifdef PORT
+	/* The original arena_start / arena_size values come from N64 linker
+	 * symbols. In the host port those symbols are ordinary globals, so their
+	 * relative addresses are not a valid heap on any platform. Use a fresh
+	 * scene heap instead; this keeps scene memory ownership explicit instead
+	 * of relying on host linker layout or allocator reuse.
+	 *
+	 * Free the previous scene's arena before allocating a new one. Without
+	 * this each scene transition leaks 16MB to libc and old arenas stay
+	 * mapped (and READABLE) for the rest of the process lifetime — which
+	 * means stale pointers from prior scenes still resolve to plausible-
+	 * looking memory instead of segfaulting at the moment of misuse.
+	 *
+	 * Suspected root cause for issue #103-family crashes: a long-lived
+	 * structure (CSS slot, fighter persistence) holds a pointer or token
+	 * referring to scene-N's arena; scene N+1 reads through it and gets
+	 * stale GBI command bytes or a bogus vertex pointer instead of a clean
+	 * NULL/SIGSEGV that we could trace. Freeing the prev arena turns
+	 * dangling-reference reads into hard faults at the dangling site,
+	 * which is far easier to triage. */
+	{
+		static const size_t kPortHeapSize = 16 * 1024 * 1024;
+		static void *sPrevHeap = NULL;
+		void *heap = malloc(kPortHeapSize);
+		if (heap == NULL)
+		{
+			port_log("SSB64: syTaskmanStartTask — failed to allocate PORT heap size=0x%llx\n",
+			         (unsigned long long)kPortHeapSize);
+			while (TRUE);
+		}
+		port_log("SSB64: syTaskmanStartTask — decomp arena_start=%p arena_size=0x%llx (ignored on PORT)\n",
+		         tsetup->scene_setup.arena_start,
+		         (unsigned long long)tsetup->scene_setup.arena_size);
+		if (sPrevHeap != NULL)
+		{
+			port_log("SSB64: syTaskmanStartTask — freeing prev PORT heap=%p (16MiB)\n", sPrevHeap);
+			free(sPrevHeap);
+		}
+		sPrevHeap = heap;
+		tsetup->scene_setup.arena_start = heap;
+		tsetup->scene_setup.arena_size = (u32)kPortHeapSize;
+		port_log("SSB64: syTaskmanStartTask — using fresh PORT heap arena_start=%p arena_size=0x%llx\n",
+		         heap, (unsigned long long)kPortHeapSize);
+	}
+#endif
 	syTaskmanInitGeneralHeap(tsetup->scene_setup.arena_start, tsetup->scene_setup.arena_size);
+#ifdef PORT
+	port_log("SSB64: syTaskmanStartTask — heap init done\n");
+#endif
 
 	gcsetup.gobjthreads = syTaskmanMalloc(sizeof(GObjThread) * tsetup->gobjthreads_num, 0x8);
 	gcsetup.gobjthreads_num = tsetup->gobjthreads_num;
@@ -1275,6 +1408,9 @@ void syTaskmanStartTask(SYTaskmanSetup *tsetup)
 	gcsetup.cobj_size = tsetup->cobj_size;
 
 	gcSetupObjman(&gcsetup);
+#ifdef PORT
+	port_log("SSB64: syTaskmanStartTask — gcSetupObjman done, entering syTaskmanLoadScene\n");
+#endif
 
 	sSYTaskmanDefaultFunction.task_update = syTaskmanCommonTaskUpdate;
 	sSYTaskmanDefaultFunction.task_draw = syTaskmanCommonTaskDraw;

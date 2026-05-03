@@ -1,9 +1,21 @@
 #include <ft/fighter.h>
+#ifdef PORT
+extern void port_coroutine_yield(void);
+#endif
 #include <if/interface.h>
 #include <gr/ground.h>
 #include <sc/scene.h>
+#include <sys/netinput.h>
+#include <sys/netpeer.h>
+#include <sys/netreplay.h>
 #include <sys/video.h>
 #include <reloc_data.h>
+#include <gm/gmcamera.h>
+#include <it/itmanager.h>
+#include <sys/audio.h>
+#include <wp/wpmanager.h>
+extern void *func_800269C0_275C0(u16 id);
+extern void func_800266A0_272A0(void);
 
 // // // // // // // // // // // //
 //                               //
@@ -40,7 +52,7 @@ SYTaskmanSetup dSCVSBattleTaskmanSetup =
         2,                              // ???
         0xC000,                         // RDP Output Buffer Size
         scVSBattleFuncLights,       	// Pre-render function
-        syControllerFuncRead,           // Controller I/O function
+        syNetInputFuncRead,             // Controller I/O function
     },
 
     0,                                  // Number of GObjThreads
@@ -74,7 +86,15 @@ SYTaskmanSetup dSCVSBattleTaskmanSetup =
 // 0x8018D0C0
 void scVSBattleFuncUpdate(void)
 {
+	syNetPeerUpdateBattleGate();
+
+	if (syNetPeerCheckBattleExecutionReady() == FALSE)
+	{
+		return;
+	}
 	ifCommonBattleUpdateInterfaceAll();
+	syNetReplayUpdate();
+	syNetPeerUpdate();
 }
 
 // 0x8018D0E0 - Get player's initial facing direction for battle start
@@ -131,6 +151,10 @@ void scVSBattleStartBattle(void)
 	FTDesc desc;
 	SYColorRGBA color;
 
+	syNetInputStartVSSession();
+	syNetReplayStartVSSession(gSCManagerBattleState);
+	syNetPeerStartVSSession();
+
 	gSCManagerSceneData.is_reset = FALSE;
 	gSCManagerSceneData.is_suddendeath = FALSE;
 
@@ -138,11 +162,11 @@ void scVSBattleStartBattle(void)
 
 	if (!(gSCManagerBackupData.error_flags & LBBACKUP_ERROR_1PGAMEMARIO) && (gSCManagerBackupData.boot > 68))
 	{
-		file = lbRelocGetExternHeapFile((u32)&llSYKseg1ValidateFileID, syTaskmanMalloc(lbRelocGetFileSize((u32)&llSYKseg1ValidateFileID), 0x10));
-		func_kseg1 = lbRelocGetFileData(sb32 (*)(void), file, &llSYKseg1ValidateFunc);
+		file = lbRelocGetExternHeapFile((u32)llSYKseg1ValidateFileID, syTaskmanMalloc(lbRelocGetFileSize((u32)llSYKseg1ValidateFileID), 0x10));
+		func_kseg1 = lbRelocGetFileData(sb32 (*)(void), file, llSYKseg1ValidateFunc);
 
-		osWritebackDCache(func_kseg1, *lbRelocGetFileData(s32*, file, &llSYKseg1ValidateNBytes));
-		osInvalICache(func_kseg1, *lbRelocGetFileData(s32*, file, &llSYKseg1ValidateNBytes));
+		osWritebackDCache(func_kseg1, *lbRelocGetFileData(s32*, file, llSYKseg1ValidateNBytes));
+		osInvalICache(func_kseg1, *lbRelocGetFileData(s32*, file, llSYKseg1ValidateNBytes));
 
 		if (func_kseg1() == FALSE)
 		{
@@ -531,6 +555,9 @@ void scVSBattleStartScene(void)
 
 	while (syAudioCheckBGMPlaying(0) != FALSE)
 	{
+#ifdef PORT
+		port_coroutine_yield();
+#endif
 		continue;
 	}
 	syAudioSetBGMVolume(0, 0x7800);
@@ -550,12 +577,17 @@ void scVSBattleStartScene(void)
 
 		while (syAudioCheckBGMPlaying(0) != FALSE)
 		{
+#ifdef PORT
+			port_coroutine_yield();
+#endif
 			continue;
 		}
 		syAudioSetBGMVolume(0, 0x7800);
 		func_800266A0_272A0();
 		gmRumbleInitPlayers();
 	}
+	syNetReplayFinishVSSession();
+	syNetPeerStopVSSession();
 	gSCManagerSceneData.scene_prev = gSCManagerSceneData.scene_curr;
 	gSCManagerSceneData.scene_curr = nSCKindVSResults;
 }

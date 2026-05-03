@@ -2,6 +2,20 @@
 #include <ft/fighter.h>
 #include <gr/ground.h>
 #include <sys/video.h>
+#include <sys/objanim.h>
+#include <sc/scmanager.h>
+#include <sys/debug.h>
+extern void func_800267F4_273F4(void *arg0);
+
+#ifdef PORT
+extern void port_log(const char *fmt, ...);
+extern void portFixupSprite(void *sprite);
+extern void portFixupBitmap(void *bitmap);
+extern void portFixupBitmapArray(void *bitmaps, unsigned int count);
+extern void portFixupSpriteBitmapData(void *sprite, void *bitmaps);
+extern void portDeswizzleDecodedSprite4c(void *sprite, void *bitmaps);
+extern void portFixupMObjSub(void *mobjsub);
+#endif
 
 extern void syInterpCubic(void*, void*, f32);
 extern void* func_80026A10_27610(u16);
@@ -725,7 +739,7 @@ void lbCommonFuncUpdate(void)
 alSoundEffect* lbCommonMakePositionFGM(u16 fgm, f32 pos)
 {
     alSoundEffect *snd = func_80026A10_27610(fgm);
-    
+
     if (snd != NULL)
     {
         s32 balance = ((pos / 8000.0F) * 60.0F);
@@ -739,8 +753,25 @@ alSoundEffect* lbCommonMakePositionFGM(u16 fgm, f32 pos)
             balance = -60;
         }
         balance = 64 - balance;
-        
+
+#ifdef PORT
+        /* PORT: func_80026A10_27610 returns ALWhatever8009EDD0_siz34*,
+         * which is type-punned via `alSoundEffect *snd` here.  On N64
+         * (4-byte pointers) alSoundEffect.balance and siz34's u8 at
+         * byte offset 0x2F coincided, so writing snd->balance updated
+         * the right byte.  On LP64 the siz34 struct's pointer fields
+         * widened, shifting that target byte to offset 0x43 — but
+         * alSoundEffect.balance still lives at offset 0x3F (the high
+         * byte of siz34's unk_0x28 EE0C pointer slot).  Writing through
+         * the alSoundEffect view would corrupt unk_0x28's high byte
+         * and crash the FGM ucode parser the first time the EE0C is
+         * dereferenced.  Reach siz34's `unk_0x2F` (offset 0x43 on LP64)
+         * directly via byte arithmetic — siz34's struct definition is
+         * private to n_env.c, so no header is available to share. */
+        *((u8 *)snd + 0x43) = (u8)balance;
+#else
         snd->balance = balance;
+#endif
 
         func_800267F4_273F4(snd);
     }
@@ -790,7 +821,12 @@ void lbCommonAddDObjAnimJointAll(DObj *root_dobj, AObjEvent32 **anim_joints, f32
 
     while (current_dobj != NULL)
     {
+#ifdef PORT
+        u32 anim_joint_token = *(u32*)anim_joints;
+        AObjEvent32 *anim_joint = (anim_joint_token != 0) ? (AObjEvent32*)PORT_RESOLVE(anim_joint_token) : NULL;
+#else
         AObjEvent32 *anim_joint = *anim_joints;
+#endif
         
         if (anim_joint != NULL)
         {
@@ -798,7 +834,11 @@ void lbCommonAddDObjAnimJointAll(DObj *root_dobj, AObjEvent32 **anim_joints, f32
         }
         else current_dobj->anim_wait = AOBJ_ANIM_NULL;
         
+#ifdef PORT
+        anim_joints = (AObjEvent32**)(void*)(((u32*)anim_joints) + 1);
+#else
         anim_joints++;
+#endif
         
         current_dobj = lbCommonGetTreeDObjNextFromRoot(current_dobj, root_dobj);
     }
@@ -813,7 +853,12 @@ void lbCommonAddFighterPartsFigatree(DObj *root_dobj, void **figatree, f32 anim_
 
     while (current_dobj != NULL)
     {
+#ifdef PORT
+        u32 anim_token = *(u32*)figatree;
+        void *anim = (anim_token != 0) ? PORT_RESOLVE(anim_token) : NULL;
+#else
         void *anim = *figatree;
+#endif
         FTParts *parts = current_dobj->user_data.p;
         
         if (anim != NULL)
@@ -828,7 +873,11 @@ void lbCommonAddFighterPartsFigatree(DObj *root_dobj, void **figatree, f32 anim_
 
             parts->is_have_anim = FALSE;
         }
+#ifdef PORT
+        figatree = (void**)(void*)(((u32*)figatree) + 1);
+#else
         figatree++;
+#endif
         
         current_dobj = lbCommonGetTreeDObjNextFromRoot(current_dobj, root_dobj);
     }
@@ -838,14 +887,21 @@ void lbCommonAddFighterPartsFigatree(DObj *root_dobj, void **figatree, f32 anim_
 void lbCommonAddTreeDObjsAnimAll(DObj *root_dobj, AObjEvent32 **anim_joints, AObjEvent32 ***p_matanim_joints, f32 anim_frame)
 {
     DObj *current_dobj = root_dobj;
-    
+#ifdef PORT
+    u32 joint_idx = 0;
+#endif
+
     root_dobj->parent_gobj->anim_frame = anim_frame;
 
     while (current_dobj != NULL)
     {
         if (anim_joints != NULL)
         {
+#ifdef PORT
+            AObjEvent32 *anim_joint = (AObjEvent32 *)PORT_RESOLVE_ARRAY(anim_joints, joint_idx);
+#else
             AObjEvent32 *anim_joint = *anim_joints;
+#endif
 
             if (anim_joint != NULL)
             {
@@ -853,10 +909,32 @@ void lbCommonAddTreeDObjsAnimAll(DObj *root_dobj, AObjEvent32 **anim_joints, AOb
             }
             else current_dobj->anim_wait = AOBJ_ANIM_NULL;
 
+#ifndef PORT
             anim_joints++;
+#endif
         }
         if (p_matanim_joints != NULL)
         {
+#ifdef PORT
+            void *matanim_joints_inner = PORT_RESOLVE_ARRAY(p_matanim_joints, joint_idx);
+            if (matanim_joints_inner != NULL)
+            {
+                MObj *mobj = current_dobj->mobj;
+                u32 matanim_idx = 0;
+
+                while (mobj != NULL)
+                {
+                    AObjEvent32 *matanim_joint = (AObjEvent32 *)PORT_RESOLVE_ARRAY(matanim_joints_inner, matanim_idx);
+
+                    if (matanim_joint != NULL)
+                    {
+                        gcAddMObjMatAnimJoint(mobj, matanim_joint, anim_frame);
+                    }
+                    mobj = mobj->next;
+                    matanim_idx++;
+                }
+            }
+#else
             if (*p_matanim_joints != NULL)
             {
                 MObj *mobj = current_dobj->mobj;
@@ -875,7 +953,11 @@ void lbCommonAddTreeDObjsAnimAll(DObj *root_dobj, AObjEvent32 **anim_joints, AOb
                 }
             }
             p_matanim_joints++;
+#endif
         }
+#ifdef PORT
+        joint_idx++;
+#endif
         current_dobj = lbCommonGetTreeDObjNextFromRoot(current_dobj, root_dobj);
     }
 }
@@ -929,14 +1011,14 @@ void lbCommonSetupTreeDObjs(DObj *root_dobj, DObjDesc *dobjdesc, DObj **dobjs, u
 
         if (id != 0)
         {
-            current_dobj = array_dobjs[id] = gcAddChildForDObj(array_dobjs[id - 1], dobjdesc->dl);
-        } 
-        else current_dobj = array_dobjs[0] = gcAddChildForDObj(root_dobj, dobjdesc->dl);
-        
-        if (dobjdesc->id & 0xF000) 
+            current_dobj = array_dobjs[id] = gcAddChildForDObj(array_dobjs[id - 1], PORT_RESOLVE(dobjdesc->dl));
+        }
+        else current_dobj = array_dobjs[0] = gcAddChildForDObj(root_dobj, PORT_RESOLVE(dobjdesc->dl));
+
+        if (dobjdesc->id & 0xF000)
         {
             gcDecideDObj3TransformsKind(current_dobj, tk1, tk2, tk3, dobjdesc->id & 0xF000);
-        } 
+        }
         else gcAddDObj3TransformsKind(current_dobj, tk1, tk2, tk3);
         
         current_dobj->translate.vec.f = dobjdesc->translate;
@@ -963,6 +1045,42 @@ void lbCommonAddMObjForFighterPartsDObj
 {
     if (mobjsubs != NULL)
     {
+#ifdef PORT
+        u32 idx = 0;
+        MObjSub *mobjsub = (MObjSub *)PORT_RESOLVE_ARRAY(mobjsubs, idx);
+
+        while (mobjsub != NULL)
+        {
+            portFixupMObjSub(mobjsub);
+            MObj *mobj = gcAddMObjForDObj(dobj, mobjsub);
+
+            if (costume_matanim_joints != NULL)
+            {
+                AObjEvent32 *costume_matanim_joint = (AObjEvent32 *)PORT_RESOLVE_ARRAY(costume_matanim_joints, idx);
+
+                if (costume_matanim_joint != NULL)
+                {
+                    gcAddMObjMatAnimJoint(mobj, costume_matanim_joint, anim_frame);
+                    gcParseMObjMatAnimJoint(mobj);
+                    gcPlayMObjMatAnim(mobj);
+                    gcRemoveAObjFromMObj(mobj);
+                }
+            }
+            if (main_matanim_joints != NULL)
+            {
+                AObjEvent32 *main_matanim_joint = (AObjEvent32 *)PORT_RESOLVE_ARRAY(main_matanim_joints, idx);
+
+                if (main_matanim_joint != NULL)
+                {
+                    gcAddMObjMatAnimJoint(mobj, main_matanim_joint, 0.0F);
+                    gcParseMObjMatAnimJoint(mobj);
+                    gcPlayMObjMatAnim(mobj);
+                }
+            }
+            idx++;
+            mobjsub = (MObjSub *)PORT_RESOLVE_ARRAY(mobjsubs, idx);
+        }
+#else
         MObjSub *mobjsub = *mobjsubs;
 
         while (mobjsub != NULL)
@@ -997,6 +1115,7 @@ void lbCommonAddMObjForFighterPartsDObj
             mobjsubs++;
             mobjsub = *mobjsubs;
         }
+#endif
     }
 }
 
@@ -1023,9 +1142,13 @@ void lbCommonSetupFighterPartsDObjs
     DObj *array_dobjs[DOBJ_ARRAY_MAX];
     s32 detail_id;
     DObjDesc *dobjdesc;
+    DObjDesc *detail_dobjdesc;
+    MObjSub ***detail_p_mobjsubs;
+    AObjEvent32 ***detail_p_costume_matanim_joints;
+    DObjDesc *low_dobjdesc;
     DObj *current_dobj;
 
-    dobjdesc = commonparts_container->commonparts[detail_curr - 1].dobjdesc;
+    dobjdesc = FTPARTS_GET_DOBJDESC(&commonparts_container->commonparts[detail_curr - 1]);
 
     flags0 = setup_parts[0], flags1 = setup_parts[1];
 
@@ -1044,25 +1167,30 @@ void lbCommonSetupFighterPartsDObjs
             if
             (
                 (detail_curr == nFTPartsDetailHigh) ||
-                (commonparts_container->commonparts[nFTPartsDetailLow - nFTPartsDetailStart].dobjdesc[i].dl == NULL)
+                ((low_dobjdesc = FTPARTS_GET_DOBJDESC(&commonparts_container->commonparts[nFTPartsDetailLow - nFTPartsDetailStart])) == NULL) ||
+                (low_dobjdesc[i].dl == NULL)
             )
             {
                 detail_id = 0;
             }
             else detail_id = 1;
 
+            detail_dobjdesc = FTPARTS_GET_DOBJDESC(&commonparts_container->commonparts[detail_id]);
+            detail_p_mobjsubs = FTPARTS_GET_MOBJSUBS(&commonparts_container->commonparts[detail_id]);
+            detail_p_costume_matanim_joints = FTPARTS_GET_COSTUME_MATANIM_JOINTS(&commonparts_container->commonparts[detail_id]);
+
             if (id != 0)
             {
                 current_dobj = array_dobjs[id] = gcAddChildForDObj
                 (
                     array_dobjs[id - 1],
-                    commonparts_container->commonparts[detail_id].dobjdesc[i].dl
+                    PORT_RESOLVE(detail_dobjdesc[i].dl)
                 );
             }
             else current_dobj = array_dobjs[0] = gcAddChildForDObj
             (
                 root_dobj,
-                commonparts_container->commonparts[detail_id].dobjdesc[i].dl
+                PORT_RESOLVE(detail_dobjdesc[i].dl)
             );
             if (dobjdesc->id & 0x8000)
             {
@@ -1077,10 +1205,13 @@ void lbCommonSetupFighterPartsDObjs
             lbCommonAddMObjForFighterPartsDObj
             (
                 current_dobj,
-                (commonparts_container->commonparts[detail_id].p_mobjsubs != NULL) ?
-                commonparts_container->commonparts[detail_id].p_mobjsubs[i] : NULL,
-                (commonparts_container->commonparts[detail_id].p_costume_matanim_joints != NULL) ?
-                commonparts_container->commonparts[detail_id].p_costume_matanim_joints[i] : NULL,
+#ifdef PORT
+                (detail_p_mobjsubs != NULL) ? (MObjSub **)PORT_RESOLVE_ARRAY(detail_p_mobjsubs, i) : NULL,
+                (detail_p_costume_matanim_joints != NULL) ? (AObjEvent32 **)PORT_RESOLVE_ARRAY(detail_p_costume_matanim_joints, i) : NULL,
+#else
+                (detail_p_mobjsubs != NULL) ? detail_p_mobjsubs[i] : NULL,
+                (detail_p_costume_matanim_joints != NULL) ? detail_p_costume_matanim_joints[i] : NULL,
+#endif
                 NULL,
                 anim_frame
             );
@@ -1116,33 +1247,52 @@ void lbCommonSetupCustomTreeDObjsWithMObj
     DObj *dobj;
     s32 id;
     DObj *array_dobjs[DOBJ_ARRAY_MAX];
+#ifdef PORT
+    u32 outer_idx = 0;
+#endif
 
     for (i = 0; i < ARRAY_COUNT(array_dobjs); i++)
     {
         array_dobjs[i] = NULL;
     }
-    while (dobjdesc->id != ARRAY_COUNT(array_dobjs)) 
+    while (dobjdesc->id != ARRAY_COUNT(array_dobjs))
     {
         id = dobjdesc->id & 0xFFF;
 
         if (id != 0)
         {
-            dobj = array_dobjs[id] = gcAddChildForDObj(array_dobjs[id - 1], dobjdesc->dl);
-        } 
-        else dobj = array_dobjs[0] = gcAddChildForDObj(root_dobj, dobjdesc->dl);
-        
-        if (dobjdesc->id & 0x8000) 
+            dobj = array_dobjs[id] = gcAddChildForDObj(array_dobjs[id - 1], PORT_RESOLVE(dobjdesc->dl));
+        }
+        else dobj = array_dobjs[0] = gcAddChildForDObj(root_dobj, PORT_RESOLVE(dobjdesc->dl));
+
+        if (dobjdesc->id & 0x8000)
         {
             gcDecideDObj3TransformsKind(dobj, tk1, tk2, tk3, 0x8000);
-        } 
+        }
         else gcAddDObj3TransformsKind(dobj, tk1, tk2, tk3);
-        
+
         dobj->translate.vec.f = dobjdesc->translate;
         dobj->rotate.vec.f = dobjdesc->rotate;
         dobj->scale.vec.f = dobjdesc->scale;
 
         if (p_mobjsubs != NULL)
         {
+#ifdef PORT
+            void *mobjsubs_inner = PORT_RESOLVE_ARRAY(p_mobjsubs, outer_idx);
+            if (mobjsubs_inner != NULL)
+            {
+                u32 inner_idx = 0;
+                MObjSub *mobjsub = (MObjSub *)PORT_RESOLVE_ARRAY(mobjsubs_inner, inner_idx);
+                while (mobjsub != NULL)
+                {
+                    portFixupMObjSub(mobjsub);
+                    gcAddMObjForDObj(dobj, mobjsub);
+                    inner_idx++;
+                    mobjsub = (MObjSub *)PORT_RESOLVE_ARRAY(mobjsubs_inner, inner_idx);
+                }
+            }
+            outer_idx++;
+#else
             if (*p_mobjsubs != NULL)
             {
                 MObjSub **mobjsubs = *p_mobjsubs;
@@ -1151,13 +1301,12 @@ void lbCommonSetupCustomTreeDObjsWithMObj
                 while (mobjsub != NULL)
                 {
                     gcAddMObjForDObj(dobj, mobjsub);
-
                     mobjsubs++;
-
                     mobjsub = *mobjsubs;
                 }
             }
             p_mobjsubs++;
+#endif
         }
         if (dobjs != NULL)
         {
@@ -1171,25 +1320,44 @@ void lbCommonSetupCustomTreeDObjsWithMObj
 void lbCommonAddMObjForTreeDObjs(DObj *root_dobj, MObjSub ***p_mobjsubs)
 {
     DObj *current_dobj = root_dobj;
-    
+#ifdef PORT
+    u32 outer_idx = 0;
+#endif
+
     while (current_dobj != NULL)
     {
         if (p_mobjsubs != NULL)
         {
+#ifdef PORT
+            void *mobjsubs_inner = PORT_RESOLVE_ARRAY(p_mobjsubs, outer_idx);
+            if (mobjsubs_inner != NULL)
+            {
+                u32 inner_idx = 0;
+                MObjSub *mobjsub = (MObjSub *)PORT_RESOLVE_ARRAY(mobjsubs_inner, inner_idx);
+                while (mobjsub != NULL)
+                {
+                    portFixupMObjSub(mobjsub);
+                    gcAddMObjForDObj(current_dobj, mobjsub);
+                    inner_idx++;
+                    mobjsub = (MObjSub *)PORT_RESOLVE_ARRAY(mobjsubs_inner, inner_idx);
+                }
+            }
+            outer_idx++;
+#else
             if (*p_mobjsubs != NULL)
             {
                 MObjSub **mobjsubs = *p_mobjsubs;
                 MObjSub *mobjsub = *mobjsubs;
-                    
+
                 while (mobjsub != NULL)
                 {
                     gcAddMObjForDObj(current_dobj, mobjsub);
-                        
                     mobjsubs++;
                     mobjsub = *mobjsubs;
                 }
             }
             p_mobjsubs++;
+#endif
         }
         current_dobj = lbCommonGetTreeDObjNextFromRoot(current_dobj, root_dobj);
     }
@@ -1360,7 +1528,7 @@ sb32 func_ovl0_800C96EC(Mtx *mtx, DObj *dobj, Gfx **dls)
 // 0x800C9714
 sb32 func_ovl0_800C9714(Mtx *mtx, DObj *dobj, Gfx **dls)
 {
-	func_ovl0_800C96DC(mtx, dobj, 1);
+	func_ovl0_800C96DC(mtx, dobj, (Gfx **)(intptr_t)1);
 
 	return 0;
 }
@@ -1446,14 +1614,36 @@ sb32 func_ovl0_800C994C(Mtx *mtx, DObj *dobj, Gfx **dls)
 {
     s32 unused;
     DObj *attach_dobj = dobj->user_data.p;
-    FTParts *parts = attach_dobj->user_data.p;
+    FTParts *parts;
     Mtx44f f;
-    
+
+#ifdef PORT
+    /* PORT: this matrix-update callback is registered as the matrix proc for
+     * effect dobjs that are "attached" to a fighter joint via user_data.p =
+     * fighter->joints[N] (see efManagerShieldMakeEffect, ef-attach-to-joint
+     * variants in efmanager.c).  When the fighter joint is NULL on PC (which
+     * happens for joints 1..3 because the FTMotionDesc layout mismatch breaks
+     * the hidden-parts mechanism, and for various per-fighter joints because
+     * setup_parts data isn't fully populating), attach_dobj is NULL.
+     *
+     * Bail out gracefully — the effect just won't get a per-frame matrix
+     * update, which means its visual position won't track the fighter.  But
+     * the game stays alive.  This is the single chokepoint for ALL the
+     * NULL-joint effect crashes; once the upstream FTMotionDesc + parts data
+     * issues are fixed, this guard becomes a no-op.
+     *
+     * Same crash class as project_addr64_relocation_bug.md. */
+    if (attach_dobj == NULL || attach_dobj->user_data.p == NULL) {
+        return 0;
+    }
+#endif
+
+    parts = attach_dobj->user_data.p;
     func_ovl2_800EDBA4(attach_dobj);
     gmCollisionCopyMatrix(f, parts->mtx_translate);
     gGCScaleX = sqrtf(SQUARE(f[0][0]) + SQUARE(f[0][1]) + SQUARE(f[0][2]));
     syMatrixF2LFixedW(&f, mtx);
-    
+
     return 0;
 }
 
@@ -2200,15 +2390,15 @@ void lbCommonDecodeSpriteBitmapsSiz4b(Sprite *sprite)
     s32 n;
     Bitmap *bitmap;
     
-    for (n = sprite->nbitmaps, bitmap = sprite->bitmap; n > 0; n--)
+    for (n = sprite->nbitmaps, bitmap = (Bitmap*)PORT_RESOLVE(sprite->bitmap); n > 0; n--)
     {
         s32 res = (bitmap[n - 1].width_img / 2) * bitmap[n - 1].actualHeight;
-            
+
         lbCommonDecodeBitmapSiz4b
         (
-            (u8*) ((u8*)bitmap[n - 1].buf + (res / 2) - 1), 
-            (u8*) ((u8*)bitmap[n - 1].buf + (res - 1)),
-            (u8*) ((u8*)bitmap[n - 1].buf)
+            (u8*) ((u8*)PORT_RESOLVE(bitmap[n - 1].buf) + (res / 2) - 1),
+            (u8*) ((u8*)PORT_RESOLVE(bitmap[n - 1].buf) + (res - 1)),
+            (u8*) ((u8*)PORT_RESOLVE(bitmap[n - 1].buf))
         );
     }
     sprite->bmsiz = G_IM_SIZ_4b;
@@ -2234,13 +2424,33 @@ void lbCommonDrawSObjBitmap
     s32 tex_width, tex_height;
     void *buf;
 
-    if (bitmap->buf == NULL)
+    if (PORT_RESOLVE(bitmap->buf) == NULL)
     {
+#ifdef PORT
+        /* Don't panic on NULL texel pointers — the original N64 code spins
+         * in a debug crash screen, but on PC we want to keep rendering and
+         * surface a diagnostic so we can chase the resource plumbing bug.
+         * Log the first handful of occurrences with enough context to find
+         * the offending sprite, then silently skip subsequent ones. */
+        static int sNullBufLogCount = 0;
+        if (sNullBufLogCount < 20) {
+            sNullBufLogCount++;
+            port_log("SSB64: lbCommonDrawSObjBitmap NULL bitmap->buf #%d "
+                     "sobj=%p sprite=%p bitmap=%p raw_buf=%p nbitmaps=%d "
+                     "bmfmt=%u bmsiz=%u w=%d h=%d\n",
+                     sNullBufLogCount, sobj, sprite, bitmap,
+                     (void*)bitmap->buf, sprite->nbitmaps,
+                     sprite->bmfmt, sprite->bmsiz,
+                     bitmap->width, bitmap->actualHeight);
+        }
+        return;
+#else
         while (TRUE)
         {
             syDebugPrintf("drawBitMap: no bitmap data!\n");
             scManagerRunPrintGObjStatus();
         }
+#endif
     }
     if (yy >= sLBCommonScissorYMin)
     {
@@ -2290,12 +2500,12 @@ void lbCommonDrawSObjBitmap
         }
         else ryl = yy * 4;
         
-        if (bitmap->buf != sLBCommonPrevBitmapBuf)
+        if (PORT_RESOLVE(bitmap->buf) != sLBCommonPrevBitmapBuf)
         {
             switch (sprite->bmsiz)
             {
             case G_IM_SIZ_4b:
-                gDPSetTextureImage(dl++, sprite->bmfmt, G_IM_SIZ_16b, 1, bitmap->buf);
+                gDPSetTextureImage(dl++, sprite->bmfmt, G_IM_SIZ_16b, 1, PORT_RESOLVE(bitmap->buf));
                 gDPSetTile
                 (
                     dl++,
@@ -2343,7 +2553,7 @@ void lbCommonDrawSObjBitmap
                 break;
                 
             case G_IM_SIZ_8b:
-                gDPSetTextureImage(dl++, sprite->bmfmt, G_IM_SIZ_8b_LOAD_BLOCK, 1, bitmap->buf);
+                gDPSetTextureImage(dl++, sprite->bmfmt, G_IM_SIZ_8b_LOAD_BLOCK, 1, PORT_RESOLVE(bitmap->buf));
                 gDPSetTile
                 (
                     dl++,
@@ -2391,7 +2601,7 @@ void lbCommonDrawSObjBitmap
                 break;
                 
             case G_IM_SIZ_16b:
-                gDPSetTextureImage(dl++, sprite->bmfmt, G_IM_SIZ_16b_LOAD_BLOCK, 1, bitmap->buf);
+                gDPSetTextureImage(dl++, sprite->bmfmt, G_IM_SIZ_16b_LOAD_BLOCK, 1, PORT_RESOLVE(bitmap->buf));
                 gDPSetTile
                 (
                     dl++,
@@ -2439,7 +2649,7 @@ void lbCommonDrawSObjBitmap
                 break;
                 
             case G_IM_SIZ_32b:
-                gDPSetTextureImage(dl++, G_IM_FMT_RGBA, G_IM_SIZ_32b_LOAD_BLOCK, 1, bitmap->buf);
+                gDPSetTextureImage(dl++, G_IM_FMT_RGBA, G_IM_SIZ_32b_LOAD_BLOCK, 1, PORT_RESOLVE(bitmap->buf));
                 gDPSetTile
                 (
                     dl++,
@@ -2486,8 +2696,8 @@ void lbCommonDrawSObjBitmap
                 );
                 break;
             }
-            sLBCommonPrevBitmapBuf = bitmap->buf;
-        }        
+            sLBCommonPrevBitmapBuf = PORT_RESOLVE(bitmap->buf);
+        }
         gSPTextureRectangle(dl++, rxh, ryh, rxl, ryl, 0, rs, rt, sx, sy);
         gDPPipeSync(dl++);
         
@@ -2603,7 +2813,7 @@ void lbCommonPrepSObjAttr(Gfx **dls, SObj *sobj)
 
         case G_IM_FMT_CI:
             gDPSetTextureLUT(dl++, G_TT_RGBA16);
-            gDPLoadTLUT(dl++, sprite->nTLUT, sprite->startTLUT + 256, sprite->LUT);
+            gDPLoadTLUT(dl++, sprite->nTLUT, sprite->startTLUT + 256, PORT_RESOLVE(sprite->LUT));
             gDPLoadSync(dl++);
 
             /* fallthrough */
@@ -2632,12 +2842,12 @@ void lbCommonPrepSObjAttr(Gfx **dls, SObj *sobj)
         break;
 
     case G_IM_FMT_CI:
-        if (sprite->LUT != sLBCommonPrevSpriteLUT)
+        if (PORT_RESOLVE(sprite->LUT) != sLBCommonPrevSpriteLUT)
         {
-            gDPLoadTLUT(dl++, sprite->nTLUT, sprite->startTLUT + 256, sprite->LUT);
+            gDPLoadTLUT(dl++, sprite->nTLUT, sprite->startTLUT + 256, PORT_RESOLVE(sprite->LUT));
             gDPLoadSync(dl++);
         }
-        break; 
+        break;
     }
     dls[0] = dl;
 }
@@ -2676,8 +2886,8 @@ void lbCommonPrepSObjDraw(Gfx **dls, SObj *sobj)
     {
         return;
     }
-    bitmap = sprite->bitmap;
-    
+    bitmap = (Bitmap*)PORT_RESOLVE(sprite->bitmap);
+
     if (bitmap != NULL)
     {
         pos_x = sobj->pos.x;
@@ -2800,7 +3010,7 @@ void lbCommonSetExternSpriteParams(Sprite *sprite)
 {
     sLBCommonExternSpriteAttr = sprite->attr;
     sLBCommonExternBitmapFmt = sprite->bmfmt;
-    sLBCommonPrevSpriteLUT = sprite->LUT;
+    sLBCommonPrevSpriteLUT = PORT_RESOLVE(sprite->LUT);
 }
 
 // 0x800CCF00
@@ -2841,9 +3051,37 @@ SObj* lbCommonMakeSObjForGObj(GObj *gobj, Sprite *sprite)
 {
     SObj *sobj;
 
+#ifdef PORT
+    // Fix byte order for Sprite + its Bitmap array after blanket u32 swap.
+    // Must happen before ANY field access (e.g. bmsiz check below).
+    portFixupSprite(sprite);
+    {
+        Bitmap *bitmaps = (Bitmap*)PORT_RESOLVE(sprite->bitmap);
+        if (bitmaps != NULL)
+        {
+            portFixupBitmapArray(bitmaps, sprite->nbitmaps);
+            // Restore N64 BE byte order for the texel data and undo the
+            // RDP TMEM line swizzle (16bpp odd rows have their 4-byte qword
+            // halves swapped in DRAM). Pass2 of portRelocByteSwapBlob can't
+            // find sprite textures because they aren't referenced by any
+            // in-file SETTIMG — sprites build their LOAD blocks at runtime.
+            portFixupSpriteBitmapData(sprite, bitmaps);
+        }
+    }
+#endif
+
     if (sprite->bmsiz == G_IM_SIZ_4c)
     {
         lbCommonDecodeSpriteBitmapsSiz4b(sprite);
+#ifdef PORT
+        {
+            Bitmap *bitmaps = (Bitmap*)PORT_RESOLVE(sprite->bitmap);
+            if (bitmaps != NULL)
+            {
+                portDeswizzleDecodedSprite4c(sprite, bitmaps);
+            }
+        }
+#endif
     }
     sobj = gcAddSObjForGObj(gobj, sprite);
     
@@ -2855,8 +3093,18 @@ SObj* lbCommonMakeSObjForGObj(GObj *gobj, Sprite *sprite)
     sobj->maskt = sobj->masks = 0;
     
     sobj->cmt = sobj->cms = 2;
-    
+
     sobj->pos.x = sobj->pos.y = 0.0F;
+
+    /*
+     * The decomp is missing the trailing `return sobj;` and relies on IDO /
+     * MSVC codegen happening to leave the value in the return register at
+     * fall-off. Clang/arm64 picks a stack slot that's never written, so the
+     * "return value" is uninitialised memory and callers (mnStartupFuncStart)
+     * crash immediately doing `sobj->sprite.attr &= ~SP_FASTCOPY`. Return
+     * explicitly so the behaviour is defined on every platform.
+     */
+    return sobj;
 }
 
 // 0x800CD050

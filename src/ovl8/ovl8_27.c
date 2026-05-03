@@ -1,9 +1,17 @@
 #include "common.h"
 #include <sys/develop.h>
 
+#ifdef PORT
+extern dbUnknownLinkStruct D_ovl8_8038D960;
+extern dbFunction D_ovl8_8038DA80;
+extern dbUnknownLink D_ovl8_8038DBD8;
+#endif
 
 void* func_ovl8_803854C4(dbUnknown5* arg0, dbUnknownLinkStruct* arg1, dbUnknownLink* arg2, s32 arg3, s32 arg4, s32 arg5);
 
+#ifdef PORT
+// 0x80385460
+#else
 
 extern sb32 func_ovl8_803718FC();
 extern sb32 func_ovl8_80371930();
@@ -173,13 +181,34 @@ dbFunction D_ovl8_8038DBD8[] = {
 };
 
 // 80385460
+#endif
 s32 func_ovl8_80385460(s32 arg0, dbUnknown3* arg1)
 {
+#ifdef PORT
+    s32 temp_v0;
+    s32 var_v1;
+#else
 	s32 temp_v0;
 	s32 var_v1;
+#endif
 
+#ifdef PORT
+    temp_v0 = func_ovl8_803717A0(0xB4);
+#else
 	temp_v0 = func_ovl8_803717A0(0xB4);
+#endif
 
+#ifdef PORT
+    if (temp_v0 != 0)
+    {
+        func_ovl8_803854C4(temp_v0, 0, 0, arg1, arg0, arg1->unk_dbunk3_0x24);
+        var_v1 = temp_v0;
+    }
+    else
+    {
+        var_v1 = 0;
+    }
+#else
 	if (temp_v0 != 0)
 	{
 		func_ovl8_803854C4(temp_v0, 0, 0, arg1, arg0, arg1->unk_dbunk3_0x24);
@@ -189,15 +218,41 @@ s32 func_ovl8_80385460(s32 arg0, dbUnknown3* arg1)
 	{
 		var_v1 = 0;
 	}
+#endif
 
+#ifdef PORT
+    return var_v1;
+#else
 	return var_v1;
+#endif
 }
 
+#ifdef PORT
+// 0x803854C4
+#else
 // 803854C4
+#endif
 void* func_ovl8_803854C4(dbUnknown5* arg0, dbUnknownLinkStruct* arg1, dbUnknownLink* arg2, s32 arg3, s32 arg4, s32 arg5)
 {
+#ifdef PORT
+    dbFunction *db_func;
+#else
 	dbFunction *db_func;
+#endif
 
+#ifdef PORT
+    if (arg0 != NULL || ((arg0 = func_ovl8_803717A0(0xB4)) != NULL))
+    {
+        if (arg1 == NULL)
+        {
+            arg1 = &arg0->unk_dbunk5_0x58;
+            arg2 = &arg0->unk_dbunk5_0x4C;
+            #line 39
+            func_ovl8_803717E0(arg1);
+            func_ovl8_8037C2D0(arg2);
+            #line 46
+        }
+#else
 	if (arg0 != NULL || ((arg0 = func_ovl8_803717A0(0xB4)) != NULL))
 	{
 		if (arg1 == NULL)
@@ -209,31 +264,80 @@ void* func_ovl8_803854C4(dbUnknown5* arg0, dbUnknownLinkStruct* arg1, dbUnknownL
 			func_ovl8_8037C2D0(arg2);
 			#line 211
 		}
+#endif
 
+#ifdef PORT
+        func_ovl8_803847A0(arg0, arg1, arg2, arg3, arg4, arg5);
+#else
 		func_ovl8_803847A0(arg0, arg1, arg2, arg3, arg4, arg5);
+#endif
 
+#ifdef PORT
+        arg0->unk_dbunk5_0x30 = &D_ovl8_8038D960;
+        arg1->db_func = &D_ovl8_8038DA80;
+        arg2->unk_dbunklink_0x8 = &D_ovl8_8038DBD8;
+#else
 		arg0->unk_dbunk5_0x30 = &D_ovl8_8038D960;
 		arg1->db_func = &D_ovl8_8038DA80;
 		arg2->unk_dbunklink_0x8 = &D_ovl8_8038DBD8;
+#endif
 
+#ifdef PORT
+        db_func = arg0->unk_dbunk5_0x30;
+        db_func[2].unk_dbfunc_0x4(db_func[2].unk_dbfunc_0x0 + (uintptr_t)arg0);
+    }
+#else
 		db_func = arg0->unk_dbunk5_0x30;
 		db_func[2].unk_dbfunc_0x4(db_func[2].unk_dbfunc_0x0 + (uintptr_t)arg0);
 	}
+#endif
 
+#ifdef PORT
+    return arg0;
+#else
 	return arg0;
+#endif
 }
 
+#ifdef PORT
+// 0x80385598
+#else
 // 80385598
+#endif
 void func_ovl8_80385598(dbUnknown5* arg0, s32 arg1)
 {
+#ifdef PORT
+    if (arg0 != NULL)
+    {
+        arg0->unk_dbunk5_0x30 = &D_ovl8_8038D960,
+        arg0->unk_dbunk5_0x38->db_func = &D_ovl8_8038DA80;
+        arg0->unk_dbunk5_0x34->unk_dbunklink_0x8 = &D_ovl8_8038DBD8;
+#else
 	if (arg0 != NULL)
 	{
 		arg0->unk_dbunk5_0x30 = &D_ovl8_8038D960,
 		arg0->unk_dbunk5_0x38->db_func = &D_ovl8_8038DA80;
 		arg0->unk_dbunk5_0x34->unk_dbunklink_0x8 = &D_ovl8_8038DBD8;
+#endif
 
+#ifdef PORT
+        func_ovl8_803848CC(arg0, 0);
+#else
 		func_ovl8_803848CC(arg0, 0);
+#endif
 
+#ifdef PORT
+        if (arg1 != 0)
+        {
+            func_ovl8_8037C30C(arg0->unk_dbunk5_0x34, 0);
+            func_ovl8_803718C4(arg0->unk_dbunk5_0x38, 0);
+        }
+        if (arg1 & 1)
+        {
+            func_ovl8_803717C0(arg0);
+        }
+    }
+#else
 		if (arg1 != 0)
 		{
 			func_ovl8_8037C30C(arg0->unk_dbunk5_0x34, 0);
@@ -244,4 +348,5 @@ void func_ovl8_80385598(dbUnknown5* arg0, s32 arg1)
 			func_ovl8_803717C0(arg0);
 		}
 	}
+#endif
 }

@@ -1,10 +1,20 @@
 #include "common.h"
 #include <sys/develop.h>
 
+#ifdef PORT
+extern dbUnknownLinkStruct D_ovl8_8038EAE0;
+extern dbFunction D_ovl8_8038EBC0;
+extern dbUnknownLink D_ovl8_8038ED18;
+extern dbUnknownLinkStruct D_ovl8_8038ED40;
+extern s32 D_ovl8_8038EDA8;
+#endif
 extern s32 D_ovl8_8038BC8C;
 
 void* func_ovl8_803879FC(dbUnknown5* arg0, dbUnknownLinkStruct* arg1, dbUnknownLink* arg2, dbUnknown3* arg3, s32 arg4);
 
+#ifdef PORT
+// 0x803879A0
+#else
 
 extern sb32 func_ovl8_803718FC();
 extern sb32 func_ovl8_80371930();
@@ -202,6 +212,7 @@ dbFunction D_ovl8_8038EDA8[] = {
 };
 
 // 803879A0
+#endif
 s32 func_ovl8_803879A0(s32 arg0, s32 arg1)
 {
 	s32 temp_v0;
@@ -220,7 +231,11 @@ s32 func_ovl8_803879A0(s32 arg0, s32 arg1)
 	return var_v1;
 }
 
+#ifdef PORT
+// 0x803879FC
+#else
 // 803879FC
+#endif
 void* func_ovl8_803879FC(dbUnknown5* arg0, dbUnknownLinkStruct* arg1, dbUnknownLink* arg2, dbUnknown3* arg3, s32 arg4)
 {
 	dbUnknown3 *temp_v0;
@@ -231,10 +246,18 @@ void* func_ovl8_803879FC(dbUnknown5* arg0, dbUnknownLinkStruct* arg1, dbUnknownL
 		{
 			arg1 = &arg0->unk_dbunk5_0xD8;
 			arg2 = &arg0->unk_dbunk5_0x134;
+#ifdef PORT
+			#line 40
+#else
 			#line 231
+#endif
 			func_ovl8_803717E0(arg1);
 			func_ovl8_8037C2D0(arg2);
+#ifdef PORT
+			#line 47
+#else
 			#line 238
+#endif
 		}
 
 		func_ovl8_8037C7D4(arg0, arg1, arg2, arg3, arg3->unk_dbunk3_0x24->unk_dbunk3_0x0, arg3->unk_dbunk3_0x24->unk_dbunk3_0x4, arg4);
@@ -250,7 +273,11 @@ void* func_ovl8_803879FC(dbUnknown5* arg0, dbUnknownLinkStruct* arg1, dbUnknownL
 	return arg0;
 }
 
+#ifdef PORT
+// 0x80387AF8
+#else
 // 80387AF8
+#endif
 void func_ovl8_80387AF8(dbUnknown5* arg0, s32 arg1)
 {
 	if (arg0 != NULL)
@@ -261,13 +288,21 @@ void func_ovl8_80387AF8(dbUnknown5* arg0, s32 arg1)
 		arg0->unk_dbunk5_0x4C = &D_ovl8_8038ED40,
 		arg0->unk_dbunk5_0xD4 = &D_ovl8_8038EDA8;
 
+#ifdef PORT
+		#line 69
+#else
 		#line 260
+#endif
 		if (&arg0->unk_dbunk5_0xB8 != 0)
 		{
 			arg0->unk_dbunk5_0xD4 = &D_ovl8_8038BC8C;
 			func_ovl8_8038120C(&arg0->unk_dbunk5_0xB8, 0);
 		}
+#ifdef PORT
+		#line 80
+#else
 		#line 271
+#endif
 
 		func_ovl8_8037C92C(arg0, 0);
 
@@ -283,20 +318,32 @@ void func_ovl8_80387AF8(dbUnknown5* arg0, s32 arg1)
 	}
 }
 
+#ifdef PORT
+// 0x80387BD0
+#else
 // 80387BD0
+#endif
 void func_ovl8_80387BD0(s32 arg0)
 {
 	func_ovl8_80381308(arg0 + 0xB8);
 }
 
+#ifdef PORT
+// 0x80387BF0
+#else
 // 80387BF0
+#endif
 void func_ovl8_80387BF0(s32 arg0, s32 arg1)
 {
 	func_ovl8_80381B04(arg0 + 0xB8);
 	func_ovl8_80373694(arg0, arg1);
 }
 
+#ifdef PORT
+// 0x80387C24
+#else
 // 80387C24
+#endif
 void func_ovl8_80387C24(dbUnknown5* arg0)
 {
 	dbUnknownLinkStruct *var_v0;
@@ -315,4 +362,8 @@ void func_ovl8_80387C24(dbUnknown5* arg0)
 
 	arg0->unk_dbunk5_0x48 = var_v0;
 	func_ovl8_803725DC(&arg0->unk_dbunk5_0x40);
+#ifdef PORT
 }
+#else
+}
+#endif

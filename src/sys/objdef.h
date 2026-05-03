@@ -1,7 +1,9 @@
 #ifndef _OBJDEF_H_
 #define _OBJDEF_H_
+#ifndef PORT
 
 #include <macros.h> // GC_FIELDSET
+#endif
 
 typedef enum GObjKind
 {
@@ -268,6 +270,7 @@ typedef enum AObjTrackKind
 
 } AObjTrackKind;
 
+#ifndef PORT
 /*
  * AObjEvent32 command-word construction macros.
  *
@@ -362,6 +365,7 @@ typedef enum AObjTrackKind
 #define AOBJ_FLAG_SCAY   AOBJ_JOINT_BIT(nGCAnimTrackScaY)
 #define AOBJ_FLAG_SCAZ   AOBJ_JOINT_BIT(nGCAnimTrackScaZ)
 
+#endif
 typedef enum GCStatus
 {
     nGCStatusSystem,

@@ -63,6 +63,15 @@ s32 D_ovl1_803922AC[] =
 
 FTMotionDesc dFTPikachuSubMotionDescs[] =
 {
+#ifdef PORT
+	ll_1957_FileID, (intptr_t)D_ovl1_80392250, 0x00000000,
+	ll_476_FileID, (intptr_t)D_ovl1_80392294, 0x80000000,
+	ll_477_FileID, (intptr_t)D_ovl1_80392298, 0x00000000,
+	ll_478_FileID, (intptr_t)D_ovl1_8039229C, 0x00000000,
+	ll_478_FileID, (intptr_t)D_ovl1_8039229C, 0x00000000,
+	ll_479_FileID, 0x80000000, 0x00000000,
+	ll_1963_FileID, 0x80000000, 0x00000000,
+#else
 	&llFTPikachuAnimIdleFileID, D_ovl1_80392250, 0x00000000,
 	&llFTPikachuAnimSelectedFileID, D_ovl1_80392294, 0x80000000,
 	&llFTPikachuAnimWin1FileID, D_ovl1_80392298, 0x00000000,
@@ -70,7 +79,18 @@ FTMotionDesc dFTPikachuSubMotionDescs[] =
 	&llFTPikachuAnimWin2FileID, D_ovl1_8039229C, 0x00000000,
 	&llFTPikachuAnimClapsFileID, 0x80000000, 0x00000000,
 	&llFTPikachuAnimRunFileID, 0x80000000, 0x00000000,
+#endif
 	0x00000000, 0x80000000, 0x00000000,
+#ifdef PORT
+	ll_480_FileID, 0x80000000, 0x80000000,
+	ll_481_FileID, 0x80000000, 0x40000000,
+	ll_482_FileID, 0x80000000, 0x40000000,
+	ll_484_FileID, 0x80000000, 0x00000000,
+	ll_485_FileID, 0x80000000, 0x00000000,
+	ll_486_FileID, 0x80000000, 0x00000000,
+	ll_487_FileID, 0x80000000, 0x00000000,
+	ll_483_FileID, (intptr_t)D_ovl1_803922AC, 0x00000000
+#else
 	&llFTPikachuAnimDollPickUpFileID, 0x80000000, 0x80000000,
 	&llFTPikachuAnimDollFallFileID, 0x80000000, 0x40000000,
 	&llFTPikachuAnimDollRevivalFileID, 0x80000000, 0x40000000,
@@ -79,6 +99,7 @@ FTMotionDesc dFTPikachuSubMotionDescs[] =
 	&llFTPikachuAnimPosePlayerFileID, 0x80000000, 0x00000000,
 	&llFTPikachuAnimPoseEnemyFileID, 0x80000000, 0x00000000,
 	&llFTPikachuAnimUnknown1FileID, D_ovl1_803922AC, 0x00000000
+#endif
 };
 
 s32 dFTPikachuSubMotionDescsCount = sizeof(dFTPikachuSubMotionDescs)/sizeof(FTMotionDesc); // 0x00000010

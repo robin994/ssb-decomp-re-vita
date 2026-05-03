@@ -3,6 +3,15 @@
 #include <sys/develop.h>
 #include <lb/library.h>
 #include <reloc_data.h>
+#ifdef PORT
+#include <string.h>
+#include <sys/debug.h>
+extern void port_log(const char *fmt, ...);
+#endif
+#ifdef PORT
+extern void portFixupFTAttributes(void *attr);
+extern void portFixupStructU16(void *base, unsigned int byte_offset, unsigned int num_words);
+#endif
 
 // // // // // // // // // // // //
 //                               //
@@ -66,7 +75,7 @@ void ftManagerSetupFileSize(void)
     FTMotionDesc *motion_desc;
 
     rl_setup.table_addr = (uintptr_t)&lLBRelocTableAddr;
-    rl_setup.table_files_num = (u32)&llRelocFileCount;
+    rl_setup.table_files_num = (u32)llRelocFileCount;
     rl_setup.file_heap = NULL;
     rl_setup.file_heap_size = 0;
     rl_setup.status_buffer = NULL;
@@ -163,9 +172,9 @@ void ftManagerAllocFighter(u32 data_flags, s32 allocs_num)
     gFTManagerMotionCount = 1;
     gFTManagerStatUpdateCount = 1;
 
-    gFTManagerCommonFile = lbRelocGetExternHeapFile((u32)&llFTManagerCommonFileID, syTaskmanMalloc(lbRelocGetFileSize((u32)&llFTManagerCommonFileID), 0x10));
+    gFTManagerCommonFile = lbRelocGetExternHeapFile((u32)llFTManagerCommonFileID, syTaskmanMalloc(lbRelocGetFileSize((u32)llFTManagerCommonFileID), 0x10));
 
-    lbRelocGetExternHeapFile((u32)&llFTCommonMovesetFileID, syTaskmanMalloc(lbRelocGetFileSize((u32)&llFTCommonMovesetFileID), 0x10));
+    lbRelocGetExternHeapFile((u32)ll_201_FileID, syTaskmanMalloc(lbRelocGetFileSize((u32)ll_201_FileID), 0x10));
 
     for (i = 0; i < (nFTKindEnumCount + ARRAY_COUNT(gSCManagerFighterFileSizes)) / 2; i++)
     {
@@ -368,6 +377,27 @@ void* ftManagerAllocFigatreeHeapKind(s32 fkind)
     return syTaskmanMalloc(data->file_anim_size, 0x10);
 }
 
+#ifdef PORT
+void ftManagerEjectShadowByPlayer(GObj *gobj, uintptr_t player)
+{
+    FTShadow *fs;
+
+    if (gobj->id != nGCCommonKindShadow)
+    {
+        return;
+    }
+    if (gobj->user_data.p == NULL)
+    {
+        return;
+    }
+    fs = gobj->user_data.p;
+
+    if (fs->player == (s32)player)
+    {
+        gcEjectGObj(gobj);
+    }
+}
+#endif
 // 0x800D78E8
 void ftManagerDestroyFighter(GObj *fighter_gobj)
 {
@@ -391,6 +421,12 @@ void ftManagerDestroyFighter(GObj *fighter_gobj)
             ftManagerSetPrevPartsAlloc(parts);
         }
     }
+    
+#ifdef PORT
+    // Fighter shadows are separate GObjs and can accumulate if not explicitly removed.
+    gcFuncGObjAll(ftManagerEjectShadowByPlayer, fp->player);
+#endif
+
     ftManagerSetPrevStructAlloc(fp);
     gcEjectGObj(fighter_gobj);
 }
@@ -627,11 +663,50 @@ void ftManagerInitFighter(GObj *fighter_gobj, FTDesc *desc)
         }
         else fp->passive_vars.kirby.is_ignore_losecopy = TRUE;
 
-        if (fp->fkind == nFTKindKirby)
         {
-            FTKirbyCopy *copy = lbRelocGetFileData(FTKirbyCopy*, gFTDataKirbyMainMotion, &llKirbyMainMotionSpecialNFTKirbyCopy);
-
-            ftParamSetModelPartDefaultID(fighter_gobj, FTKIRBY_COPY_MODELPARTS_JOINT, copy[fp->passive_vars.kirby.copy_id].copy_modelpart_id);
+            FTKirbyCopy *copy = lbRelocGetFileData(FTKirbyCopy*, gFTDataKirbyMainMotion, llKirbyMainMotionSpecialNFTKirbyCopy);
+#ifdef PORT
+            /* PORT: FTKirbyCopy's first u32 word is [u16 copy_id][s16 copy_modelpart_id]
+             * — adjacent u16s in one word.  Pass1's blanket BSWAP32 position-swaps
+             * the two halves, so without this fixup copy_id/copy_modelpart_id read
+             * as each other's values.
+             *
+             * The consumer in ftkirbyspecialn.c (the eat/inhale path) indexes the
+             * array by raw `victim_fp->fkind` — which on the Giant DK 1P stage is
+             * `nFTKindGDonkey`, beyond `nFTKindNEnd`.  The fixup domain MUST match
+             * the consumer's domain or specific stages corrupt copy_id and dispatch
+             * Kirby into the wrong character's special-N (originally surfaced as a
+             * NULL deref in wpManagerMakeWeapon when GiantDK landed on Mario's
+             * fireball spawn).  Iterate the full FTKind value range so this stays
+             * correct if the enum grows.  Run for both Kirby and N-Kirby spawns:
+             * polygon-Kirby on 1P stage 12 uses real Kirby's AI attack table and
+             * fires neutral-B at any nearby polygon, so its eat path also reads
+             * copy[fkind] — must be fixed up even when the player isn't Kirby.
+             * Idempotent via sStructU16Fixups.
+             *
+             * NULL guard: the FTKirbyCopy table lives in Kirby's main-motion file,
+             * which is only loaded under `gFTDataKirbyMainMotion` when real Kirby
+             * is on the stage.  N-Kirby's FTData loads the same physical file but
+             * stores it under `gFTDataNKirbySubMotion` instead, so on stages with
+             * polygon Kirby and no real Kirby (e.g. Race to the Finish randomly
+             * picking N-Kirby as one of the three polygon enemies) the lookup
+             * returns NULL+0=NULL.  Skip the fixup in that case — the eat-path
+             * consumer in ftkirbyspecialn.c reads from the same NULL global so
+             * polygon Kirby cannot actually invoke the inhale code path there
+             * either; the N64 build relies on the same precondition. */
+            if (copy != NULL)
+            {
+                s32 i;
+                for (i = 0; i < nFTKindEnumCount; i++)
+                {
+                    portFixupStructU16(&copy[i], 0, 1);
+                }
+            }
+#endif
+            if (fp->fkind == nFTKindKirby)
+            {
+                ftParamSetModelPartDefaultID(fighter_gobj, FTKIRBY_COPY_MODELPARTS_JOINT, copy[fp->passive_vars.kirby.copy_id].copy_modelpart_id);
+            }
         }
         break;
 
@@ -692,6 +767,19 @@ GObj* ftManagerMakeFighter(FTDesc *desc) // Create fighter
     fp->fkind = desc->fkind;
     fp->data = dFTManagerDataFiles[fp->fkind];
     attr = fp->attr = lbRelocGetFileData(FTAttributes*, *fp->data->p_file_main, fp->data->o_attributes);
+#ifdef PORT
+    portFixupFTAttributes(attr);
+    {
+        // Dump raw memory around expected bitfield offset to find it
+        u32 *raw = (u32 *)attr;
+        port_log("SSB64: ATTR fkind=%d sizeof=%d fog_off=0x%X\n",
+            (int)fp->fkind, (int)sizeof(FTAttributes),
+            (int)offsetof(FTAttributes, fog_color));
+        port_log("  raw[0x3E..0x43]: %08X %08X %08X %08X %08X %08X\n",
+            raw[0x3E], raw[0x3F], raw[0x40], raw[0x41], raw[0x42], raw[0x43]);
+    }
+    port_log("SSB64: ftManagerMakeFighter - begin fkind=%d\n", (int)fp->fkind);
+#endif
     fp->figatree_heap = desc->figatree_heap;
     fp->team = desc->team;
     fp->player = desc->player;
@@ -750,7 +838,7 @@ GObj* ftManagerMakeFighter(FTDesc *desc) // Create fighter
     fp->is_playertag_bossend = FALSE;
     fp->is_limit_map_bounds = FALSE;
 
-    fp->is_have_translate_scale = (attr->translate_scales != NULL) ? TRUE : FALSE;
+    fp->is_have_translate_scale = ((Vec3f*)PORT_RESOLVE(attr->translate_scales) != NULL) ? TRUE : FALSE;
 
     for (i = 0; i < ARRAY_COUNT(fp->joints); i++)
     {
@@ -763,19 +851,26 @@ GObj* ftManagerMakeFighter(FTDesc *desc) // Create fighter
 
     fp->joints[nFTPartsJointTopN]->xobjs[0]->unk05 = desc->unk_rebirth_0x1D;
 
+#ifdef PORT
+    port_log("SSB64: ftManagerMakeFighter - before parts setup fkind=%d commonparts=%p setup_parts=%p\n",
+        fp->fkind, PORT_RESOLVE(attr->commonparts_container), PORT_RESOLVE(attr->setup_parts));
+#endif
     lbCommonSetupFighterPartsDObjs
     (
         DObjGetStruct(fighter_gobj),
-        attr->commonparts_container,
+        (FTCommonPartContainer*)PORT_RESOLVE(attr->commonparts_container),
         fp->detail_curr,
         &fp->joints[nFTPartsJointCommonStart],
-        attr->setup_parts,
+        (u32*)PORT_RESOLVE(attr->setup_parts),
         0x4B,
         nGCMatrixKindNull,
         nGCMatrixKindNull,
         fp->costume,
         fp->unk_ft_0x149
     );
+#ifdef PORT
+    port_log("SSB64: ftManagerMakeFighter - after parts setup fkind=%d\n", fp->fkind);
+#endif
     for (i = 0; i < ARRAY_COUNT(fp->joints); i++)
     {
         if (fp->joints[i] != NULL)
@@ -783,23 +878,26 @@ GObj* ftManagerMakeFighter(FTDesc *desc) // Create fighter
             fp->joints[i]->user_data.p = ftManagerGetNextPartsAlloc();
 
             parts = fp->joints[i]->user_data.p;
-            parts->flags = attr->commonparts_container->commonparts[fp->detail_curr - nFTPartsDetailStart].flags;
+            parts->flags = ((FTCommonPartContainer*)PORT_RESOLVE(attr->commonparts_container))->commonparts[fp->detail_curr - nFTPartsDetailStart].flags;
             parts->joint_id = i;
 
             if (fp->costume != 0)
             {
-                if ((attr->accesspart != NULL) && (i == attr->accesspart->joint_id))
+                if (((FTAccessPart*)PORT_RESOLVE(attr->accesspart) != NULL) && (i == ((FTAccessPart*)PORT_RESOLVE(attr->accesspart))->joint_id))
                 {
-                    accesspart = attr->accesspart;
+                    accesspart = (FTAccessPart*)PORT_RESOLVE(attr->accesspart);
 
                     parts->gobj = gcMakeGObjSPAfter(nGCCommonKindFighterParts, NULL, nGCCommonLinkIDFighterParts, GOBJ_PRIORITY_DEFAULT);
 
-                    gcAddDObjForGObj(parts->gobj, accesspart->dl);
-                    lbCommonAddMObjForFighterPartsDObj(DObjGetStruct(parts->gobj), accesspart->mobjsubs, accesspart->costume_matanim_joints, NULL, fp->costume);
+                    gcAddDObjForGObj(parts->gobj, FTACCESSPART_GET_DL(accesspart));
+                    lbCommonAddMObjForFighterPartsDObj(DObjGetStruct(parts->gobj), FTACCESSPART_GET_MOBJSUBS(accesspart), FTACCESSPART_GET_COSTUME_MATANIM_JOINTS(accesspart), NULL, fp->costume);
                 }
             }
         }
     }
+#ifdef PORT
+    port_log("SSB64: ftManagerMakeFighter - parts metadata initialized fkind=%d\n", fp->fkind);
+#endif
     for (i = nFTPartsJointCommonStart; i < ARRAY_COUNT(fp->joints); i++)
     {
         if (fp->joints[i] != NULL)
@@ -865,6 +963,9 @@ GObj* ftManagerMakeFighter(FTDesc *desc) // Create fighter
     else gcAddGObjProcess(fighter_gobj, scSubsysFighterProcUpdate, nGCProcessKindFunc, 5);
 
     ftManagerInitFighter(fighter_gobj, desc);
+#ifdef PORT
+    port_log("SSB64: ftManagerMakeFighter - fighter init complete fkind=%d pkind=%d\n", fp->fkind, fp->pkind);
+#endif
 
     if (fp->pkind == nFTPlayerKindCom)
     {
@@ -906,5 +1007,8 @@ GObj* ftManagerMakeFighter(FTDesc *desc) // Create fighter
     {
         ftShadowMakeShadow(fighter_gobj);
     }
+#ifdef PORT
+    port_log("SSB64: ftManagerMakeFighter - return fkind=%d\n", fp->fkind);
+#endif
     return fighter_gobj;
 }
