@@ -363,6 +363,18 @@ s32 mnPlayersVSGetPortrait(s32 fkind)
 		7, 5, 8, 10, 11, 6
 	};
 
+#ifdef PORT
+	/* fkind comes from sMNPlayersVSSlots[player].fkind which can be a non-playable
+	   kind (nFTKindNull=28, nFTKindBoss=12, polygon variants, etc.) when the slot
+	   is unselected or transitioning. ASan caught a stack-OOB read here when an
+	   out-of-range fkind landed past the 12-entry portraits[]. Clamp to slot 0
+	   (Mario portrait); on N64 the OOB bytes happened to be benign stack residue
+	   so this stayed silent. Tracked separately at call sites where appropriate. */
+	if ((u32)fkind >= ARRAY_COUNT(portraits))
+	{
+		return 0;
+	}
+#endif
 	return portraits[fkind];
 }
 
