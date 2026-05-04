@@ -4309,7 +4309,11 @@ void mnPlayersVSUpdateControllerOrders(void)
 	{
 		sMNPlayersVSControllerOrders[player] = -1;
 
-		for (order = 0; gSYControllerDeviceStatuses[order] != -1; order++) // Array can go out of bounds!!! AND DOES!!!
+		for (order = 0;
+#ifdef PORT
+		     order < (s32)ARRAY_COUNT(gSYControllerDeviceStatuses) &&
+#endif
+		     gSYControllerDeviceStatuses[order] != -1; order++) // Array can go out of bounds when 4 controllers are connected (no -1 terminator written); guarded under PORT.
 		{
 			if (player == gSYControllerDeviceStatuses[order])
 			{
