@@ -2961,6 +2961,9 @@ s32 mnPlayersVSUpdateCursorPlacementPriorities(s32 player, s32 puck)
 			}
 			gcMoveGObjDL(sMNPlayersVSSlots[sMNPlayersVSSlots[i].held_player].puck, 32, unheld_priorities[unheld_id] + 1);
 			unheld_id--;
+#ifdef PORT
+			if (unheld_id < 0) unheld_id = 0;
+#endif
 		}
 	}
 	if (player != GMCOMMON_PLAYERS_MAX)
@@ -2970,6 +2973,9 @@ s32 mnPlayersVSUpdateCursorPlacementPriorities(s32 player, s32 puck)
 	gcMoveGObjDL(sMNPlayersVSSlots[puck].puck, 33, unheld_priorities[unheld_id] + 1);
 
 	unheld_id--;
+#ifdef PORT
+	if (unheld_id < 0) unheld_id = 0;
+#endif
 
 	for (i = 0; i < (ARRAY_COUNT(is_held) + ARRAY_COUNT(unheld_priorities)) / 2; i++)
 	{
@@ -2980,6 +2986,9 @@ s32 mnPlayersVSUpdateCursorPlacementPriorities(s32 player, s32 puck)
 				gcMoveGObjDL(sMNPlayersVSSlots[i].cursor, 32, unheld_priorities[unheld_id]);
 			}
 			unheld_id--;
+#ifdef PORT
+			if (unheld_id < 0) unheld_id = 0;
+#endif
 		}
 	}
 	return 0;
