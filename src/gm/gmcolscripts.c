@@ -827,10 +827,18 @@ u32 dGMColScriptsFighterPikachuAttackS4[/* */] =
 	gmColCommandGoto(dGMColScriptsFighterPikachuAttackS4)
 };
 
+#ifdef PORT
+extern u32 dGMColScriptsFighterPikachuSpecialHiStartLoop[];
+#endif
+
 // 0x8012D6AC
 u32 dGMColScriptsFighterPikachuSpecialHiStart[/* */] =
 {
-	gmColCommandPlayFGM(nSYAudioFGMPikachuSpecialHiStart)
+	gmColCommandPlayFGM(nSYAudioFGMPikachuSpecialHiStart),
+#ifdef PORT
+	/* port: explicit fall-through that was implicit on N64 (adjacent BSS layout). */
+	gmColCommandGoto(dGMColScriptsFighterPikachuSpecialHiStartLoop)
+#endif
 };
 
 // 0x8012D6B0 - part of PikachuSpecialHiStart, as that script does not have an End command
