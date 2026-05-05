@@ -2850,6 +2850,23 @@ check_heavy_damage:
 
         for (i = 0; i < SC1PGAME_STAGE_KIRBY_VARIATIONS_COUNT; i++)
         {
+#ifdef PORT
+            /* team_order is a u8 set from sSC1PGameCurrentEnemyVariation which is
+               post-incremented (sc1pgame.c:1378) and not clamped at the bookkeeping
+               site -- it can hold values >= SC1PGAME_STAGE_KIRBY_VARIATIONS_COUNT
+               when the bonus-stats array carries residue from a non-Kirby stage,
+               or when the player's KO ordering walks off the variation count.
+               Index dSC1PGameKirbyTeamCopyKinds[7] is a 1-byte OOB read on N64 it
+               grabbed a benign adjacent global byte (dSC1PGameZoomEyeX[0]'s LSB)
+               which never matched the canonical kind, so the bonus was silently
+               just-not-awarded. ASan traps the redzone byte. Treat OOB team_order
+               as "not the canonical ordering". */
+            if ((u32)sSC1PGameBonusStatEnemyStats[i].team_order >= ARRAY_COUNT(dSC1PGameKirbyTeamCopyKinds))
+            {
+                is_ordered_variation = FALSE;
+                continue;
+            }
+#endif
             if (dSC1PGameKirbyTeamCopyKinds[sSC1PGameBonusStatEnemyStats[i].team_order] != dSC1PGameKirbyTeamCopyKinds[i])
             {
                 is_ordered_variation = FALSE;
