@@ -2731,6 +2731,17 @@ check_heavy_damage:
         )
         ||
         (
+#ifdef PORT
+            /* Mirror the GBumper branch's guard: every other use of
+               sSC1PGameBonusStatEnemyStats[KOs-1] in this file checks
+               KOs != 0 first; this NBumper branch was missing it. ASan
+               caught a global-buffer-overflow at array index -1 when the
+               function ran with PlayerKOsNum=0 (any 1P scene start before
+               the player has scored a KO). On N64 the [-1] read landed in
+               adjacent BSS that never set damage_player to the live player
+               value, so the bumper-clear bonus silently never triggered. */
+            (sSC1PGameBonusStatPlayerKOsNum != 0) &&
+#endif
             (sSC1PGameBonusStatEnemyStats[sSC1PGameBonusStatPlayerKOsNum - 1].damage_player == gSCManagerSceneData.player) &&
             (sSC1PGameBonusStatEnemyStats[sSC1PGameBonusStatPlayerKOsNum - 1].damage_object_class == nFTHitLogObjectItem) &&
             (sSC1PGameBonusStatEnemyStats[sSC1PGameBonusStatPlayerKOsNum - 1].damage_object_kind == nITKindNBumper)
