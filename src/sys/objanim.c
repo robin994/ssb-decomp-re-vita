@@ -402,17 +402,10 @@ void gcParseDObjAnimJoint(DObj *dobj)
     u32 flags;
     f32 payload;
 
-#ifdef PORT
-    /* Un-halfswap this EVENT32 stream on first access. See
-     * port/port_aobj_fixup.{h,cpp} — file-loaded AObjEvent32 data was
-     * corrupted by portRelocFixupFighterFigatree's u16-halfswap, and the
-     * fix is lazy per-stream at the first EVENT32 reader touch.
-     * Idempotent; subsequent calls on the same head are no-ops. */
-    extern void port_aobj_event32_unhalfswap_stream(void *head);
-    if (dobj->anim_joint.event32 != NULL) {
-        port_aobj_event32_unhalfswap_stream(dobj->anim_joint.event32);
-    }
-#endif
+    /* PORT: AObjEvent32 lazy un-halfswap previously fired here. Phase 2a
+     * moved EVENT32 detection to Torch (RelocCollectEvent32WordIndices),
+     * so the streams arrive in u32-native form already and the runtime
+     * walker is unnecessary. Deleted in Phase 2a-follow (2026-05-06). */
 
     if (dobj->anim_wait != AOBJ_ANIM_NULL)
     {
@@ -767,20 +760,17 @@ void gcParseDObjAnimJoint(DObj *dobj)
                 // empty, but necessary
             default:
 #ifdef PORT
-                /* PORT: safety net.  The port_aobj_event32_unhalfswap_stream
-                 * call at function entry should have made the command word
-                 * byte layout correct before we got here, so unhandled
-                 * opcodes would only happen on truly corrupt data (or an
-                 * opcode 23 we don't implement).  The original N64 `break;`
-                 * would re-parse the same event and spin — terminate the
-                 * animation instead. */
-                /* Include the raw u32 word too — a halfswap-corrupted
-                 * stream surfaces here as opcode in the high 7 bits of a
-                 * shifted command word, and seeing the byte pattern
-                 * makes the corruption shape diagnosable from the log
-                 * alone.  E.g. opcode=64 with raw_u32=0x80000a03 is the
-                 * halfswapped form of a real SetValRateBlock (opcode=5)
-                 * whose stream-level un-halfswap fixup was skipped. */
+                /* PORT: safety net for genuinely corrupt EVENT32 data —
+                 * Torch's RelocCollectEvent32WordIndices (Phase 2a) should
+                 * have left every stream the parser sees in u32-native form.
+                 * If we still see an unhandled opcode here, the stream is
+                 * either truly corrupt or a Torch detection edge case (worth
+                 * investigating). The raw u32 makes the corruption shape
+                 * diagnosable: opcode=64 with raw_u32=0x80000a03 is the
+                 * halfswapped form of SetValRateBlock (opcode=5), pointing
+                 * at a Torch detection miss. The original N64 `break;` would
+                 * re-parse the same event and spin — terminate the animation
+                 * instead. */
                 port_log("SSB64: gcParseDObjAnimJoint UNHANDLED opcode=%u ev=%p raw_u32=0x%08x — ending anim\n",
                     command_kind, (void*)dobj->anim_joint.event32,
                     *(u32*)dobj->anim_joint.event32);
@@ -1010,14 +1000,9 @@ void gcParseMObjMatAnimJoint(MObj *mobj)
     u32 flags;
     f32 payload;
 
-#ifdef PORT
-    /* See gcParseDObjAnimJoint — MObj matanim streams share the same
-     * AObjEvent32 layout and the same halfswap corruption. */
-    extern void port_aobj_event32_unhalfswap_stream(void *head);
-    if (mobj->matanim_joint.event32 != NULL) {
-        port_aobj_event32_unhalfswap_stream(mobj->matanim_joint.event32);
-    }
-#endif
+    /* PORT: AObjEvent32 lazy un-halfswap previously fired here for MObj
+     * matanim streams. Same Phase 2a-follow rationale as gcParseDObjAnimJoint
+     * — Torch handles it at extraction now. */
 
     if (mobj->anim_wait != AOBJ_ANIM_NULL)
     {
