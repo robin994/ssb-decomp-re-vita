@@ -315,12 +315,22 @@ void lbTransitionSetupTransition(void)
      * black-interior behaviour. */
     /* Photo region in the N64 320x240 framebuffer: rows 10..229, cols
      * 10..309 (the inner 300x220 visible area, stripped of the 10px
-     * scissor border the lbcommon viewport uses). The transition mesh's
-     * single-tile sample of the photo heap maps its local UV (0..1) onto
-     * exactly this sub-rect of mGameFb. */
+     * scissor border the lbcommon viewport uses).
+     *
+     * Y-flip vs. 1P stage clear: the original N64 #else copy below walks
+     * the framebuffer BOTTOM-UP (starts at row 230, then `framebuffer_pixels -= 310`
+     * after each row), so heap[0] holds the bottom row of the photo and
+     * heap[end] holds the top. The transition mesh's vertex UVs (baked in
+     * relocData, e.g. dLBTransitionAeroplane*) are authored against that
+     * bottom-up heap layout. mGameFb stores rows top-down (N64 row 0 at v=0),
+     * so we pass v0/v1 swapped: consumer's local v=0 (mesh top) samples FB
+     * v=230/240 (N64 row 230) and consumer's v=1 (mesh bottom) samples
+     * FB v=10/240 (N64 row 10). FbUvTransform handles negative scaleV
+     * naturally. (1P stage clear in sc1pstageclear.c reads top-down and
+     * passes v's in normal order.) */
     (void)port_capture_register_fb_for_subrect(sLBTransitionPhotoHeap, 300u * 220u * sizeof(u16),
-                                               10.0f / 320.0f, 10.0f / 240.0f,
-                                               310.0f / 320.0f, 230.0f / 240.0f);
+                                               10.0f / 320.0f, 230.0f / 240.0f,
+                                               310.0f / 320.0f, 10.0f / 240.0f);
     (void)heap_pixels; (void)framebuffer_pixels; (void)i; (void)j;
 #else
     framebuffer_pixels = (u32*)
