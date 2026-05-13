@@ -1920,6 +1920,21 @@ void gcDrawMObjForDObj(DObj *dobj, Gfx **dl_head)
         }
         gSPEndDisplayList(branch_dl++);
     }
+#ifdef PORT
+    /* Final terminator for the branch_dl region. Each per-MObj section
+     * already ends with gSPEndDisplayList above, but the region as a
+     * whole has no closing terminator after the for-loop. If a stale
+     * parent DL emits `gsSPDisplayList(0x0E + N)` with N falling past
+     * the last per-MObj G_ENDDL (e.g. a fighter-file static DL with an
+     * offset baked for a different scene's seg 0xE layout), the walker
+     * lands in uninitialized heap bytes and walks until it hits an
+     * unmapped page — the variant-5 crash family in
+     * docs/bugs/linux_stale_scene_data_family_2026-05-11.md.
+     *
+     * Append one G_ENDDL here so the walker terminates safely even when
+     * the entry offset is past the intended per-MObj boundaries. */
+    gSPEndDisplayList(branch_dl++);
+#endif
     gSYTaskmanGraphicsHeap.ptr = (void*) branch_dl;
 }
 
