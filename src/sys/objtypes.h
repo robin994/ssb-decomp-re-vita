@@ -414,12 +414,20 @@ typedef struct PortRefGfx
 {
     u32 token;
 } PortRefGfx;
+typedef struct PortRefDObjDLLink
+{
+    u32 token;
+} PortRefDObjDLLink;
 #ifdef __cplusplus
 static inline unsigned int portRefToken(unsigned int token)
 {
     return token;
 }
 static inline unsigned int portRefToken(PortRefGfx ref)
+{
+    return ref.token;
+}
+static inline unsigned int portRefToken(PortRefDObjDLLink ref)
 {
     return ref.token;
 }
@@ -433,7 +441,11 @@ static inline unsigned int portRefGfxToken(PortRefGfx ref)
 {
     return ref.token;
 }
-#define PORT_TOKEN_VALUE(token) _Generic((token), PortRefGfx: portRefGfxToken, default: portRefU32Token)(token)
+static inline unsigned int portRefDObjDLLinkToken(PortRefDObjDLLink ref)
+{
+    return ref.token;
+}
+#define PORT_TOKEN_VALUE(token) _Generic((token), PortRefGfx: portRefGfxToken, PortRefDObjDLLink: portRefDObjDLLinkToken, default: portRefU32Token)(token)
 #endif
 #define PORT_RESOLVE(token) portRelocResolvePointerDebug(PORT_TOKEN_VALUE(token), __FILE__, __LINE__)
 #define PORT_REGISTER(ptr) portRelocRegisterPointer((void*)(ptr))
@@ -442,12 +454,14 @@ static inline unsigned int portRefGfxToken(PortRefGfx ref)
 #define PORT_REF_IS_NULL(ref) (PORT_REF_TOKEN(ref) == 0)
 #define PORT_REF_RESOLVE(type, ref) ((type*)portRelocResolvePointerDebug(PORT_REF_TOKEN(ref), __FILE__, __LINE__))
 #define PORT_RESOLVE_GFX(ref) PORT_REF_RESOLVE(Gfx, ref)
+#define PORT_RESOLVE_DOBJ_DLLINK(ref) PORT_REF_RESOLVE(DObjDLLink, ref)
 #else
 #define PORT_RESOLVE(token) (token)
 #define PORT_REGISTER(ptr) (ptr)
 #define PORT_RESOLVE_ARRAY(array_ptr, index) (((array_ptr) != NULL) ? ((void *const*)(array_ptr))[index] : NULL)
 #define PORT_REF_IS_NULL(ref) ((ref) == NULL)
 #define PORT_RESOLVE_GFX(ref) (ref)
+#define PORT_RESOLVE_DOBJ_DLLINK(ref) (ref)
 #endif
 
 struct DObjDesc
@@ -467,7 +481,7 @@ struct DObjTraDesc
 {
     s32 id;
 #ifdef PORT
-    u32 dl;     // Relocation token
+    PortRefGfx dl;     // Relocation token
 #else
     void *dl;
 #endif
@@ -478,7 +492,7 @@ struct DObjMultiList
 {
     s32 id;
 #ifdef PORT
-    u32 dl1, dl2;   // Relocation tokens
+    PortRefGfx dl1, dl2;   // Relocation tokens
 #else
     Gfx *dl1, *dl2;
 #endif
@@ -498,7 +512,7 @@ struct DObjDistDL
 {
     f32 target_dist;
 #ifdef PORT
-    u32 dl;     // Relocation token
+    PortRefGfx dl;     // Relocation token
 #else
     Gfx *dl;
 #endif
@@ -508,7 +522,7 @@ struct DObjDistDLLink
 {
     f32 target_dist;
 #ifdef PORT
-    u32 dl_link;    // Relocation token
+    PortRefDObjDLLink dl_link;    // Relocation token
 #else
     DObjDLLink *dl_link;
 #endif
