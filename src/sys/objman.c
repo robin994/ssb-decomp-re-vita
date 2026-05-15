@@ -9,28 +9,6 @@
 
 extern void port_log(const char *fmt, ...);
 
-#ifdef PORT
-/* Stale-DL hunt: log when a DObj is being created with a dvar that's a
- * suspicious sub-256MB non-zero value (token-shaped, not a real host
- * pointer). Also captures the caller's return address (PC) so we can
- * resolve it to a source line via addr2line. Counter-limited to avoid
- * log spam. */
-static int sGCAddDObjSuspiciousCount = 0;
-static inline void gcAddDObjCheckSuspiciousDvarPC(const void *dvar, void *gobj_or_parent_dobj, const char *site, const void *ret_pc)
-{
-    unsigned long long v = (unsigned long long)(uintptr_t)dvar;
-    if (__builtin_expect(v != 0 && v < 0x10000000ULL, 0)) {
-        if (sGCAddDObjSuspiciousCount < 32) {
-            sGCAddDObjSuspiciousCount++;
-            port_log("SSB64: gcAddDObj SUSPICIOUS dvar=0x%llx caller_obj=%p site=%s ret_pc=%p\n",
-                     v, gobj_or_parent_dobj, site, ret_pc);
-        }
-    }
-}
-#define GC_ADDDOBJ_CHECK_DVAR(dvar, gobj_or_parent, site) \
-    gcAddDObjCheckSuspiciousDvarPC((dvar), (gobj_or_parent), (site), __builtin_return_address(0))
-#endif
-
 /* Issue #128 follow-on (item-side variant): a stale GObj* from BSS-stored
  * handles is being injected into gGCCommonDLLinks[] *after* gcSetupObjman
  * cleared the array. Catching the injection (here) names the caller — the
@@ -1480,9 +1458,6 @@ DObj* gcAddDObjForGObj(GObj *gobj, void *dvar)
 	new_dobj->sib_next = NULL;
 	new_dobj->child = NULL;
 	new_dobj->dv = dvar;
-#ifdef PORT
-	GC_ADDDOBJ_CHECK_DVAR(dvar, gobj, "gcAddDObjForGObj");
-#endif
 
 	gcInitDObj(new_dobj);
 
@@ -1506,9 +1481,6 @@ DObj* gcAddSiblingForDObj(DObj *dobj, void *dvar)
 
 	new_dobj->child = NULL;
 	new_dobj->dv = dvar;
-#ifdef PORT
-	GC_ADDDOBJ_CHECK_DVAR(dvar, dobj, "gcAddSiblingForDObj");
-#endif
 
 	gcInitDObj(new_dobj);
 
@@ -1542,9 +1514,6 @@ DObj* gcAddChildForDObj(DObj *dobj, void *dvar)
 	new_dobj->child = NULL;
 	new_dobj->sib_next = NULL;
 	new_dobj->dv = dvar;
-#ifdef PORT
-	GC_ADDDOBJ_CHECK_DVAR(dvar, dobj, "gcAddChildForDObj");
-#endif
 
 	gcInitDObj(new_dobj);
 

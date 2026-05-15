@@ -8,27 +8,6 @@
 #ifdef PORT
 #include <enhancements/enhancements.h>
 extern float port_widescreen_clip_x_scale(void);
-extern void port_log(const char *fmt, ...);
-
-/* Stale-DL emission hunt: when a sub-256MB non-zero value is about to be
- * written into a G_DL target via gSPDisplayList here, log file/line/context.
- * Real host pointers on Linux brk are >= 0x10000000; anything below is a
- * stale token, raw N64 segment, or garbage. Returns FALSE when value is
- * normal (hot path), TRUE+logs when suspicious (cold path).
- *
- * Cost: 1 compare + 1 branch (predicted not-taken) per emission. Inline
- * keeps the cold path off the hot instruction stream. */
-static int sFTDMSuspiciousDLCount = 0;
-static inline void ftDMCheckSuspiciousDL(unsigned long long v, const char *site, void *dobj_or_null)
-{
-    if (__builtin_expect(v != 0 && v < 0x10000000ULL, 0)) {
-        if (sFTDMSuspiciousDLCount < 32) {
-            sFTDMSuspiciousDLCount++;
-            port_log("SSB64: ftdisplaymain SUSPICIOUS DL ptr 0x%llx at %s (dobj=%p)\n",
-                     v, site, dobj_or_null);
-        }
-    }
-}
 #endif
 
 // // // // // // // // // // // //
@@ -759,9 +738,7 @@ void ftDisplayMainDrawAccessory(FTStruct *fp, DObj *dobj, FTParts *parts)
         {
             gcDrawMObjForDObj(root_dobj, gSYTaskmanDLHeads);
             ftDisplayMainDecideFogDraw(parts->flags, fp);
-#ifdef PORT
-            ftDMCheckSuspiciousDL((unsigned long long)(uintptr_t)root_dobj->dl, "ftDisplayMainDrawAccessory:case0:root_dobj->dl", root_dobj);
-#endif
+
             gSPDisplayList(gSYTaskmanDLHeads[0]++, root_dobj->dl);
         }
         break;
@@ -773,9 +750,7 @@ void ftDisplayMainDrawAccessory(FTStruct *fp, DObj *dobj, FTParts *parts)
         {
             gcDrawMObjForDObj(root_dobj, gSYTaskmanDLHeads);
             ftDisplayMainDecideFogDraw(parts->flags, fp);
-#ifdef PORT
-            ftDMCheckSuspiciousDL((unsigned long long)(uintptr_t)root_dobj->dl, "ftDisplayMainDrawAccessory:case1:root_dobj->dl", root_dobj);
-#endif
+
             gSPDisplayList(gSYTaskmanDLHeads[0]++, root_dobj->dl);
         }
         break;
@@ -816,9 +791,7 @@ void ftDisplayMainDrawDefault(DObj *dobj)
                 {
                     gcDrawMObjForDObj(dobj, gSYTaskmanDLHeads);
                     ftDisplayMainDecideFogDraw(parts->flags, fp);
-#ifdef PORT
-                    ftDMCheckSuspiciousDL((unsigned long long)(uintptr_t)dobj->dl, "ftDisplayMainDrawDefault:case0:dobj->dl", dobj);
-#endif
+
                     gSPDisplayList(gSYTaskmanDLHeads[0]++, dobj->dl);
                 }
                 break;
@@ -831,9 +804,7 @@ void ftDisplayMainDrawDefault(DObj *dobj)
                 if ((dl0 != NULL) && !(dobj->flags & DOBJ_FLAG_NOTEXTURE))
                 {
                     ftDisplayMainDecideFogDraw(parts->flags, fp);
-#ifdef PORT
-                    ftDMCheckSuspiciousDL((unsigned long long)(uintptr_t)dl0, "ftDisplayMainDrawDefault:case1:dl0", dobj);
-#endif
+
                     gSPDisplayList(gSYTaskmanDLHeads[0]++, dl0);
                 }
                 sp58 = gcPrepDObjMatrix(gSYTaskmanDLHeads, dobj);
@@ -842,9 +813,7 @@ void ftDisplayMainDrawDefault(DObj *dobj)
                 {
                     gcDrawMObjForDObj(dobj, gSYTaskmanDLHeads);
                     ftDisplayMainDecideFogDraw(parts->flags, fp);
-#ifdef PORT
-                    ftDMCheckSuspiciousDL((unsigned long long)(uintptr_t)dl1, "ftDisplayMainDrawDefault:case1:dl1", dobj);
-#endif
+
                     gSPDisplayList(gSYTaskmanDLHeads[0]++, dl1);
                 }
                 break;
@@ -922,9 +891,7 @@ void ftDisplayMainDrawSkeleton(DObj *dobj)
                 {
                     gcDrawMObjForDObj(dobj, gSYTaskmanDLHeads);
                     ftDisplayMainDecideFogDraw(skeleton->flags, fp);
-#ifdef PORT
-                    ftDMCheckSuspiciousDL((unsigned long long)(uintptr_t)FTSKELETON_GET_DL(skeleton), "ftDisplayMainDrawSkeleton:case0:skeleton->dl", dobj);
-#endif
+
                     gSPDisplayList(gSYTaskmanDLHeads[0]++, FTSKELETON_GET_DL(skeleton));
                 }
                 break;
@@ -937,9 +904,7 @@ void ftDisplayMainDrawSkeleton(DObj *dobj)
                 if ((dl0 != NULL) && !(dobj->flags & DOBJ_FLAG_NOTEXTURE))
                 {
                     ftDisplayMainDecideFogDraw(skeleton->flags, fp);
-#ifdef PORT
-                    ftDMCheckSuspiciousDL((unsigned long long)(uintptr_t)dl0, "ftDisplayMainDrawSkeleton:case1:dl0", dobj);
-#endif
+
                     gSPDisplayList(gSYTaskmanDLHeads[0]++, dl0);
                 }
                 sp60 = gcPrepDObjMatrix(gSYTaskmanDLHeads, dobj);
@@ -948,9 +913,7 @@ void ftDisplayMainDrawSkeleton(DObj *dobj)
                 {
                     gcDrawMObjForDObj(dobj, gSYTaskmanDLHeads);
                     ftDisplayMainDecideFogDraw(skeleton->flags, fp);
-#ifdef PORT
-                    ftDMCheckSuspiciousDL((unsigned long long)(uintptr_t)dl1, "ftDisplayMainDrawSkeleton:case1:dl1", dobj);
-#endif
+
                     gSPDisplayList(gSYTaskmanDLHeads[0]++, dl1);
                 }
                 break;
