@@ -340,7 +340,11 @@ static void gcLogSuspiciousDLPointer(const char *issue, DObj *dobj, unsigned lon
     void *draw_dl = (void*)draw_dl_raw;
     void *resolved_dl = NULL;
 
-    if ((draw_dl == NULL) || (draw_dl_raw >= 0x10000ULL))
+    /* Stale-DL hunt: real host pointers on Linux brk are >= 0x10000000.
+     * Token-shaped or low-offset values < 0x10000000 are suspect; widening
+     * from the original 0x10000 (64KB) threshold catches stale tokens like
+     * 0x30392d that the dispatcher silently treats as raw pointers. */
+    if ((draw_dl == NULL) || (draw_dl_raw >= 0x10000000ULL))
     {
         return;
     }
