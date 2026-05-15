@@ -4220,7 +4220,7 @@ void ftMainUpdateHiddenPartID(FTStruct *fp, s32 hiddenpart_id)
         {
             commonpart = &((FTCommonPartContainer*)PORT_RESOLVE(fp->attr->commonparts_container))->commonparts[0];
         }
-        else if (FTPARTS_GET_DOBJDESC(&((FTCommonPartContainer*)PORT_RESOLVE(attr->commonparts_container))->commonparts[1])[hiddenpart->root_joint_id - nFTPartsJointCommonStart].dl != NULL)
+        else if (!PORT_REF_IS_NULL(FTPARTS_GET_DOBJDESC(&((FTCommonPartContainer*)PORT_RESOLVE(attr->commonparts_container))->commonparts[1])[hiddenpart->root_joint_id - nFTPartsJointCommonStart].dl))
         {
             commonpart = &((FTCommonPartContainer*)PORT_RESOLVE(attr->commonparts_container))->commonparts[1];
         }
