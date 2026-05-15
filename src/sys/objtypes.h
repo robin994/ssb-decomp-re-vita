@@ -488,7 +488,7 @@ struct DObjDLLink
 {
     s32 list_id;
 #ifdef PORT
-    u32 dl;     // Relocation token
+    PortRefGfx dl;     // Relocation token
 #else
     Gfx *dl;
 #endif
