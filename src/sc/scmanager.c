@@ -825,8 +825,10 @@ char dSCManagerBuildDate[/* */] = { "Dec 23 1998 18:06:24" };
 // 0x800A1980
 void scManagerRunLoop(sb32 arg)
 {
+#ifndef PORT
 	u16 *framebuffer;
 	uintptr_t end;
+#endif
 
 	syControllerSetStatusDelay(60);
 
@@ -847,77 +849,39 @@ void scManagerRunLoop(sb32 arg)
 	ftManagerSetupFileSize();
 	dSYAudioPublicSettings.unk31 = 72;
 
-#ifdef PORT
-	/* Audio runs for real on PC (the "stubbed, skip the spin-waits" era is
-	 * long over). Mirror the N64 settings-update / restart waits below so
-	 * the audio thread's restart (n_alClose → portAudioLoadAssets →
-	 * syAudioMakeBGMPlayers → flag clear) completes BEFORE scene dispatch.
-	 *
-	 * US masks the race: its first scene is nSCKindStartup (N64 logo, ~3 s),
-	 * during which the restart finishes. JP's first scene is
-	 * nSCKindOpeningRoom immediately (scmanager.c first-scene REGION split),
-	 * so mvOpeningRoomFuncStart calls syAudioPlayBGM(0, nSYAudioBGMOpening)
-	 * while dSYAudioIsSettingsUpdated is still TRUE. status[0]=AL_PLAYING
-	 * then makes the audio thread's port_cmdLen != 0, taking the
-	 * syAudioStopBGMAll() branch (audio.c) which wipes the queued BGM and
-	 * does NOT clear the flag → JP attract/intro music silent.
-	 *
-	 * Yield (not busy-spin) so the cooperative scheduler keeps pumping the
-	 * audio path — same idiom as the scautodemo/scvsbattle BGM waits. The
-	 * iteration cap is a hang-proof backstop (the historical fear in the old
-	 * comment): on the real machine the flag clears in a handful of yields,
-	 * so hitting the cap means something is wrong — log it and fall through
-	 * rather than hang (no worse than the pre-fix skip behaviour). */
-	syAudioSetSettingsUpdated();
-	{
-		s32 port_audio_wait = 0;
-		while (syAudioGetSettingsUpdated() != FALSE)
-		{
-			if (++port_audio_wait > 100000)
-			{
-				port_log("SSB64: scManagerRunLoop — settings-update wait "
-				         "hit cap, proceeding (audio restart stalled?)\n");
-				break;
-			}
-			port_coroutine_yield();
-		}
-		syAudioSetFXType(AL_FX_CUSTOM);
-		while (syAudioGetRestarting() != FALSE)
-		{
-			if (++port_audio_wait > 100000)
-			{
-				port_log("SSB64: scManagerRunLoop — restart wait hit cap, "
-				         "proceeding\n");
-				break;
-			}
-			port_coroutine_yield();
-		}
-		port_log("SSB64: scManagerRunLoop — past audio/FB setup "
-		         "(settings-update cleared after %d yields)\n", port_audio_wait);
-	}
-	/* Skip framebuffer clear — no physical N64 framebuffers on PC.
-	 * Fast3D handles framebuffer management. */
-	/* SRAM is backed by a real file in the user's app-data dir
-	 * (port_save.cpp). Load it so unlocks/options persist across runs
-	 * — without this the backup struct stays at defaults forever. */
-	lbBackupIsSramValid();
-	lbBackupApplyOptions();
-#else
+	/* Wait for the audio thread to finish its settings-update restart
+	 * (n_alClose -> portAudioLoadAssets -> syAudioMakeBGMPlayers -> clear
+	 * dSYAudioIsSettingsUpdated) before dispatching the first scene.
+	 * Skipping it lets syAudioPlayBGM race the restart: on JP the first
+	 * scene is nSCKindOpeningRoom immediately (no ~3 s nSCKindStartup to
+	 * mask it as on US), so syAudioStopBGMAll() wipes the queued BGM and
+	 * the attract music is silent. See
+	 * docs/bugs/jp_attract_music_settings_update_race_2026-05-18.md.
+	 * PORT swaps the N64 busy-spin for a cooperative yield — the same
+	 * idiom as the scautodemo / scvsbattle BGM waits. */
 	syAudioSetSettingsUpdated();
 
 	while (syAudioGetSettingsUpdated() != FALSE)
 	{
+#ifdef PORT
+		port_coroutine_yield();
+#endif
 		continue;
 	}
 	syAudioSetFXType(AL_FX_CUSTOM);
 
 	while (syAudioGetRestarting() != FALSE)
 	{
+#ifdef PORT
+		port_coroutine_yield();
+#endif
 		continue;
 	}
 	lbBackupIsSramValid();
 	lbBackupApplyOptions();
 
+#ifndef PORT
+	/* N64 only — no physical framebuffers on PC; Fast3D manages them. */
 	framebuffer = (u16*) gSYFramebufferSets;
 	end = 0x80400000;
 
