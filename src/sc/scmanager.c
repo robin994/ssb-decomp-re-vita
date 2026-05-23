@@ -21,6 +21,10 @@ extern void port_coroutine_yield(void);
 #include <sys/controller.h>
 #include <sys/netpeer.h>
 #include <sys/netreplay.h>
+#ifdef PORT
+#include <gr/ground.h>
+#include <sys/objman.h>
+#endif
 
 extern void mnVSModeStartScene();
 
@@ -963,6 +967,63 @@ void scManagerRunLoop(sb32 arg)
 			gSCManagerVSBattleState.players[_p].fighter_gobj = NULL;
 			gSCManagerTransferBattleState.players[_p].fighter_gobj = NULL;
 		}
+
+		/* Zebes acid + efManagerMakeEffect stale-dl_link family
+		 * (docs/bugs/zebes_acid_effect_stale_dl_link_holder_2026-05-23.md):
+		 * scene routines do not eject their own GObjs on exit — there are no
+		 * per-stage teardown hooks, and the existing gcEjectAll() sweep only
+		 * runs at task boundaries (taskman.c:1185, 1203), not between the
+		 * intra-task scene transitions that the attract demo cycles through.
+		 * The previous scene's stage / effect GObjs therefore stay linked in
+		 * gGCCommonLinks[], their DObj subtrees keep pointing at dl_link
+		 * memory in the recycled scene arena, and on the next frame the
+		 * renderer walks freed bytes — the defensive guard in
+		 * gcDrawDObjTreeDLLinks bails with "stale dl_link" and the entire
+		 * subtree drops (visible: particle / stage geometry corruption that
+		 * persists across the attract → title → match transition).
+		 *
+		 * Eject every linked GObj here, before the next scene's start routine
+		 * runs. Per objdef.h::GObjLinkID, every link kind is scene-scoped: no
+		 * GObj is documented to survive a scene transition. We mirror the
+		 * body of gcEjectAll() (objhelper.c:465) inline so we can clamp any
+		 * non-progress — gcEjectGObj refuses to drop gGCCurrentCommon, which
+		 * shouldn't be set between scenes but is cheap to guard against. The
+		 * existing GOBJ_PORT_EJECTED_SENTINEL guard in gcEjectGObj handles a
+		 * stage routine that already self-ejected (e.g. grHyruleTwister at
+		 * grhyrule.c:334) — that GObj is no longer in the link, so the sweep
+		 * just doesn't see it. */
+		{
+			s32 _link;
+			for (_link = 0; _link < ARRAY_COUNT(gGCCommonLinks); _link++) {
+				GObj *_head;
+				s32 _guard = 0;
+				while ((_head = gGCCommonLinks[_link]) != NULL) {
+					gcEjectGObj(_head);
+					if (gGCCommonLinks[_link] == _head) {
+						port_log("SSB64: scManagerRunLoop scene-boundary GObj "
+						         "sweep — no progress link=%d head=%p, breaking\n",
+						         (int)_link, (void*)_head);
+						break;
+					}
+					if (++_guard > 4096) {
+						port_log("SSB64: scManagerRunLoop scene-boundary GObj "
+						         "sweep — runaway link=%d, breaking\n",
+						         (int)_link);
+						break;
+					}
+				}
+			}
+		}
+
+		/* gGRCommonStruct is a union of per-stage var blobs; the cached GObj*
+		 * slots (zebes.map_gobj, hyrule.twister_gobj, jungle.tarucann_gobj,
+		 * castle.bumper_gobj, yamabuki.{gate,monster}_gobj, pupupu.map_gobj[],
+		 * inishie.{pakkun,pblock}_gobj, ...) all overlay one another. The
+		 * GObjs they cached were just ejected above; null the holders so
+		 * nothing (e.g. a stale subsystem callback that survived eject)
+		 * dereferences a freed slot before the next stage init repopulates
+		 * the union from scratch. */
+		memset(&gGRCommonStruct, 0, sizeof(gGRCommonStruct));
 #endif
 		switch (gSCManagerSceneData.scene_curr)
 		{
