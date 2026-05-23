@@ -1,4 +1,5 @@
 #include <ft/fighter.h>
+#include <ft/ftparam.h>
 #include <wp/weapon.h>
 #include <it/item.h>
 #ifdef PORT
@@ -402,6 +403,12 @@ void mpCommonUpdateFighterSlopeContour(GObj *fighter_gobj)
             {
                 DObjGetStruct(fighter_gobj)->rotate.vec.f.x = (syUtilsArcTan2(fp->coll_data.floor_angle.x, fp->coll_data.floor_angle.y) * fp->lr);
             }
+#ifdef PORT
+            /* Root translate/rotate just changed from floor sampling — drop
+             * the FTParts caches along the spine so the next hand-matrix walk
+             * (e.g. attack-coll, grab pull) re-derives from the live root. */
+            ftParamInvalidateFighterRootChain(fighter_gobj);
+#endif
         }
     }
     else return;
