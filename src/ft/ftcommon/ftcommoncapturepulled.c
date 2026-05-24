@@ -36,12 +36,14 @@ void ftCommonCapturePulledRotateScale(GObj *fighter_gobj, Vec3f *this_pos, Vec3f
         }
         return;
     }
-    /* Core fix: ftParamsUpdateFighterPartsTransformAll(TopN) clears caches in
-     * TopN's subtree each frame but NOT the root DObj above it. If a stale
-     * root cache is still flagged valid, the func_ovl2_800EDBA4 walk-up below
-     * short-circuits before reaching the live root translate/rotate, and the
-     * hand world matrix reflects the previous frame's body pose. Invalidating
-     * the root chain forces a real re-derivation. */
+    /* Defensive: clear FTParts transform-cache short-circuit flags along the
+     * TopN -> root spine so the func_ovl2_800EDBA4 walk-up below can't return
+     * a frame-stale matrix in obscure draw-thread timing. Empirically the
+     * actual bug behind the reported "inverted victim" was elsewhere (see
+     * docs/bugs/grab_pose_eulerextract_gimbal_2026-05-23.md) and this is a
+     * no-op for the offline case, but the invalidate is cheap, harmless, and
+     * still useful as belt-and-suspenders for future save-state / rollback
+     * paths that may revive coupling with a stale grabber cache. */
     ftParamInvalidateFighterRootChain(this_fp->capture_gobj);
 #else
     FTStruct *capture_fp = ftGetStruct(this_fp->capture_gobj);
