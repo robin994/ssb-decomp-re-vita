@@ -2791,9 +2791,25 @@ void func_ovl2_800EBD08(DObj *root_dobj, f32 arg1, Vec3f *vec, f32 arg3)
 
     inverse_xy_2 = (zmulnorm + new_var);
 
+#ifdef PORT
+    /* Port: same fragility as gmcollision.c func_ovl2_800EDA0C — inverse_xy_2
+     * is built from chained sqrtf + division + trig so it composes to
+     * ~0.99999 on modern toolchains. Exact equality misses the gimbal-lock
+     * branch, the general extraction runs atan2/arcsin on near-singular
+     * inputs, and child1_dobj's rotate ends up corrupted — this drives
+     * fighter two-bone IK (arm chain), used among other things for grab and
+     * throw target tracking. Same threshold (~0.81° band around ±90°).
+     * See docs/bugs/grab_pose_eulerextract_gimbal_2026-05-23.md. */
+    if ((inverse_xy_2 <= -0.9999F) || (inverse_xy_2 >= 0.9999F))
+#else
     if ((inverse_xy_2 == -1.0F) || (inverse_xy_2 == 1.0F))
+#endif
     {
+#ifdef PORT
+        if (inverse_xy_2 <= -0.9999F)
+#else
         if (inverse_xy_2 == -1.0F)
+#endif
         {
             child1_dobj->rotate.vec.f.y = F_CLC_DTOR32(90.0F);
 
