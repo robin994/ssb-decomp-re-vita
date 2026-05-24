@@ -12,12 +12,19 @@ extern void port_log(const char *fmt, ...);
 #ifdef PORT
 /* PORT diag: log GObj allocations for the kinds known to leak stale
  * DObj.dl_link across scene boundaries (Ground=1010, Effect=1011).
- * __builtin_return_address(0) here resolves to the caller of the
- * wrapper (gcMakeGObjSPAfter / SPBefore / After / Before), which is
- * the user-level allocation site (efManagerMakeEffect, grCastleSetup,
- * etc.) — addr2line on it pins the scene/effect that allocated this
- * GObj. Cross-reference with the stale-dl_link bail log to identify
- * which scene's GObj is surviving the scene-arena recycle. */
+ * Resolves to the caller of the wrapper (gcMakeGObjSPAfter / SPBefore /
+ * After / Before), which is the user-level allocation site
+ * (efManagerMakeEffect, grCastleSetup, etc.) — addr2line on it pins the
+ * scene/effect that allocated this GObj. Cross-reference with the
+ * stale-dl_link bail log to identify which scene's GObj is surviving
+ * the scene-arena recycle. */
+#if defined(_MSC_VER)
+#include <intrin.h>
+#pragma intrinsic(_ReturnAddress)
+#define PORT_CALLER_RA() _ReturnAddress()
+#else
+#define PORT_CALLER_RA() __builtin_return_address(0)
+#endif
 #define PORT_LOG_GOBJ_ALLOC(gobj, _id, _link)                                  \
 	do                                                                         \
 	{                                                                          \
@@ -26,7 +33,7 @@ extern void port_log(const char *fmt, ...);
 			port_log("SSB64: gobj_alloc gobj=%p id=%u link=%u caller=%p "      \
 			         "frame=%u\n",                                             \
 			         (void *) (gobj), (unsigned) (_id), (unsigned) (_link),    \
-			         __builtin_return_address(0),                              \
+			         PORT_CALLER_RA(),                                         \
 			         (unsigned) dSYTaskmanFrameCount);                         \
 		}                                                                      \
 	} while (0)
