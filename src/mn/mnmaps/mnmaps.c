@@ -9,13 +9,47 @@
 #include <reloc_data.h>
 #ifdef PORT
 extern void *func_800269C0_275C0(u16 id);
+// Port-built CSS sprites (baked into the binary at compile time). Declared as
+// `extern` rather than a header include because the port symbols live outside
+// the decomp include path; the linker resolves them from port/css_icons/*.cpp.
+// Generic per-stage CSS asset getters — bytes live in <app-data>/assets/css_icons/
+// and are derived from the user's ROM at build time by tools/derive_stage_assets.py
+// (see port/css_icons/port_css_stage_assets.cpp). Return NULL when the requested
+// gkind has no port-side PNG, in which case the caller falls back to ROM data.
+extern Sprite *portCSSGetStageIconSprite(int gkind);
+extern Sprite *portCSSGetStageBackgroundSprite(int gkind);
+extern Sprite *portCSSGetStageNameSprite(int gkind);
+extern Sprite *portCSSGetScrollArrowSprite(void);
+extern Sprite *portCSSGetScrollArrowLeftSprite(void);
 #endif
 
-#define nMNMapsSlotFinal	5
-#define nMNMapsSlotRandom	10
-#define nMNMapsSlotCount	11
+#define nMNMapsSlotRandom	9
+#define nMNMapsSlotCount	10
 #define nMNMapsRandomGKind	0xDE
 #define nMNMapsFileMasterHandIcon	5
+
+#ifdef PORT
+// PORT: empty-slot sentinel for pages that don't fill all 10 grid positions.
+// mnMapsCheckLocked treats it as locked, so mnMapsMakeIcons skips it and
+// cursor-movement helpers skip past it.
+#define nMNMapsEmptyGKind	0xDD
+
+#define nMNMapsPageOriginal	0
+#define nMNMapsPagePort		1
+#define nMNMapsPageCount	2
+
+// Foreground-slide page-transition animation. Background bitmap (stone tiles)
+// stays put; the icons GObj and the cursor slide as a unit, GBC-style.
+//
+//   nMNMapsScrollFrames: total frames the slide runs. 320 px / 16 frames = 20 px/frame.
+//   The shorter the slide, the snappier; too short and it just looks like a jump.
+#define nMNMapsScrollFrames		16
+#define nMNMapsScrollPageWidth	320.0F
+
+#define nMNMapsScrollDirNone	0
+#define nMNMapsScrollDirRight	1   // jumping to page+1, contents slide LEFT
+#define nMNMapsScrollDirLeft	2   // jumping to page-1, contents slide RIGHT
+#endif
 
 
 // // // // // // // // // // // //
@@ -194,6 +228,56 @@ void *sMNMapsModelHeap0;
 // 0x80134E28
 void *sMNMapsModelHeap1;
 
+#ifdef PORT
+// PORT: current CSS page (0 = original 9-stage layout, 1+ = port expansion pages).
+// Cursor moving right past page 0's rightmost slot transitions to page 1 etc.
+s32 sMNMapsCursorPage;
+
+// Tracks the icons-layer GObj so a page transition can rebuild it without leaking.
+GObj *sMNMapsIconsGObj;
+
+// Tracks the page-scroll arrow GObj. Re-built whenever the page changes so the
+// arrow visibility (left and/or right side) reflects which neighbor pages exist.
+// Arrows do NOT slide with the icons during a page transition — they're page-state
+// indicators, not page content.
+GObj *sMNMapsArrowsGObj;
+
+// Page-slide animation state (foreground-only slide, background stays).
+//   sMNMapsScrollDir          : 0 (idle) / Right / Left.
+//   sMNMapsScrollTicks        : frames remaining in current slide (counts down).
+//   sMNMapsScrollOldIconsGObj : outgoing page's icons GObj (sliding off-screen).
+//   sMNMapsScrollOldArrowsGObj: outgoing page's arrows GObj (sliding off-screen).
+//                                The "new" arrows live in sMNMapsArrowsGObj and
+//                                are built off-screen at slide start, same as icons.
+//   sMNMapsScrollIconsDelta   : per-frame x-delta applied to icons + arrows GObjs.
+//   sMNMapsScrollCursorDelta  : per-frame x-delta applied to the cursor.
+s32 sMNMapsScrollDir;
+s32 sMNMapsScrollTicks;
+GObj *sMNMapsScrollOldIconsGObj;
+GObj *sMNMapsScrollOldArrowsGObj;
+f32 sMNMapsScrollIconsDelta;
+f32 sMNMapsScrollCursorDelta;
+
+// Per-page gkind tables. Each row is exactly 10 slots (5 row 1 + 5 row 2, with the
+// last entry being the random/page-specific terminator). nMNMapsEmptyGKind marks a
+// slot with no stage on this page — mnMapsCheckLocked treats it as locked so the
+// icon isn't drawn and the cursor skips past it.
+s32 dMNMapsPageGkinds[nMNMapsPageCount][nMNMapsSlotCount] =
+{
+	// Page 0 — original ROM-shipping layout (unchanged from N64 release).
+	{
+		nGRKindCastle, nGRKindJungle, nGRKindHyrule, nGRKindZebes, nGRKindInishie,
+		nGRKindYoster, nGRKindPupupu, nGRKindSector, nGRKindYamabuki, nMNMapsRandomGKind,
+	},
+	// Page 1 — port expansion. Final Destination today; room for more.
+	{
+		nGRKindLast,
+		nMNMapsEmptyGKind, nMNMapsEmptyGKind, nMNMapsEmptyGKind, nMNMapsEmptyGKind,
+		nMNMapsEmptyGKind, nMNMapsEmptyGKind, nMNMapsEmptyGKind, nMNMapsEmptyGKind, nMNMapsEmptyGKind,
+	},
+};
+#endif
+
 // // // // // // // // // // // //
 //                               //
 //           FUNCTIONS           //
@@ -228,6 +312,14 @@ void mnMapsFuncLights(Gfx **dls)
 // 0x80131BAC
 sb32 mnMapsCheckLocked(s32 gkind)
 {
+#ifdef PORT
+	if (gkind == nMNMapsEmptyGKind)
+	{
+		// Empty page slot — no stage to show. Treated as locked so mnMapsMakeIcons
+		// skips it and cursor-movement helpers walk past it.
+		return TRUE;
+	}
+#endif
 	if (gkind == nGRKindInishie)
 	{
 		if (sMNMapsUnlockedMask & LBBACKUP_UNLOCK_MASK_INISHIE)
@@ -246,14 +338,18 @@ sb32 mnMapsCheckLocked(s32 gkind)
 // 0x80131BB0
 void mnMapsGetSlotPosition(s32 slot, f32 *x, f32 *y)
 {
-	if (slot < 6)
+	// Original ROM layout: 5 icons per row, step 50, row 1 y=30, row 2 y=68.
+	// The original mnMapsMakeIcons inlined this as `x + 30` (row 1) and `x - 220`
+	// (row 2 with `x = i * 50`); we share the same math through a helper so the
+	// cursor and per-page rebuild paths stay in sync.
+	if (slot < 5)
 	{
-		*x = (slot * 50) + 20;
+		*x = (slot * 50) + 30;
 		*y = 30.0F;
 	}
 	else
 	{
-		*x = ((slot - 6) * 50) + 45;
+		*x = ((slot - 5) * 50) + 30;
 		*y = 68.0F;
 	}
 }
@@ -575,11 +671,16 @@ void mnMapsMakeLabels(void)
 // 0x80132430
 s32 mnMapsGetGroundKind(s32 slot)
 {
+#ifdef PORT
+	// Page table drives this directly — Final Destination lives on page 1, the
+	// original 9 stages + random on page 0, and any future expansion stages drop
+	// into dMNMapsPageGkinds without churning this function.
+	return dMNMapsPageGkinds[sMNMapsCursorPage][slot];
+#else
 	s32 gkinds[/* */] =
 	{
 		nGRKindCastle, nGRKindJungle, nGRKindHyrule, nGRKindZebes, nGRKindInishie,
-		nGRKindLast, nGRKindYoster, nGRKindPupupu, nGRKindSector, nGRKindYamabuki,
-		nMNMapsRandomGKind
+		nGRKindYoster, nGRKindPupupu, nGRKindSector, nGRKindYamabuki
 	};
 
 	if (slot == nMNMapsSlotRandom)
@@ -587,48 +688,84 @@ s32 mnMapsGetGroundKind(s32 slot)
 		return nMNMapsRandomGKind;
 	}
 	return gkinds[slot];
+#endif
 }
+
+#ifdef PORT
+// PORT: locate which page a gkind lives on. Returns -1 if not in any page table.
+// Used by mnMapsInitVars to restore the cursor across sessions.
+s32 mnMapsGetPageForGkind(s32 gkind)
+{
+	s32 page;
+	s32 slot;
+
+	for (page = 0; page < nMNMapsPageCount; page++)
+	{
+		for (slot = 0; slot < nMNMapsSlotCount; slot++)
+		{
+			if (dMNMapsPageGkinds[page][slot] == gkind)
+			{
+				return page;
+			}
+		}
+	}
+	return -1;
+}
+#endif
 
 // 0x80132498
 s32 mnMapsGetSlot(s32 gkind)
 {
+#ifdef PORT
+	// Look up the slot within whichever page owns this gkind. Caller is
+	// responsible for syncing sMNMapsCursorPage via mnMapsGetPageForGkind.
+	s32 page;
+	s32 slot;
+
+	for (page = 0; page < nMNMapsPageCount; page++)
+	{
+		for (slot = 0; slot < nMNMapsSlotCount; slot++)
+		{
+			if (dMNMapsPageGkinds[page][slot] == gkind)
+			{
+				return slot;
+			}
+		}
+	}
+	return 0;
+#else
 	switch (gkind)
 	{
 	case nGRKindCastle:
 		return 0;
-		
+
 	case nGRKindJungle:
 		return 1;
-		
+
 	case nGRKindHyrule:
 		return 2;
-		
+
 	case nGRKindZebes:
 		return 3;
-		
+
 	case nGRKindInishie:
 		return 4;
 
-	case nGRKindLast:
-		return nMNMapsSlotFinal;
-		
 	case nGRKindYoster:
-		return 6;
-		
+		return 5;
+
 	case nGRKindPupupu:
-		return 7;
-		
+		return 6;
+
 	case nGRKindSector:
-		return 8;
-		
+		return 7;
+
 	case nGRKindYamabuki:
-		return 9;
+		return 8;
 
 	case nMNMapsRandomGKind:
 		return nMNMapsSlotRandom;
 	}
-#ifdef PORT
-	return 0;
 #endif
 }
 
@@ -661,6 +798,9 @@ void mnMapsMakeIcons(void)
 
 	gobj = gcMakeGObjSPAfter(0, NULL, 3, GOBJ_PRIORITY_DEFAULT);
 	gcAddGObjDisplay(gobj, lbCommonDrawSObjAttr, 1, GOBJ_PRIORITY_DEFAULT, ~0);
+#ifdef PORT
+	sMNMapsIconsGObj = gobj;
+#endif
 
 	for (i = 0; i < nMNMapsSlotCount; i++)
 	{
@@ -676,15 +816,34 @@ void mnMapsMakeIcons(void)
 				sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNMapsFiles[2], &llMNMapsRandomSmallSprite));
 #endif
 			}
-			else if (gkind == nGRKindLast)
+			else
 			{
+				Sprite *port_icon = NULL;
 #ifdef PORT
-				sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNMapsFiles[nMNMapsFileMasterHandIcon], llMasterHandIconStockSprite));
-#else
-				sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNMapsFiles[2], &llMNMapsQuestionMarkSprite));
+				// Generic per-stage port asset (Torch-derived PNG, runtime-loaded). Returns
+				// NULL for ROM gkinds that don't have a port override — we fall through to
+				// the legacy offsets[] table for those.
+				port_icon = portCSSGetStageIconSprite(gkind);
+#endif
+				if (port_icon != NULL)
+				{
+					sobj = lbCommonMakeSObjForGObj(gobj, port_icon);
+				}
+				else if (gkind <= nGRKindBattleEnd)
+				{
+					// ROM VS-mode stage — index the legacy offsets table.
+					sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNMapsFiles[2], offsets[gkind]));
+				}
+#ifdef PORT
+				else
+				{
+					// Port-introduced stage but its PNG is missing (user hasn't run a Torch
+					// build, or the manifest entry was added without a matching extraction).
+					// Show the question-mark sprite so the slot still renders.
+					sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNMapsFiles[2], llMNMapsQuestionMarkSprite));
+				}
 #endif
 			}
-			else sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNMapsFiles[2], offsets[gkind]));
 
 			mnMapsGetSlotPosition(i, &x, &y);
 			sobj->pos.x = x;
@@ -717,11 +876,90 @@ void mnMapsSetNamePosition(SObj *sobj, s32 gkind)
 #endif
 }
 
+#ifdef PORT
+// Render "FINAL DESTINATION" on the stage-name plate using the subtitle font, scaled up
+// to approximate the visual weight of the pre-rendered name sprites used by the other
+// nine stages. Two-pass: render letters left-to-right tracking total width, then shift
+// every newly-created SObj so the string is mathematically centered on plate_center_x.
+//
+// We use the subtitle-font letter sprites (llMNCommonFontsLetter*) — the same family
+// mnMapsMakeString uses — because no pre-rendered "FINAL DESTINATION" sprite exists
+// yet (deferred until Issue 1, the per-pixel icon pipeline, lands).
+static void mnMapsMakeNameFinalDestinationPort(GObj *gobj)
+{
+	intptr_t chars[/* */] =
+	{
+		llMNCommonFontsLetterASprite, llMNCommonFontsLetterBSprite,
+		llMNCommonFontsLetterCSprite, llMNCommonFontsLetterDSprite,
+		llMNCommonFontsLetterESprite, llMNCommonFontsLetterFSprite,
+		llMNCommonFontsLetterGSprite, llMNCommonFontsLetterHSprite,
+		llMNCommonFontsLetterISprite, llMNCommonFontsLetterJSprite,
+		llMNCommonFontsLetterKSprite, llMNCommonFontsLetterLSprite,
+		llMNCommonFontsLetterMSprite, llMNCommonFontsLetterNSprite,
+		llMNCommonFontsLetterOSprite, llMNCommonFontsLetterPSprite,
+		llMNCommonFontsLetterQSprite, llMNCommonFontsLetterRSprite,
+		llMNCommonFontsLetterSSprite, llMNCommonFontsLetterTSprite,
+		llMNCommonFontsLetterUSprite, llMNCommonFontsLetterVSprite,
+		llMNCommonFontsLetterWSprite, llMNCommonFontsLetterXSprite,
+		llMNCommonFontsLetterYSprite, llMNCommonFontsLetterZSprite,
+		llMNCommonFontsSymbolApostropheSprite,
+		llMNCommonFontsSymbolPercentSprite,
+		llMNCommonFontsSymbolPeriodSprite,
+	};
+	const char *str = "FINAL DESTINATION";
+	// Plate runs PlateLeft@174 → PlateRight@262, so center ≈ x=220; baseline y=196 matches
+	// the pre-rendered name sprite Y in mnMapsSetNamePosition.
+	const f32 plate_center_x = 220.0F;
+	const f32 baseline_y     = 196.0F;
+	// 1.0× = subtitle size (too small for the plate). 1.4× lands close to the visual
+	// height of the pre-rendered name sprites without overflowing the plate horizontally
+	// once centered.
+	const f32 text_scale     = 1.4F;
+	SObj *new_letters[20];
+	s32 new_letters_count = 0;
+	SObj *sobj;
+	f32 cursor_x = 0.0F;
+	f32 shift;
+	s32 i;
+
+	for (i = 0; str[i] != 0; i++)
+	{
+		if (str[i] == ' ')
+		{
+			cursor_x += 4.0F * text_scale;
+			continue;
+		}
+		sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNMapsFiles[3], chars[mnMapsGetCharacterID(str[i])]));
+		sobj->sprite.scalex = text_scale;
+		sobj->sprite.scaley = text_scale;
+		sobj->pos.x = cursor_x;
+		sobj->pos.y = baseline_y;
+
+		sobj->sprite.attr &= ~SP_FASTCOPY;
+		sobj->sprite.attr |= SP_TRANSPARENT;
+
+		sobj->sprite.red   = 0x00;
+		sobj->sprite.green = 0x00;
+		sobj->sprite.blue  = 0x00;
+
+		new_letters[new_letters_count++] = sobj;
+
+		cursor_x += (sobj->sprite.width + mnMapsGetCharacterSpacing(str, i)) * text_scale;
+	}
+
+	// cursor_x is now the total rendered width; shift each letter to center on the plate.
+	shift = plate_center_x - (cursor_x * 0.5F);
+	for (i = 0; i < new_letters_count; i++)
+	{
+		new_letters[i]->pos.x += shift;
+	}
+}
+#endif
+
 // 0x80132738
 void mnMapsMakeName(GObj *gobj, s32 gkind)
 {
 	SObj* sobj;
-	u32 final_destination_color[/* */] = { 0x00, 0x00, 0x00 };
 	intptr_t offsets[/* */] =
 	{
 #ifdef PORT
@@ -747,12 +985,37 @@ void mnMapsMakeName(GObj *gobj, s32 gkind)
 #endif
 	};
 
+#ifdef PORT
+	// Generic per-stage nameplate sprite (Torch-derived 96x10 IA4-equivalent PNG,
+	// loaded at runtime). Same color-override pattern as ROM nameplates: red/green/
+	// blue forced to 0x00 so the texel's alpha mask becomes a black silhouette.
+	// mnMapsSetNamePosition isn't safe for out-of-range gkinds (positions[] is
+	// only 9 entries), so we set the canonical x=183/y=196 directly for port
+	// stages — that's the US position the ROM uses for every nameplate.
+	{
+		Sprite *port_name = portCSSGetStageNameSprite(gkind);
+		if (port_name != NULL)
+		{
+			sobj = lbCommonMakeSObjForGObj(gobj, port_name);
+			sobj->pos.x = 183.0F;
+			sobj->pos.y = 196.0F;
+			sobj->sprite.attr &= ~SP_FASTCOPY;
+			sobj->sprite.attr |= SP_TRANSPARENT;
+			sobj->sprite.red   = 0x00;
+			sobj->sprite.green = 0x00;
+			sobj->sprite.blue  = 0x00;
+			return;
+		}
+	}
 	if (gkind == nGRKindLast)
 	{
-		mnMapsMakeString(gobj, "FINAL", 199.0F, 190.0F, final_destination_color);
-		mnMapsMakeString(gobj, "DESTINATION", 177.0F, 198.0F, final_destination_color);
+		// Asset PNG missing — fall back to the runtime-rasterized subtitle-font
+		// glyphs so the slot still shows readable text. The fallback can be
+		// dropped once the Torch pipeline is mandatory.
+		mnMapsMakeNameFinalDestinationPort(gobj);
 		return;
 	}
+#endif
 	sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNMapsFiles[2], offsets[gkind]));
 	mnMapsSetNamePosition(sobj, gkind);
 
@@ -1069,6 +1332,62 @@ void mnMapsMakeCursor(void)
 	mnMapsSetCursorPosition(gobj, sMNMapsCursorSlot);
 }
 
+#ifdef PORT
+// Build the page-scroll arrow indicators. One SObj per visible arrow side:
+//   right (>) — present when sMNMapsCursorPage + 1 < nMNMapsPageCount
+//   left  (<) — present when sMNMapsCursorPage > 0; mirrored via sprite.scalex = -1
+// The arrow sprite is W=6, H=44 (port_css_arrow.cpp). It sits at the vertical
+// center of the icons block (rows at y=30..62 and y=68..100 → center y≈65).
+// Lives in its own GObj so it doesn't get caught up in the icons slide animation —
+// the arrows are page-state indicators, not page content. mnMapsMakeArrows
+// destroys any prior arrows GObj and rebuilds, so it's safe to call on every
+// page change.
+void mnMapsMakeArrows(void)
+{
+	GObj *gobj;
+	SObj *sobj;
+	Sprite *arrow_right;
+	Sprite *arrow_left;
+
+	if (sMNMapsArrowsGObj != NULL)
+	{
+		gcEjectGObj(sMNMapsArrowsGObj);
+		sMNMapsArrowsGObj = NULL;
+	}
+
+	arrow_right = portCSSGetScrollArrowSprite();
+	arrow_left  = portCSSGetScrollArrowLeftSprite();
+	if (arrow_right == NULL && arrow_left == NULL) return;
+
+	gobj = gcMakeGObjSPAfter(0, NULL, 4, GOBJ_PRIORITY_DEFAULT);
+	gcAddGObjDisplay(gobj, lbCommonDrawSObjAttr, 1, GOBJ_PRIORITY_DEFAULT, ~0);
+	sMNMapsArrowsGObj = gobj;
+
+	// Arrow placement: symmetric clearance from the icon row's outer edges so the
+	// CSS grid stays at the exact same layout as page 0. Row-1 spans x=30..278
+	// (slot 0 leftmost, slot 4 rightmost icon right edge). Each arrow leaves a
+	// 12 px gap to the nearest icon edge.
+	//   Right arrow:  pos.x = 290 → arrow.left=290, icon.right=278, gap=12
+	//   Left  arrow:  pos.x = 10  → arrow.right=18, icon.left=30,   gap=12
+	if (((sMNMapsCursorPage + 1) < nMNMapsPageCount) && (arrow_right != NULL))
+	{
+		sobj = lbCommonMakeSObjForGObj(gobj, arrow_right);
+		sobj->sprite.attr &= ~SP_FASTCOPY;
+		sobj->sprite.attr |= SP_TRANSPARENT;
+		sobj->pos.x = 290.0F;
+		sobj->pos.y = 43.0F;   // center y=65 with H=44
+	}
+	if ((sMNMapsCursorPage > 0) && (arrow_left != NULL))
+	{
+		sobj = lbCommonMakeSObjForGObj(gobj, arrow_left);
+		sobj->sprite.attr &= ~SP_FASTCOPY;
+		sobj->sprite.attr |= SP_TRANSPARENT;
+		sobj->pos.x = 10.0F;
+		sobj->pos.y = 43.0F;
+	}
+}
+#endif
+
 // 0x80132B84
 void mnMapsLoadMapFile(s32 gkind, void *heap)
 {
@@ -1177,7 +1496,23 @@ GObj* mnMapsMakePreviewWallpaper(s32 gkind)
 			);
 		}
 #ifdef PORT
-		else sobj = lbCommonMakeSObjForGObj(gobj, (Sprite*)PORT_RESOLVE(sMNMapsGroundInfo->wallpaper)); // Use stage bg
+		else
+		{
+			// Generic per-stage port asset (Torch-derived from user's ROM at build
+			// time, loaded as PNG at runtime). Returns NULL for stages without a
+			// port-side entry — falls back to the reloc-data wallpaper from
+			// sMNMapsGroundInfo, which is the original ROM-shipped sprite for that
+			// stage. Either way, no Nintendo bytes are baked into the binary.
+			Sprite *port_wp = portCSSGetStageBackgroundSprite(gkind);
+			if (port_wp != NULL)
+			{
+				sobj = lbCommonMakeSObjForGObj(gobj, port_wp);
+			}
+			else
+			{
+				sobj = lbCommonMakeSObjForGObj(gobj, (Sprite*)PORT_RESOLVE(sMNMapsGroundInfo->wallpaper));
+			}
+		}
 #else
 		else sobj = lbCommonMakeSObjForGObj(gobj, sMNMapsGroundInfo->wallpaper); // Use stage bg
 #endif
@@ -1295,9 +1630,12 @@ GObj* mnMapsMakeLayer(s32 gkind, MPGroundData *ground_data, MPGroundDesc *ground
 	}
 	if (gkind == nGRKindLast)
 	{
-		DObjGetStruct(gobj)->scale.vec.f.x = 0.22F;
-		DObjGetStruct(gobj)->scale.vec.f.y = 0.22F;
-		DObjGetStruct(gobj)->scale.vec.f.z = 0.22F;
+		// 0.35F: Final Destination's worldspace model is larger than the standard stages,
+		// so it needs a lower scale than e.g. Hyrule (0.6) or Castle (0.5).  0.22F was
+		// visibly too small; 0.35F brings it roughly in line with the other previews.
+		DObjGetStruct(gobj)->scale.vec.f.x = 0.35F;
+		DObjGetStruct(gobj)->scale.vec.f.y = 0.35F;
+		DObjGetStruct(gobj)->scale.vec.f.z = 0.35F;
 	}
 	else
 	{
@@ -1583,24 +1921,17 @@ void mnMapsSetPreviewCameraPosition(CObj *cobj, s32 gkind)
 		{ 1600.0F, 1500.0F, 0.0F },
 		{ 1600.0F, 1600.0F, 0.0F },
 		{ 1200.0F, 1600.0F, 0.0F },
+#ifdef PORT
+		// Final Destination (nGRKindLast = 16) lives well past the starter+unlock block;
+		// extend the array via a designated initializer so positions[nGRKindLast] is
+		// well-defined. Intervening 1P/bonus gkinds never reach this VS-CSS path.
+		[nGRKindLast] = { 1500.0F, 1.0F, 0.0F },
+#endif
 	};
 
 	if (gkind == nMNMapsRandomGKind)
 	{
 		gkind = nGRKindCastle;
-	}
-	if (gkind == nGRKindLast)
-	{
-		cobj->vec.eye.x = -3000.0F;
-		cobj->vec.eye.y = 2800.0F;
-		cobj->vec.eye.z = 9000.0F;
-		cobj->vec.up.x = 0.0F;
-		cobj->vec.up.y = 1.0F;
-		cobj->vec.up.z = 0.0F;
-		cobj->vec.at.x = 0.0F;
-		cobj->vec.at.y = 500.0F;
-		cobj->vec.at.z = 0.0F;
-		return;
 	}
 	cobj->vec.eye.x = -3000.0F;
 	cobj->vec.eye.y = 3000.0F;
@@ -1631,40 +1962,31 @@ void mnMapsPreviewCameraThreadUpdate(GObj *gobj)
 }
 
 // 0x80133A00
+// In-page-only vertical move (row 1 ↔ row 2). Page transitions stay horizontal.
 s32 mnMapsGetVerticalSlot(s32 slot, sb32 is_down)
 {
-	s32 next_slot = -1;
+	s32 next_slot;
 
 	if (is_down != FALSE)
 	{
-		if (slot < nMNMapsSlotFinal)
-		{
-			next_slot = slot + 6;
-		}
-		else if (slot == nMNMapsSlotFinal)
-		{
-			next_slot = nMNMapsSlotRandom;
-		}
+		if (slot >= 5) return slot;
+		next_slot = slot + 5;
 	}
 	else
 	{
-		if ((slot >= 6) && (slot < nMNMapsSlotRandom))
-		{
-			next_slot = slot - 6;
-		}
-		else if (slot == nMNMapsSlotRandom)
-		{
-			next_slot = (mnMapsCheckLocked(mnMapsGetGroundKind(nMNMapsSlotRandom - 1)) != FALSE) ? nMNMapsSlotFinal : nMNMapsSlotRandom - 1;
-		}
+		if (slot < 5) return slot;
+		next_slot = slot - 5;
 	}
-	if ((next_slot != -1) && (mnMapsCheckLocked(mnMapsGetGroundKind(next_slot)) == FALSE))
+	if (mnMapsCheckLocked(mnMapsGetGroundKind(next_slot)) == FALSE)
 	{
 		return next_slot;
 	}
-	else return slot;
+	return slot;
 }
 
 // 0x80133A40
+// In-page-only horizontal walk. Wraps within the current row (slot 4↔0, slot 9↔5).
+// Page transitions are handled separately in mnMapsFuncRun via mnMapsTryPageJump.
 s32 mnMapsGetHorizontalSlot(s32 slot, sb32 is_right)
 {
 	s32 next_slot = slot;
@@ -1674,27 +1996,15 @@ s32 mnMapsGetHorizontalSlot(s32 slot, sb32 is_right)
 	{
 		if (is_right != FALSE)
 		{
-			if (next_slot == nMNMapsSlotFinal)
-			{
-				next_slot = 0;
-			}
-			else if (next_slot == nMNMapsSlotRandom)
-			{
-				next_slot = 6;
-			}
-			else next_slot++;
+			if (next_slot == 4)        next_slot = 0;
+			else if (next_slot == 9)   next_slot = 5;
+			else                       next_slot++;
 		}
 		else
 		{
-			if (next_slot == 0)
-			{
-				next_slot = nMNMapsSlotFinal;
-			}
-			else if (next_slot == 6)
-			{
-				next_slot = nMNMapsSlotRandom;
-			}
-			else next_slot--;
+			if (next_slot == 0)        next_slot = 4;
+			else if (next_slot == 5)   next_slot = 9;
+			else                       next_slot--;
 		}
 		if (mnMapsCheckLocked(mnMapsGetGroundKind(next_slot)) == FALSE)
 		{
@@ -1703,6 +2013,163 @@ s32 mnMapsGetHorizontalSlot(s32 slot, sb32 is_right)
 	}
 	return slot;
 }
+
+#ifdef PORT
+// PORT: shift every SObj on a GObj's list by (dx, dy). Used to slide the icons
+// GObj as a unit during a page transition. NULL-safe.
+static void mnMapsShiftSObjs(GObj *gobj, f32 dx, f32 dy)
+{
+	SObj *s;
+
+	if (gobj == NULL) return;
+	for (s = SObjGetStruct(gobj); s != NULL; s = SObjGetNext(s))
+	{
+		s->pos.x += dx;
+		s->pos.y += dy;
+	}
+}
+
+// PORT: advance the page-slide animation by one frame. Returns TRUE if a slide
+// is in progress (the caller — mnMapsFuncRun — should skip input handling this
+// frame); FALSE means idle.
+sb32 mnMapsTickScrollAnimation(void)
+{
+	if (sMNMapsScrollDir == nMNMapsScrollDirNone)
+	{
+		return FALSE;
+	}
+
+	mnMapsShiftSObjs(sMNMapsScrollOldIconsGObj,  sMNMapsScrollIconsDelta, 0.0F);
+	mnMapsShiftSObjs(sMNMapsIconsGObj,           sMNMapsScrollIconsDelta, 0.0F);
+	mnMapsShiftSObjs(sMNMapsScrollOldArrowsGObj, sMNMapsScrollIconsDelta, 0.0F);
+	mnMapsShiftSObjs(sMNMapsArrowsGObj,          sMNMapsScrollIconsDelta, 0.0F);
+	if (sMNMapsCursorGObj != NULL)
+	{
+		SObjGetStruct(sMNMapsCursorGObj)->pos.x += sMNMapsScrollCursorDelta;
+	}
+
+	sMNMapsScrollTicks--;
+	if (sMNMapsScrollTicks <= 0)
+	{
+		// Slide finished — destroy outgoing icons + arrows, snap cursor onto the
+		// exact slot, and refresh the per-stage UI (name plate, emblem, preview
+		// camera + model). The new arrows GObj is already in place; just trust it.
+		if (sMNMapsScrollOldIconsGObj != NULL)
+		{
+			gcEjectGObj(sMNMapsScrollOldIconsGObj);
+			sMNMapsScrollOldIconsGObj = NULL;
+		}
+		if (sMNMapsScrollOldArrowsGObj != NULL)
+		{
+			gcEjectGObj(sMNMapsScrollOldArrowsGObj);
+			sMNMapsScrollOldArrowsGObj = NULL;
+		}
+		mnMapsSetCursorPosition(sMNMapsCursorGObj, sMNMapsCursorSlot);
+		mnMapsMakeNameAndEmblem(sMNMapsCursorSlot);
+		mnMapsMakePreview(mnMapsGetGroundKind(sMNMapsCursorSlot));
+		sMNMapsScrollDir = nMNMapsScrollDirNone;
+	}
+	return TRUE;
+}
+
+// PORT: kick off a page-slide animation. Caller has already validated that
+// target_page / target_slot are a legitimate edge transition. The outgoing
+// icons GObj is captured into sMNMapsScrollOldIconsGObj; a fresh icons GObj
+// for the target page is built off-screen (offset ±320 px) and slides in
+// while the old one slides out.
+static void mnMapsBeginPageSlide(s32 target_page, s32 target_slot, sb32 is_right)
+{
+	f32 page_offset;
+	f32 old_cursor_x;
+	f32 new_cursor_x;
+	f32 new_slot_x;
+	f32 new_slot_y;
+
+	// Snapshot current cursor position before we change pages.
+	old_cursor_x = SObjGetStruct(sMNMapsCursorGObj)->pos.x;
+
+	// Hand the current icons + arrows off to the "old / sliding off-screen" pointers.
+	sMNMapsScrollOldIconsGObj  = sMNMapsIconsGObj;
+	sMNMapsScrollOldArrowsGObj = sMNMapsArrowsGObj;
+	sMNMapsIconsGObj           = NULL;
+	sMNMapsArrowsGObj          = NULL;
+
+	sMNMapsCursorPage = target_page;
+	sMNMapsCursorSlot = target_slot;
+
+	// mnMapsMakeIcons / mnMapsMakeArrows read sMNMapsCursorPage and assign
+	// sMNMapsIconsGObj / sMNMapsArrowsGObj for the *new* page.
+	mnMapsMakeIcons();
+	mnMapsMakeArrows();
+
+	// Position the new icons + arrows off-screen in the direction the slide
+	// reveals them from: right-jump → enter from +320; left-jump → enter from -320.
+	page_offset = (is_right != FALSE) ? nMNMapsScrollPageWidth : -nMNMapsScrollPageWidth;
+	mnMapsShiftSObjs(sMNMapsIconsGObj,  page_offset, 0.0F);
+	mnMapsShiftSObjs(sMNMapsArrowsGObj, page_offset, 0.0F);
+
+	// Cursor lerps from its current screen position to the new slot's natural
+	// cursor position over the slide duration.
+	mnMapsGetSlotPosition(target_slot, &new_slot_x, &new_slot_y);
+	new_cursor_x = new_slot_x - 7.0F;
+
+	sMNMapsScrollDir          = (is_right != FALSE) ? nMNMapsScrollDirRight : nMNMapsScrollDirLeft;
+	sMNMapsScrollTicks        = nMNMapsScrollFrames;
+	sMNMapsScrollIconsDelta   = -page_offset / (f32)nMNMapsScrollFrames;
+	sMNMapsScrollCursorDelta  = (new_cursor_x - old_cursor_x) / (f32)nMNMapsScrollFrames;
+}
+
+// PORT: at the current cursor edge, attempt a page transition. is_right=TRUE
+// triggers from row 1's slot 4 or row 2's slot 9; is_right=FALSE triggers from
+// row 1's slot 0 or row 2's slot 5. Returns TRUE if a slide was kicked off
+// (caller must SKIP its own snap-updates while sMNMapsScrollDir != None);
+// FALSE means caller should fall back to in-page horizontal movement.
+sb32 mnMapsTryPageJump(sb32 is_right)
+{
+	s32 target_page;
+	s32 target_slot;
+
+	if (is_right != FALSE)
+	{
+		// Only row-edge slots trigger a forward page jump.
+		if (sMNMapsCursorSlot == 4)      target_slot = 0;
+		else if (sMNMapsCursorSlot == 9) target_slot = 5;
+		else                             return FALSE;
+		target_page = sMNMapsCursorPage + 1;
+		if (target_page >= nMNMapsPageCount) return FALSE;
+	}
+	else
+	{
+		if (sMNMapsCursorSlot == 0)      target_slot = 4;
+		else if (sMNMapsCursorSlot == 5) target_slot = 9;
+		else                             return FALSE;
+		target_page = sMNMapsCursorPage - 1;
+		if (target_page < 0) return FALSE;
+	}
+
+	// If the symmetric landing slot is empty/locked on the target page, walk inward
+	// along the same row until we find a usable slot (or give up).
+	{
+		s32 row_left  = (target_slot >= 5) ? 5 : 0;
+		s32 row_right = (target_slot >= 5) ? 9 : 4;
+		s32 step      = (is_right != FALSE) ? 1 : -1;
+		s32 probe     = target_slot;
+		s32 tries;
+
+		for (tries = 0; tries < 5; tries++)
+		{
+			if (mnMapsCheckLocked(dMNMapsPageGkinds[target_page][probe]) == FALSE)
+			{
+				mnMapsBeginPageSlide(target_page, probe, is_right);
+				return TRUE;
+			}
+			probe += step;
+			if (probe < row_left || probe > row_right) break;
+		}
+	}
+	return FALSE;
+}
+#endif
 
 // 0x80133A88
 void mnMapsMakePreviewCamera(void)
@@ -1745,6 +2212,34 @@ void mnMapsSaveSceneData(void)
 
 	if (sMNMapsCursorSlot == nMNMapsSlotRandom)
 	{
+#ifdef PORT
+		// Random picks across all pages — collect every unlocked, non-random,
+		// non-current gkind and pick uniformly. That way FD (and any future
+		// expansion stages on page 1+) participate.
+		s32 candidates[nMNMapsPageCount * nMNMapsSlotCount];
+		s32 count = 0;
+		s32 page;
+
+		for (page = 0; page < nMNMapsPageCount; page++)
+		{
+			for (slot = 0; slot < nMNMapsSlotCount; slot++)
+			{
+				gkind = dMNMapsPageGkinds[page][slot];
+				if (gkind == nMNMapsRandomGKind) continue;
+				if (mnMapsCheckLocked(gkind) != FALSE) continue;
+				if (gkind == gSCManagerSceneData.gkind) continue;
+				candidates[count++] = gkind;
+			}
+		}
+		if (count > 0)
+		{
+			gSCManagerSceneData.gkind = candidates[syUtilsRandTimeUCharRange(count)];
+		}
+		else
+		{
+			gSCManagerSceneData.gkind = mnMapsGetGroundKind(0);
+		}
+#else
 		do
 		{
 			slot = syUtilsRandTimeUCharRange(nMNMapsSlotRandom);
@@ -1753,6 +2248,7 @@ void mnMapsSaveSceneData(void)
 		while ((mnMapsCheckLocked(gkind) != FALSE) || (gkind == gSCManagerSceneData.gkind));
 
 		gSCManagerSceneData.gkind = gkind;
+#endif
 	}
 	else gSCManagerSceneData.gkind = mnMapsGetGroundKind(sMNMapsCursorSlot);
 
@@ -1770,10 +2266,25 @@ void mnMapsSaveSceneData(void)
 void mnMapsInitVars(void)
 {
 	s32 i;
+#ifdef PORT
+	s32 saved_gkind;
+	s32 saved_page;
+#endif
 
 	sMNMapsNameLogoGObj = NULL;
 	sMNMapsHeap0WallpaperGObj = NULL;
 	sMNMapsHeap1WallpaperGObj = NULL;
+#ifdef PORT
+	sMNMapsIconsGObj           = NULL;
+	sMNMapsArrowsGObj          = NULL;
+	sMNMapsCursorPage          = nMNMapsPageOriginal;
+	sMNMapsScrollDir           = nMNMapsScrollDirNone;
+	sMNMapsScrollTicks         = 0;
+	sMNMapsScrollOldIconsGObj  = NULL;
+	sMNMapsScrollOldArrowsGObj = NULL;
+	sMNMapsScrollIconsDelta    = 0.0F;
+	sMNMapsScrollCursorDelta   = 0.0F;
+#endif
 
 	for (i = 0; i < ARRAY_COUNT(sMNMapsHeap0LayerGObjs); i++)
 	{
@@ -1784,17 +2295,32 @@ void mnMapsInitVars(void)
 	{
 	case nSCKindPlayers1PTraining:
 		sMNMapsIsTrainingMode = TRUE;
+#ifdef PORT
+		saved_gkind = gSCManagerSceneData.maps_training_gkind;
+		saved_page  = mnMapsGetPageForGkind(saved_gkind);
+		sMNMapsCursorPage = (saved_page >= 0) ? saved_page : nMNMapsPageOriginal;
+#endif
 		sMNMapsCursorSlot = mnMapsGetSlot(gSCManagerSceneData.maps_training_gkind);
 		break;
-		
+
 	case nSCKindPlayersVS:
 		sMNMapsIsTrainingMode = FALSE;
+#ifdef PORT
+		saved_gkind = gSCManagerSceneData.maps_vsmode_gkind;
+		saved_page  = mnMapsGetPageForGkind(saved_gkind);
+		sMNMapsCursorPage = (saved_page >= 0) ? saved_page : nMNMapsPageOriginal;
+#endif
 		sMNMapsCursorSlot = mnMapsGetSlot(gSCManagerSceneData.maps_vsmode_gkind);
 		break;
 	}
 	sMNMapsUnlockedMask = gSCManagerBackupData.unlock_mask;
 	if (mnMapsCheckLocked(mnMapsGetGroundKind(sMNMapsCursorSlot)) != FALSE)
 	{
+#ifdef PORT
+		// Fall back to page 0 slot 0 (always Castle) if the restored slot is unusable
+		// on the resolved page (e.g. training mode hides FD on page 1).
+		sMNMapsCursorPage = nMNMapsPageOriginal;
+#endif
 		sMNMapsCursorSlot = 0;
 	}
 	sMNMapsHeapID = 1;
@@ -1817,6 +2343,16 @@ void mnMapsFuncRun(GObj *gobj)
 	s32 next_slot;
 
 	sMNMapsTotalTimeTics++;
+
+#ifdef PORT
+	// Page-slide animation has the floor — while sliding, block all input and
+	// don't run the rest of the per-frame logic. mnMapsTickScrollAnimation
+	// finalizes (eject old icons, refresh name/emblem/preview) on the last tick.
+	if (mnMapsTickScrollAnimation() != FALSE)
+	{
+		return;
+	}
+#endif
 
 	if (sMNMapsTotalTimeTics >= 10)
 	{
@@ -1935,11 +2471,22 @@ void mnMapsFuncRun(GObj *gobj)
 
 			if ((button_input != 0) || (stick_input = scSubsysControllerGetPlayerStickLR(-20, 0), (stick_input)))
 			{
-				sMNMapsCursorSlot = mnMapsGetHorizontalSlot(sMNMapsCursorSlot, FALSE);
-				func_800269C0_275C0(nSYAudioFGMMenuScroll2);
-				mnMapsMakeNameAndEmblem(sMNMapsCursorSlot);
-				mnMapsSetCursorPosition(sMNMapsCursorGObj, sMNMapsCursorSlot);
-				mnMapsMakePreview(mnMapsGetGroundKind(sMNMapsCursorSlot));
+#ifdef PORT
+				// Page jump kicks off a slide; the slide's last frame finalizes name+emblem+preview.
+				// We skip the per-stage snap-updates and cursor reposition in that case.
+				if (mnMapsTryPageJump(FALSE) != FALSE)
+				{
+					func_800269C0_275C0(nSYAudioFGMMenuScroll2);
+				}
+				else
+#endif
+				{
+					sMNMapsCursorSlot = mnMapsGetHorizontalSlot(sMNMapsCursorSlot, FALSE);
+					func_800269C0_275C0(nSYAudioFGMMenuScroll2);
+					mnMapsMakeNameAndEmblem(sMNMapsCursorSlot);
+					mnMapsSetCursorPosition(sMNMapsCursorGObj, sMNMapsCursorSlot);
+					mnMapsMakePreview(mnMapsGetGroundKind(sMNMapsCursorSlot));
+				}
 
 				if (button_input != 0)
 				{
@@ -1953,11 +2500,20 @@ void mnMapsFuncRun(GObj *gobj)
 
 			if ((button_input != 0) || (stick_input = scSubsysControllerGetPlayerStickLR(20, 1), (stick_input)))
 			{
-				sMNMapsCursorSlot = mnMapsGetHorizontalSlot(sMNMapsCursorSlot, TRUE);
-				func_800269C0_275C0(nSYAudioFGMMenuScroll2);
-				mnMapsMakeNameAndEmblem(sMNMapsCursorSlot);
-				mnMapsSetCursorPosition(sMNMapsCursorGObj, sMNMapsCursorSlot);
-				mnMapsMakePreview(mnMapsGetGroundKind(sMNMapsCursorSlot));
+#ifdef PORT
+				if (mnMapsTryPageJump(TRUE) != FALSE)
+				{
+					func_800269C0_275C0(nSYAudioFGMMenuScroll2);
+				}
+				else
+#endif
+				{
+					sMNMapsCursorSlot = mnMapsGetHorizontalSlot(sMNMapsCursorSlot, TRUE);
+					func_800269C0_275C0(nSYAudioFGMMenuScroll2);
+					mnMapsMakeNameAndEmblem(sMNMapsCursorSlot);
+					mnMapsSetCursorPosition(sMNMapsCursorGObj, sMNMapsCursorSlot);
+					mnMapsMakePreview(mnMapsGetGroundKind(sMNMapsCursorSlot));
+				}
 
 				if (button_input != 0)
 				{
@@ -2008,6 +2564,9 @@ void mnMapsFuncStart(void)
 	mnMapsMakePlaque();
 	mnMapsMakeLabels();
 	mnMapsMakeIcons();
+#ifdef PORT
+	mnMapsMakeArrows();
+#endif
 	mnMapsMakeNameAndEmblem(sMNMapsCursorSlot);
 	mnMapsMakeCursor();
 	mnMapsMakePreview(mnMapsGetGroundKind(sMNMapsCursorSlot));

@@ -38,13 +38,22 @@ struct MPCollisionLastVSMapObjContainer
     MPMapObjData mapobjs[11];
 };
 
+// Player spawn and map-object positions for Final Destination in VS mode.
+// Floor surface sits at Y=0 in world space (ROM mapobj data: file 114,
+// offset 0x4ED4 — all four BattlePlayer entries have y=1, i.e. floor level).
+// Using y=0 here; the physics engine snaps fighters to the floor on their first
+// frame anyway, so this is effectively identical to the ROM's y=1.
+// BP3/BP4 x positions match the ROM (±600), giving symmetric inner spawns.
+// Item Y heights are above the stage so items fall onto the platform.
+// Rebirth halo platform placed well above the stage top (ROM: y=1050;
+// using 2600 for a more comfortable VS respawn arc height).
 MPCollisionLastVSMapObjContainer dMPCollisionLastVSMapObjs =
 {
     {
-        { nMPMapObjKindBattlePlayer1, { -900,  450 } },
-        { nMPMapObjKindBattlePlayer2, {  900,  450 } },
-        { nMPMapObjKindBattlePlayer3, { -300,  450 } },
-        { nMPMapObjKindBattlePlayer4, {  300,  450 } },
+        { nMPMapObjKindBattlePlayer1, { -900,    0 } },
+        { nMPMapObjKindBattlePlayer2, {  900,    0 } },
+        { nMPMapObjKindBattlePlayer3, { -600,    0 } },
+        { nMPMapObjKindBattlePlayer4, {  600,    0 } },
         { nMPMapObjKindItem,          { -1500, 900 } },
         { nMPMapObjKindItem,          {  -700, 700 } },
         { nMPMapObjKindItem,          {     0, 950 } },
