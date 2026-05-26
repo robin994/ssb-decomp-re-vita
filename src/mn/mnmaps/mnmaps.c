@@ -19,6 +19,7 @@ extern void *func_800269C0_275C0(u16 id);
 extern Sprite *portCSSGetStageIconSprite(int gkind);
 extern Sprite *portCSSGetStageBackgroundSprite(int gkind);
 extern Sprite *portCSSGetStageNameSprite(int gkind);
+extern Sprite *portCSSGetStageEmblemSprite(int gkind);
 extern Sprite *portCSSGetScrollArrowSprite(void);
 extern Sprite *portCSSGetScrollArrowLeftSprite(void);
 #endif
@@ -1196,8 +1197,14 @@ void mnMapsSetLogoPosition(GObj *gobj, s32 gkind)
 	}
 	else if (gkind == nGRKindLast)
 	{
-		SObjGetStruct(gobj)->pos.x = 222.0F;
-		SObjGetStruct(gobj)->pos.y = 142.0F;
+		// FD emblem is the same 64x48 size as every ROM FT emblem (port_css_stage_assets
+		// upscales the Master Hand sprite at build time). The other stages compute their
+		// position as positions[gkind].x + 189, positions[gkind].y + 124, with per-stage
+		// .x offsets clustered around 1..3 and .y around 19..20 — i.e. they all land at
+		// roughly (190..192, 143..144). Match that so FD's emblem aligns visually with
+		// the rest of the stage emblems on the wooden circle.
+		SObjGetStruct(gobj)->pos.x = 191.0F;
+		SObjGetStruct(gobj)->pos.y = 143.0F;
 	}
 	else
 	{
@@ -1243,21 +1250,18 @@ void mnMapsMakeEmblem(GObj *gobj, s32 gkind)
 		sobj->sprite.green = 0x22;
 		sobj->sprite.blue = 0x00;
 	}
+#ifdef PORT
 	else if (gkind == nGRKindLast)
 	{
-#ifdef PORT
-		sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNMapsFiles[nMNMapsFileMasterHandIcon], llMasterHandIconFTEmblemSprite));
-#else
-		sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNMapsFiles[2], &llMNMapsQuestionMarkSprite));
-#endif
-
-		sobj->sprite.attr &= ~SP_FASTCOPY;
-		sobj->sprite.attr |= SP_TRANSPARENT;
-
-		sobj->sprite.red = 0x5C;
-		sobj->sprite.green = 0x22;
-		sobj->sprite.blue = 0x00;
+		// Final Destination emblem deliberately blank for now — every attempt
+		// to render either the port-derived sprite or the ROM Master Hand
+		// fallback has hit format-edge bugs (TMEM overflow, IA4 bit-layout
+		// mismatch, multi-bitmap stride). Skip emblem creation entirely; the
+		// wooden circle behind it still renders. mnMapsSetLogoPosition is
+		// also skipped because there's no SObj to position.
+		return;
 	}
+#endif
 	else
 	{
 		sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNMapsFiles[0], offsets[gkind]));
@@ -2119,52 +2123,87 @@ static void mnMapsBeginPageSlide(s32 target_page, s32 target_slot, sb32 is_right
 	sMNMapsScrollCursorDelta  = (new_cursor_x - old_cursor_x) / (f32)nMNMapsScrollFrames;
 }
 
-// PORT: at the current cursor edge, attempt a page transition. is_right=TRUE
-// triggers from row 1's slot 4 or row 2's slot 9; is_right=FALSE triggers from
-// row 1's slot 0 or row 2's slot 5. Returns TRUE if a slide was kicked off
+// PORT: attempt a page transition when the cursor is at the visible edge of
+// its row in the requested direction. Returns TRUE if a slide was kicked off
 // (caller must SKIP its own snap-updates while sMNMapsScrollDir != None);
 // FALSE means caller should fall back to in-page horizontal movement.
+//
+// Trigger condition is "no unlocked slot exists in this row in the move
+// direction", NOT "cursor sits on a hard-coded edge slot". That's important:
+// when Mushroom Kingdom is locked, slot 4 is unreachable — without this the
+// page jump from row 1 never fires (slot 3 is the de-facto right edge).
+//
+// Landing-slot search: try the symmetric row on the target page first
+// (row 1 ↔ row 1, row 2 ↔ row 2). If that row is entirely empty on the
+// target page (current page-1 case — only FD in row 1, no row 2 content),
+// fall back to the other row. Without that fallback, pressing right from
+// Random on page 0 would refuse to scroll because page 1's row 2 is empty.
 sb32 mnMapsTryPageJump(sb32 is_right)
 {
 	s32 target_page;
-	s32 target_slot;
+	s32 row_left;
+	s32 row_right;
+	s32 other_left;
+	s32 other_right;
+	s32 step;
+	s32 probe;
 
-	if (is_right != FALSE)
+	// Current row range.
+	if (sMNMapsCursorSlot < 5)
 	{
-		// Only row-edge slots trigger a forward page jump.
-		if (sMNMapsCursorSlot == 4)      target_slot = 0;
-		else if (sMNMapsCursorSlot == 9) target_slot = 5;
-		else                             return FALSE;
-		target_page = sMNMapsCursorPage + 1;
-		if (target_page >= nMNMapsPageCount) return FALSE;
+		row_left = 0;  row_right = 4;
+		other_left = 5; other_right = 9;
 	}
 	else
 	{
-		if (sMNMapsCursorSlot == 0)      target_slot = 4;
-		else if (sMNMapsCursorSlot == 5) target_slot = 9;
-		else                             return FALSE;
-		target_page = sMNMapsCursorPage - 1;
-		if (target_page < 0) return FALSE;
+		row_left = 5;  row_right = 9;
+		other_left = 0; other_right = 4;
 	}
 
-	// If the symmetric landing slot is empty/locked on the target page, walk inward
-	// along the same row until we find a usable slot (or give up).
+	// At-edge check: is there any unlocked slot beyond the cursor in this row?
+	if (is_right != FALSE)
 	{
-		s32 row_left  = (target_slot >= 5) ? 5 : 0;
-		s32 row_right = (target_slot >= 5) ? 9 : 4;
-		s32 step      = (is_right != FALSE) ? 1 : -1;
-		s32 probe     = target_slot;
-		s32 tries;
+		for (probe = sMNMapsCursorSlot + 1; probe <= row_right; probe++)
+		{
+			if (mnMapsCheckLocked(mnMapsGetGroundKind(probe)) == FALSE) return FALSE;
+		}
+		target_page = sMNMapsCursorPage + 1;
+		step = 1;
+	}
+	else
+	{
+		for (probe = sMNMapsCursorSlot - 1; probe >= row_left; probe--)
+		{
+			if (mnMapsCheckLocked(mnMapsGetGroundKind(probe)) == FALSE) return FALSE;
+		}
+		target_page = sMNMapsCursorPage - 1;
+		step = -1;
+	}
 
-		for (tries = 0; tries < 5; tries++)
+	if (target_page < 0 || target_page >= nMNMapsPageCount) return FALSE;
+
+	// Find a landing slot on target_page. Walk the symmetric row from the
+	// entry side first, then fall back to the other row if symmetric is empty.
+	{
+		s32 probe_start = (is_right != FALSE) ? row_left : row_right;
+		s32 fallback_start = (is_right != FALSE) ? other_left : other_right;
+		s32 i;
+
+		for (i = 0, probe = probe_start; i < 5 && probe >= row_left && probe <= row_right; i++, probe += step)
 		{
 			if (mnMapsCheckLocked(dMNMapsPageGkinds[target_page][probe]) == FALSE)
 			{
 				mnMapsBeginPageSlide(target_page, probe, is_right);
 				return TRUE;
 			}
-			probe += step;
-			if (probe < row_left || probe > row_right) break;
+		}
+		for (i = 0, probe = fallback_start; i < 5 && probe >= other_left && probe <= other_right; i++, probe += step)
+		{
+			if (mnMapsCheckLocked(dMNMapsPageGkinds[target_page][probe]) == FALSE)
+			{
+				mnMapsBeginPageSlide(target_page, probe, is_right);
+				return TRUE;
+			}
 		}
 	}
 	return FALSE;
