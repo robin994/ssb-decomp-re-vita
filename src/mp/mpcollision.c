@@ -30,6 +30,38 @@ f32 dMPCollisionMaterialFrictions[/* */] =
     4.0F, 4.0F
 };
 
+#ifdef PORT
+typedef struct MPCollisionLastVSMapObjContainer MPCollisionLastVSMapObjContainer;
+
+struct MPCollisionLastVSMapObjContainer
+{
+    MPMapObjData mapobjs[11];
+};
+
+MPCollisionLastVSMapObjContainer dMPCollisionLastVSMapObjs =
+{
+    {
+        { nMPMapObjKindBattlePlayer1, { -900,  450 } },
+        { nMPMapObjKindBattlePlayer2, {  900,  450 } },
+        { nMPMapObjKindBattlePlayer3, { -300,  450 } },
+        { nMPMapObjKindBattlePlayer4, {  300,  450 } },
+        { nMPMapObjKindItem,          { -1500, 900 } },
+        { nMPMapObjKindItem,          {  -700, 700 } },
+        { nMPMapObjKindItem,          {     0, 950 } },
+        { nMPMapObjKindItem,          {   700, 700 } },
+        { nMPMapObjKindItem,          {  1500, 900 } },
+        { nMPMapObjKindItem,          {     0, 350 } },
+        { nMPMapObjKindRebirth,       {     0, 2600 } }
+    }
+};
+
+u8 dMPCollisionLastVSItemWeights[20] =
+{
+    0x46, 0x28, 0x78, 0x00, 0x14, 0x08, 0x06, 0x0A, 0x05, 0x0C,
+    0x16, 0x08, 0x0A, 0x07, 0x0A, 0x0A, 0x0A, 0x05, 0x05, 0x12
+};
+#endif
+
 // 0x8012C520
 GRFileInfo dMPCollisionGroundFileInfos[/* */] =
 {
@@ -4058,6 +4090,13 @@ void mpCollisionInitGroundData(void)
     {
         unsigned int mapobj_words = (gdata->mapobj_count * 6 + 3) / 4;
         portFixupStructU16(gMPCollisionMapObjs, 0, mapobj_words);
+    }
+    if ((gSCManagerSceneData.scene_curr == nSCKindVSBattle) && (gSCManagerBattleState->gkind == nGRKindLast))
+    {
+        gdata->mapobj_count = ARRAY_COUNT(dMPCollisionLastVSMapObjs.mapobjs);
+        gdata->mapobjs = PORT_REGISTER(&dMPCollisionLastVSMapObjs);
+        gMPCollisionMapObjs = (MPMapObjContainer*)PORT_RESOLVE(gdata->mapobjs);
+        gMPCollisionGroundData->item_weights = PORT_REGISTER(dMPCollisionLastVSItemWeights);
     }
     // Fix MPLineInfo array — all u16 fields (yakumono_id + MPLineData[4] = 18 bytes each).
     // Must happen before mpCollisionAllocLinesGetCountTotal reads line_data->line_count.

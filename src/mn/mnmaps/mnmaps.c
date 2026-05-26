@@ -11,6 +11,12 @@
 extern void *func_800269C0_275C0(u16 id);
 #endif
 
+#define nMNMapsSlotFinal	5
+#define nMNMapsSlotRandom	10
+#define nMNMapsSlotCount	11
+#define nMNMapsRandomGKind	0xDE
+#define nMNMapsFileMasterHandIcon	5
+
 
 // // // // // // // // // // // //
 //                               //
@@ -26,13 +32,15 @@ u32 dMNMapsFileIDs[/* */] =
 	llMNSelectCommonFileID,
 	llMNMapsFileID,
 	llMNCommonFontsFileID,
-	llGRWallpaperTrainingBlackFileID
+	llGRWallpaperTrainingBlackFileID,
+	llMasterHandIconFileID
 #else
 	&llFTEmblemSpritesFileID,
 	&llMNSelectCommonFileID,
 	&llMNMapsFileID,
 	&llMNCommonFontsFileID,
-	&llGRWallpaperTrainingBlackFileID
+	&llGRWallpaperTrainingBlackFileID,
+	&llMasterHandIconFileID
 #endif
 };
 
@@ -48,7 +56,15 @@ GRFileInfo dMNMapsFileInfos[/* */] =
 	{ llGRYosterMapFileID,   llGRYosterMapMapHeader },
 	{ llGRPupupuMapFileID,   llGRPupupuMapMapHeader },
 	{ llGRYamabukiMapFileID, llGRYamabukiMapMapHeader },
-	{ llGRInishieMapFileID,  llGRInishieMapMapHeader }
+	{ llGRInishieMapFileID,  llGRInishieMapMapHeader },
+	{ llGRPupupuSmallMapFileID, llGRPupupuSmallMapMapHeader },
+	{ llGRPupupuTestMapFileID, llGRPupupuTestMapMapHeader },
+	{ llGRExplainMapFileID, llGRExplainMapMapHeader },
+	{ llGRYosterSmallMapFileID, llGRYosterSmallMapMapHeader },
+	{ llGRMetalMapFileID, llGRMetalMapMapHeader },
+	{ llGRZakoMapFileID, llGRZakoMapMapHeader },
+	{ llGRBonus3MapFileID, llGRBonus3MapMapHeader },
+	{ llGRLastMapFileID, llGRLastMapMapHeader }
 #else
 	{ &llGRCastleMapFileID,   &llGRCastleMapMapHeader },
 	{ &llGRSectorMapFileID,   &llGRSectorMapMapHeader },
@@ -58,7 +74,15 @@ GRFileInfo dMNMapsFileInfos[/* */] =
 	{ &llGRYosterMapFileID,   &llGRYosterMapMapHeader },
 	{ &llGRPupupuMapFileID,   &llGRPupupuMapMapHeader },
 	{ &llGRYamabukiMapFileID, &llGRYamabukiMapMapHeader },
-	{ &llGRInishieMapFileID,  &llGRInishieMapMapHeader }
+	{ &llGRInishieMapFileID,  &llGRInishieMapMapHeader },
+	{ &llGRPupupuSmallMapFileID, &llGRPupupuSmallMapMapHeader },
+	{ &llGRPupupuTestMapFileID, &llGRPupupuTestMapMapHeader },
+	{ &llGRExplainMapFileID, &llGRExplainMapMapHeader },
+	{ &llGRYosterSmallMapFileID, &llGRYosterSmallMapMapHeader },
+	{ &llGRMetalMapFileID, &llGRMetalMapMapHeader },
+	{ &llGRZakoMapFileID, &llGRZakoMapMapHeader },
+	{ &llGRBonus3MapFileID, &llGRBonus3MapMapHeader },
+	{ &llGRLastMapFileID, &llGRLastMapMapHeader }
 #endif
 };
 
@@ -67,7 +91,10 @@ intptr_t dMNMapsWallpaperOffsets[/* */] =
 {
 	0x00026C88, 0x00026C88, 0x00026C88,
 	0x00026C88, 0x00026C88, 0x00026C88,
-	0x00026C88, 0x00026C88, 0x00026C88
+	0x00026C88, 0x00026C88, 0x00026C88,
+	0x00026C88, 0x00026C88, 0x00026C88,
+	0x00026C88, 0x00026C88, 0x00026C88,
+	0x00026C88, 0x00026C88
 };
 
 // 0x80134550
@@ -85,7 +112,7 @@ GRFileInfo dMNMapsTrainingModeFileInfos[/* */] =
 };
 
 // 0x80134568
-s32 dMNMapsTrainingModeWallpaperIDs[/* */] = { 2, 0, 0, 0, 2, 1, 2, 2, 2, 0 };
+s32 dMNMapsTrainingModeWallpaperIDs[/* */] = { 2, 0, 0, 0, 2, 1, 2, 2, 2, 0, 2, 2, 1, 2, 2, 2, 2 };
 
 // 0x80134590
 Lights1 dMNMapsLights1 = gdSPDefLights1(0x20, 0x20, 0x20, 0xFF, 0xFF, 0xFF, 0x14, 0x14, 0x14);
@@ -209,7 +236,26 @@ sb32 mnMapsCheckLocked(s32 gkind)
 		}
 		else return TRUE;
 	}
+	else if ((gkind == nGRKindLast) && (sMNMapsIsTrainingMode != FALSE))
+	{
+		return TRUE;
+	}
 	else return FALSE;
+}
+
+// 0x80131BB0
+void mnMapsGetSlotPosition(s32 slot, f32 *x, f32 *y)
+{
+	if (slot < 6)
+	{
+		*x = (slot * 50) + 20;
+		*y = 30.0F;
+	}
+	else
+	{
+		*x = ((slot - 6) * 50) + 45;
+		*y = 68.0F;
+	}
 }
 
 // 0x80131BE4
@@ -532,12 +578,13 @@ s32 mnMapsGetGroundKind(s32 slot)
 	s32 gkinds[/* */] =
 	{
 		nGRKindCastle, nGRKindJungle, nGRKindHyrule, nGRKindZebes, nGRKindInishie,
-		nGRKindYoster, nGRKindPupupu, nGRKindSector, nGRKindYamabuki, 0xDE
+		nGRKindLast, nGRKindYoster, nGRKindPupupu, nGRKindSector, nGRKindYamabuki,
+		nMNMapsRandomGKind
 	};
 
-	if (slot == 9)
+	if (slot == nMNMapsSlotRandom)
 	{
-		return 0xDE;
+		return nMNMapsRandomGKind;
 	}
 	return gkinds[slot];
 }
@@ -561,21 +608,24 @@ s32 mnMapsGetSlot(s32 gkind)
 		
 	case nGRKindInishie:
 		return 4;
+
+	case nGRKindLast:
+		return nMNMapsSlotFinal;
 		
 	case nGRKindYoster:
-		return 5;
-		
-	case nGRKindPupupu:
 		return 6;
 		
-	case nGRKindSector:
+	case nGRKindPupupu:
 		return 7;
 		
-	case nGRKindYamabuki:
+	case nGRKindSector:
 		return 8;
 		
-	case 0xDE:
+	case nGRKindYamabuki:
 		return 9;
+
+	case nMNMapsRandomGKind:
+		return nMNMapsSlotRandom;
 	}
 #ifdef PORT
 	return 0;
@@ -604,19 +654,21 @@ void mnMapsMakeIcons(void)
 		&llMNMapsMushroomKingdomSprite,	&llMNMapsRandomSmallSprite
 #endif
 	};
-	s32 x;
+	s32 gkind;
+	f32 x;
+	f32 y;
 	s32 i;
 
 	gobj = gcMakeGObjSPAfter(0, NULL, 3, GOBJ_PRIORITY_DEFAULT);
 	gcAddGObjDisplay(gobj, lbCommonDrawSObjAttr, 1, GOBJ_PRIORITY_DEFAULT, ~0);
 
-	for (i = 0; i < ARRAY_COUNT(offsets); i++)
+	for (i = 0; i < nMNMapsSlotCount; i++)
 	{
-		if (mnMapsCheckLocked(mnMapsGetGroundKind(i)) == FALSE)
-		{
-			x = i * 50;
+		gkind = mnMapsGetGroundKind(i);
 
-			if (i == 9)
+		if (mnMapsCheckLocked(gkind) == FALSE)
+		{
+			if (gkind == nMNMapsRandomGKind)
 			{
 #ifdef PORT
 				sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNMapsFiles[2], llMNMapsRandomSmallSprite));
@@ -624,18 +676,19 @@ void mnMapsMakeIcons(void)
 				sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNMapsFiles[2], &llMNMapsRandomSmallSprite));
 #endif
 			}
-			else sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNMapsFiles[2], offsets[mnMapsGetGroundKind(i)]));
+			else if (gkind == nGRKindLast)
+			{
+#ifdef PORT
+				sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNMapsFiles[nMNMapsFileMasterHandIcon], llMasterHandIconStockSprite));
+#else
+				sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNMapsFiles[2], &llMNMapsQuestionMarkSprite));
+#endif
+			}
+			else sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNMapsFiles[2], offsets[gkind]));
 
-			if (i < 5)
-			{
-				sobj->pos.y = 30.0F;
-				sobj->pos.x = x + 30;
-			}
-			else
-			{
-				sobj->pos.y = 68.0F;
-				sobj->pos.x = x - 220;
-			}
+			mnMapsGetSlotPosition(i, &x, &y);
+			sobj->pos.x = x;
+			sobj->pos.y = y;
 		}
 	}
 }
@@ -668,6 +721,7 @@ void mnMapsSetNamePosition(SObj *sobj, s32 gkind)
 void mnMapsMakeName(GObj *gobj, s32 gkind)
 {
 	SObj* sobj;
+	u32 final_destination_color[/* */] = { 0x00, 0x00, 0x00 };
 	intptr_t offsets[/* */] =
 	{
 #ifdef PORT
@@ -693,6 +747,12 @@ void mnMapsMakeName(GObj *gobj, s32 gkind)
 #endif
 	};
 
+	if (gkind == nGRKindLast)
+	{
+		mnMapsMakeString(gobj, "FINAL", 199.0F, 190.0F, final_destination_color);
+		mnMapsMakeString(gobj, "DESTINATION", 177.0F, 198.0F, final_destination_color);
+		return;
+	}
 	sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNMapsFiles[2], offsets[gkind]));
 	mnMapsSetNamePosition(sobj, gkind);
 
@@ -866,10 +926,15 @@ void mnMapsSetLogoPosition(GObj *gobj, s32 gkind)
 		{34.0F, 20.0F }
 	};
 
-	if (gkind == 0xDE)
+	if (gkind == nMNMapsRandomGKind)
 	{
 		SObjGetStruct(gobj)->pos.x = 223.0F;
 		SObjGetStruct(gobj)->pos.y = 144.0F;
+	}
+	else if (gkind == nGRKindLast)
+	{
+		SObjGetStruct(gobj)->pos.x = 222.0F;
+		SObjGetStruct(gobj)->pos.y = 142.0F;
 	}
 	else
 	{
@@ -900,10 +965,25 @@ void mnMapsMakeEmblem(GObj *gobj, s32 gkind)
 #endif
 	};
 
-	if (gkind == 0xDE)
+	if (gkind == nMNMapsRandomGKind)
 	{
 #ifdef PORT
 		sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNMapsFiles[2], llMNMapsQuestionMarkSprite));
+#else
+		sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNMapsFiles[2], &llMNMapsQuestionMarkSprite));
+#endif
+
+		sobj->sprite.attr &= ~SP_FASTCOPY;
+		sobj->sprite.attr |= SP_TRANSPARENT;
+
+		sobj->sprite.red = 0x5C;
+		sobj->sprite.green = 0x22;
+		sobj->sprite.blue = 0x00;
+	}
+	else if (gkind == nGRKindLast)
+	{
+#ifdef PORT
+		sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNMapsFiles[nMNMapsFileMasterHandIcon], llMasterHandIconFTEmblemSprite));
 #else
 		sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNMapsFiles[2], &llMNMapsQuestionMarkSprite));
 #endif
@@ -942,11 +1022,14 @@ void mnMapsMakeNameAndEmblem(s32 slot)
 	gcAddGObjDisplay(gobj, lbCommonDrawSObjAttr, 2, GOBJ_PRIORITY_DEFAULT, ~0);
 	mnMapsMakeEmblem(sMNMapsNameLogoGObj, mnMapsGetGroundKind(slot));
 
-	if (slot != 9)
+	if (slot != nMNMapsSlotRandom)
 	{
 		mnMapsMakeName(sMNMapsNameLogoGObj, mnMapsGetGroundKind(slot));
 #if defined(REGION_JP)
-		mnMapsMakeSubtitle(sMNMapsNameLogoGObj, mnMapsGetGroundKind(slot));
+		if (mnMapsGetGroundKind(slot) != nGRKindLast)
+		{
+			mnMapsMakeSubtitle(sMNMapsNameLogoGObj, mnMapsGetGroundKind(slot));
+		}
 #endif
 	}
 }
@@ -954,16 +1037,12 @@ void mnMapsMakeNameAndEmblem(s32 slot)
 // 0x80132A58
 void mnMapsSetCursorPosition(GObj *gobj, s32 slot)
 {
-	if (slot < 5)
-	{
-		SObjGetStruct(gobj)->pos.x = (slot * 50) + 23;
-		SObjGetStruct(gobj)->pos.y = 23.0F;
-	}
-	else
-	{
-		SObjGetStruct(gobj)->pos.x = (slot * 50) - 250 + 23;
-		SObjGetStruct(gobj)->pos.y = 61.0F;
-	}
+	f32 x;
+	f32 y;
+
+	mnMapsGetSlotPosition(slot, &x, &y);
+	SObjGetStruct(gobj)->pos.x = x - 7.0F;
+	SObjGetStruct(gobj)->pos.y = y - 7.0F;
 }
 
 // 0x80132ADC
@@ -1050,7 +1129,7 @@ GObj* mnMapsMakePreviewWallpaper(s32 gkind)
 		continue;
 	}
 	// Check if Random
-	if (gkind == 0xDE)
+	if (gkind == nMNMapsRandomGKind)
 	{
 		// If Random, use Random image
 #ifdef PORT
@@ -1214,9 +1293,18 @@ GObj* mnMapsMakeLayer(s32 gkind, MPGroundData *ground_data, MPGroundDesc *ground
 #endif
 		gcPlayAnimAll(gobj);
 	}
-	DObjGetStruct(gobj)->scale.vec.f.x = scales[gkind];
-	DObjGetStruct(gobj)->scale.vec.f.y = scales[gkind];
-	DObjGetStruct(gobj)->scale.vec.f.z = scales[gkind];
+	if (gkind == nGRKindLast)
+	{
+		DObjGetStruct(gobj)->scale.vec.f.x = 0.22F;
+		DObjGetStruct(gobj)->scale.vec.f.y = 0.22F;
+		DObjGetStruct(gobj)->scale.vec.f.z = 0.22F;
+	}
+	else
+	{
+		DObjGetStruct(gobj)->scale.vec.f.x = scales[gkind];
+		DObjGetStruct(gobj)->scale.vec.f.y = scales[gkind];
+		DObjGetStruct(gobj)->scale.vec.f.z = scales[gkind];
+	}
 
 	return gobj;
 }
@@ -1296,7 +1384,7 @@ void mnMapsDestroyPreview(s32 heap_id)
 // 0x801333B4
 void mnMapsMakePreview(s32 gkind)
 {
-	if (gkind != 0xDE)
+	if (gkind != nMNMapsRandomGKind)
 	{
 		if (sMNMapsHeapID == 0)
 		{
@@ -1310,7 +1398,7 @@ void mnMapsMakePreview(s32 gkind)
 	}
 	else sMNMapsHeap0WallpaperGObj = mnMapsMakePreviewWallpaper(gkind);
 
-	if (gkind != 0xDE)
+	if (gkind != nMNMapsRandomGKind)
 	{
 		mnMapsMakeModel(gkind, sMNMapsGroundInfo, sMNMapsHeapID);
 		mnMapsSetPreviewCameraPosition(sMNMapsPreviewCObj, gkind);
@@ -1497,9 +1585,22 @@ void mnMapsSetPreviewCameraPosition(CObj *cobj, s32 gkind)
 		{ 1200.0F, 1600.0F, 0.0F },
 	};
 
-	if (gkind == 0xDE)
+	if (gkind == nMNMapsRandomGKind)
 	{
 		gkind = nGRKindCastle;
+	}
+	if (gkind == nGRKindLast)
+	{
+		cobj->vec.eye.x = -3000.0F;
+		cobj->vec.eye.y = 2800.0F;
+		cobj->vec.eye.z = 9000.0F;
+		cobj->vec.up.x = 0.0F;
+		cobj->vec.up.y = 1.0F;
+		cobj->vec.up.z = 0.0F;
+		cobj->vec.at.x = 0.0F;
+		cobj->vec.at.y = 500.0F;
+		cobj->vec.at.z = 0.0F;
+		return;
 	}
 	cobj->vec.eye.x = -3000.0F;
 	cobj->vec.eye.y = 3000.0F;
@@ -1527,6 +1628,80 @@ void mnMapsPreviewCameraThreadUpdate(GObj *gobj)
 
 		gcSleepCurrentGObjThread(1);
 	}
+}
+
+// 0x80133A00
+s32 mnMapsGetVerticalSlot(s32 slot, sb32 is_down)
+{
+	s32 next_slot = -1;
+
+	if (is_down != FALSE)
+	{
+		if (slot < nMNMapsSlotFinal)
+		{
+			next_slot = slot + 6;
+		}
+		else if (slot == nMNMapsSlotFinal)
+		{
+			next_slot = nMNMapsSlotRandom;
+		}
+	}
+	else
+	{
+		if ((slot >= 6) && (slot < nMNMapsSlotRandom))
+		{
+			next_slot = slot - 6;
+		}
+		else if (slot == nMNMapsSlotRandom)
+		{
+			next_slot = (mnMapsCheckLocked(mnMapsGetGroundKind(nMNMapsSlotRandom - 1)) != FALSE) ? nMNMapsSlotFinal : nMNMapsSlotRandom - 1;
+		}
+	}
+	if ((next_slot != -1) && (mnMapsCheckLocked(mnMapsGetGroundKind(next_slot)) == FALSE))
+	{
+		return next_slot;
+	}
+	else return slot;
+}
+
+// 0x80133A40
+s32 mnMapsGetHorizontalSlot(s32 slot, sb32 is_right)
+{
+	s32 next_slot = slot;
+	s32 i;
+
+	for (i = 0; i < nMNMapsSlotCount; i++)
+	{
+		if (is_right != FALSE)
+		{
+			if (next_slot == nMNMapsSlotFinal)
+			{
+				next_slot = 0;
+			}
+			else if (next_slot == nMNMapsSlotRandom)
+			{
+				next_slot = 6;
+			}
+			else next_slot++;
+		}
+		else
+		{
+			if (next_slot == 0)
+			{
+				next_slot = nMNMapsSlotFinal;
+			}
+			else if (next_slot == 6)
+			{
+				next_slot = nMNMapsSlotRandom;
+			}
+			else next_slot--;
+		}
+		if (mnMapsCheckLocked(mnMapsGetGroundKind(next_slot)) == FALSE)
+		{
+			return next_slot;
+		}
+	}
+	return slot;
 }
 
 // 0x80133A88
@@ -1565,19 +1740,15 @@ void mnMapsMakePreviewCamera(void)
 // 0x80133B78
 void mnMapsSaveSceneData(void)
 {
-	s32 unused[/* */] =
-	{
-		nGRKindPupupu, 	nGRKindZebes,	nGRKindCastle,
-		nGRKindInishie,	nGRKindJungle, 	nGRKindSector,
-		nGRKindYoster, 	nGRKindYamabuki,nGRKindHyrule
-	};
 	s32 gkind;
+	s32 slot;
 
-	if (sMNMapsCursorSlot == 9)
+	if (sMNMapsCursorSlot == nMNMapsSlotRandom)
 	{
 		do
 		{
-			gkind = syUtilsRandTimeUCharRange(9);
+			slot = syUtilsRandTimeUCharRange(nMNMapsSlotRandom);
+			gkind = mnMapsGetGroundKind(slot);
 		}
 		while ((mnMapsCheckLocked(gkind) != FALSE) || (gkind == gSCManagerSceneData.gkind));
 
@@ -1622,6 +1793,10 @@ void mnMapsInitVars(void)
 		break;
 	}
 	sMNMapsUnlockedMask = gSCManagerBackupData.unlock_mask;
+	if (mnMapsCheckLocked(mnMapsGetGroundKind(sMNMapsCursorSlot)) != FALSE)
+	{
+		sMNMapsCursorSlot = 0;
+	}
 	sMNMapsHeapID = 1;
 	sMNMapsTotalTimeTics = 0;
 	sMNMapsReturnTic = sMNMapsTotalTimeTics + I_MIN_TO_TICS(5);
@@ -1639,6 +1814,7 @@ void mnMapsFuncRun(GObj *gobj)
 	s32 unused;
 	s32 stick_input;
 	s32 button_input;
+	s32 next_slot;
 
 	sMNMapsTotalTimeTics++;
 
@@ -1711,11 +1887,13 @@ void mnMapsFuncRun(GObj *gobj)
 
 			if ((button_input != 0) || (stick_input = scSubsysControllerGetPlayerStickUD(20, 1), (stick_input != 0)))
 			{
-				if ((sMNMapsCursorSlot >= 5) && (mnMapsCheckLocked(mnMapsGetGroundKind(sMNMapsCursorSlot - 5)) == FALSE))
+				next_slot = mnMapsGetVerticalSlot(sMNMapsCursorSlot, FALSE);
+
+				if (next_slot != sMNMapsCursorSlot)
 				{
 					func_800269C0_275C0(nSYAudioFGMMenuScroll2);
 
-					sMNMapsCursorSlot -= 5;
+					sMNMapsCursorSlot = next_slot;
 
 					mnMapsMakeNameAndEmblem(sMNMapsCursorSlot);
 					mnMapsSetCursorPosition(sMNMapsCursorGObj, sMNMapsCursorSlot);
@@ -1733,11 +1911,13 @@ void mnMapsFuncRun(GObj *gobj)
 
 			if ((button_input != 0) || (stick_input = scSubsysControllerGetPlayerStickUD(-20, 0), (stick_input != 0)))
 			{
-				if ((sMNMapsCursorSlot < 5) && (mnMapsCheckLocked(mnMapsGetGroundKind(sMNMapsCursorSlot + 5)) == FALSE))
+				next_slot = mnMapsGetVerticalSlot(sMNMapsCursorSlot, TRUE);
+
+				if (next_slot != sMNMapsCursorSlot)
 				{
 					func_800269C0_275C0(nSYAudioFGMMenuScroll2);
 
-					sMNMapsCursorSlot += 5;
+					sMNMapsCursorSlot = next_slot;
 
 					mnMapsMakeNameAndEmblem(sMNMapsCursorSlot);
 					mnMapsSetCursorPosition(sMNMapsCursorGObj, sMNMapsCursorSlot);
@@ -1755,19 +1935,7 @@ void mnMapsFuncRun(GObj *gobj)
 
 			if ((button_input != 0) || (stick_input = scSubsysControllerGetPlayerStickLR(-20, 0), (stick_input)))
 			{
-				switch (sMNMapsCursorSlot)
-				{
-				case 0:
-					sMNMapsCursorSlot = (mnMapsCheckLocked(mnMapsGetGroundKind(4))) ? 3 : 4;
-					break;
-
-				case 5:
-					sMNMapsCursorSlot = 9;
-					break;
-					
-				default:
-					sMNMapsCursorSlot--;
-				}
+				sMNMapsCursorSlot = mnMapsGetHorizontalSlot(sMNMapsCursorSlot, FALSE);
 				func_800269C0_275C0(nSYAudioFGMMenuScroll2);
 				mnMapsMakeNameAndEmblem(sMNMapsCursorSlot);
 				mnMapsSetCursorPosition(sMNMapsCursorGObj, sMNMapsCursorSlot);
@@ -1785,23 +1953,7 @@ void mnMapsFuncRun(GObj *gobj)
 
 			if ((button_input != 0) || (stick_input = scSubsysControllerGetPlayerStickLR(20, 1), (stick_input)))
 			{
-				switch (sMNMapsCursorSlot)
-				{
-				case 3:
-					sMNMapsCursorSlot = (mnMapsCheckLocked(mnMapsGetGroundKind(4))) ? 0 : 4;
-					break;
-					
-				case 4:
-					sMNMapsCursorSlot = 0;
-					break;
-					
-				case 9:
-					sMNMapsCursorSlot = 5;
-					break;
-					
-				default:
-					sMNMapsCursorSlot++;
-				}
+				sMNMapsCursorSlot = mnMapsGetHorizontalSlot(sMNMapsCursorSlot, TRUE);
 				func_800269C0_275C0(nSYAudioFGMMenuScroll2);
 				mnMapsMakeNameAndEmblem(sMNMapsCursorSlot);
 				mnMapsSetCursorPosition(sMNMapsCursorGObj, sMNMapsCursorSlot);
