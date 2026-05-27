@@ -22,6 +22,7 @@ extern Sprite *portCSSGetStageNameSprite(int gkind);
 extern Sprite *portCSSGetStageEmblemSprite(int gkind);
 extern Sprite *portCSSGetScrollArrowSprite(void);
 extern Sprite *portCSSGetScrollArrowLeftSprite(void);
+extern float port_widescreen_clip_x_scale(void);
 #endif
 
 #define nMNMapsSlotRandom	9
@@ -1991,6 +1992,23 @@ void mnMapsSetPreviewCameraPosition(CObj *cobj, s32 gkind)
 	cobj->vec.at.y = positions[gkind].y;
 	cobj->vec.at.z = positions[gkind].z;
 #ifdef PORT
+	/* Widescreen: the 3D stage preview renders through libultraship's
+	 * AdjXForAspectRatio (clip-x compressed by (4/3)/window_aspect) while
+	 * the surrounding CSS panel UI draws as 2D TextureRectangle ops that
+	 * skip AdjX. Without compensation the rendered stage drifts inward
+	 * relative to the 2D preview-window panel in 16:9. The model is
+	 * centered at translate.x=0 so the fighter-style `translate.x /= scale`
+	 * pattern is a no-op here; instead push the camera's look-at point
+	 * outward along +x so the model projects further along -clip-x,
+	 * shifting the rendered stage left to recenter it inside the 2D
+	 * panel frame. */
+	{
+		f32 scale = port_widescreen_clip_x_scale();
+		if (scale > 0.0F && scale < 1.0F)
+		{
+			cobj->vec.at.x /= scale;
+		}
+	}
 	// Track the base at.y the camera thread oscillates around. Without this,
 	// the thread (mnMapsPreviewCameraThreadUpdate) captures vec.at.y once at
 	// start and ignores subsequent SetPosition writes — switching stages or
