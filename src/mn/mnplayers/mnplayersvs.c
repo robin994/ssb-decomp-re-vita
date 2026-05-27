@@ -4643,15 +4643,20 @@ void mnPlayersVSFuncRun(GObj *gobj)
 			{
 				gSCManagerSceneData.scene_curr = nSCKindVSBattle;
 				{
+					// Port-introduced playable stages (Final Destination, Metal Cavern,
+					// Battlefield) participate in the VS random pool from the start —
+					// no unlock gating on them today.
 					s32 starter_gkinds[/* */] =
 					{
 						nGRKindCastle, nGRKindSector, nGRKindJungle, nGRKindZebes, nGRKindHyrule,
-						nGRKindYoster, nGRKindPupupu, nGRKindYamabuki, nGRKindLast
+						nGRKindYoster, nGRKindPupupu, nGRKindYamabuki,
+						nGRKindLast, nGRKindMetal, nGRKindZako
 					};
 					s32 unlocked_gkinds[/* */] =
 					{
 						nGRKindCastle, nGRKindSector, nGRKindJungle, nGRKindZebes, nGRKindHyrule,
-						nGRKindYoster, nGRKindPupupu, nGRKindYamabuki, nGRKindInishie, nGRKindLast
+						nGRKindYoster, nGRKindPupupu, nGRKindYamabuki, nGRKindInishie,
+						nGRKindLast, nGRKindMetal, nGRKindZako
 					};
 
 					if (gSCManagerBackupData.unlock_mask & LBBACKUP_UNLOCK_MASK_INISHIE)

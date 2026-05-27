@@ -270,10 +270,11 @@ s32 dMNMapsPageGkinds[nMNMapsPageCount][nMNMapsSlotCount] =
 		nGRKindCastle, nGRKindJungle, nGRKindHyrule, nGRKindZebes, nGRKindInishie,
 		nGRKindYoster, nGRKindPupupu, nGRKindSector, nGRKindYamabuki, nMNMapsRandomGKind,
 	},
-	// Page 1 — port expansion. Final Destination today; room for more.
+	// Page 1 — port expansion. Three playable stages from the 1P/Master-Hand pool:
+	//   row 1 (slots 0..4): Final Destination, Metal Cavern, Battlefield
+	//   row 2 (slots 5..9): empty (page-jump fallback finds row-1 entries instead)
 	{
-		nGRKindLast,
-		nMNMapsEmptyGKind, nMNMapsEmptyGKind, nMNMapsEmptyGKind, nMNMapsEmptyGKind,
+		nGRKindLast,       nGRKindMetal,      nGRKindZako,      nMNMapsEmptyGKind, nMNMapsEmptyGKind,
 		nMNMapsEmptyGKind, nMNMapsEmptyGKind, nMNMapsEmptyGKind, nMNMapsEmptyGKind, nMNMapsEmptyGKind,
 	},
 };
@@ -329,8 +330,10 @@ sb32 mnMapsCheckLocked(s32 gkind)
 		}
 		else return TRUE;
 	}
-	else if ((gkind == nGRKindLast) && (sMNMapsIsTrainingMode != FALSE))
+	else if (sMNMapsIsTrainingMode != FALSE && ((gkind == nGRKindLast) || (gkind == nGRKindMetal) || (gkind == nGRKindZako)))
 	{
+		// Port-introduced stages hide from the Training Mode CSS — the training
+		// wallpaper paths (Smash-logo overlay) aren't wired up for them yet.
 		return TRUE;
 	}
 	else return FALSE;
@@ -878,15 +881,18 @@ void mnMapsSetNamePosition(SObj *sobj, s32 gkind)
 }
 
 #ifdef PORT
-// Render "FINAL DESTINATION" on the stage-name plate using the subtitle font, scaled up
-// to approximate the visual weight of the pre-rendered name sprites used by the other
-// nine stages. Two-pass: render letters left-to-right tracking total width, then shift
-// every newly-created SObj so the string is mathematically centered on plate_center_x.
+// Render arbitrary text on the stage-name plate using the subtitle font, scaled up
+// to approximate the visual weight of the pre-rendered name sprites used by the
+// ROM-shipping stages. Two-pass: render letters left-to-right tracking total width,
+// then shift every newly-created SObj so the string is mathematically centered on
+// plate_center_x.
+//
+// Used as a fallback when a port-introduced stage's Torch-derived nameplate PNG
+// isn't present at runtime (user hasn't run a ROM-extracting build).
 //
 // We use the subtitle-font letter sprites (llMNCommonFontsLetter*) — the same family
-// mnMapsMakeString uses — because no pre-rendered "FINAL DESTINATION" sprite exists
-// yet (deferred until Issue 1, the per-pixel icon pipeline, lands).
-static void mnMapsMakeNameFinalDestinationPort(GObj *gobj)
+// mnMapsMakeString uses.
+static void mnMapsMakeNamePortText(GObj *gobj, const char *str)
 {
 	intptr_t chars[/* */] =
 	{
@@ -907,7 +913,6 @@ static void mnMapsMakeNameFinalDestinationPort(GObj *gobj)
 		llMNCommonFontsSymbolPercentSprite,
 		llMNCommonFontsSymbolPeriodSprite,
 	};
-	const char *str = "FINAL DESTINATION";
 	// Plate runs PlateLeft@174 → PlateRight@262, so center ≈ x=220; baseline y=196 matches
 	// the pre-rendered name sprite Y in mnMapsSetNamePosition.
 	const f32 plate_center_x = 220.0F;
@@ -1008,13 +1013,23 @@ void mnMapsMakeName(GObj *gobj, s32 gkind)
 			return;
 		}
 	}
-	if (gkind == nGRKindLast)
+	// Port-introduced stages that ship no ROM nameplate sprite. Asset PNG is
+	// missing at runtime — fall back to runtime-rasterized subtitle-font glyphs
+	// so the slot still shows readable text. The fallback can be dropped once
+	// the Torch pipeline is mandatory.
+	switch (gkind)
 	{
-		// Asset PNG missing — fall back to the runtime-rasterized subtitle-font
-		// glyphs so the slot still shows readable text. The fallback can be
-		// dropped once the Torch pipeline is mandatory.
-		mnMapsMakeNameFinalDestinationPort(gobj);
+	case nGRKindLast:
+		mnMapsMakeNamePortText(gobj, "FINAL DESTINATION");
 		return;
+	case nGRKindMetal:
+		mnMapsMakeNamePortText(gobj, "METAL CAVERN");
+		return;
+	case nGRKindZako:
+		mnMapsMakeNamePortText(gobj, "BATTLEFIELD");
+		return;
+	default:
+		break;
 	}
 #endif
 	sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNMapsFiles[2], offsets[gkind]));
@@ -1251,14 +1266,14 @@ void mnMapsMakeEmblem(GObj *gobj, s32 gkind)
 		sobj->sprite.blue = 0x00;
 	}
 #ifdef PORT
-	else if (gkind == nGRKindLast)
+	else if ((gkind == nGRKindLast) || (gkind == nGRKindMetal) || (gkind == nGRKindZako))
 	{
-		// Final Destination emblem deliberately blank for now — every attempt
-		// to render either the port-derived sprite or the ROM Master Hand
-		// fallback has hit format-edge bugs (TMEM overflow, IA4 bit-layout
-		// mismatch, multi-bitmap stride). Skip emblem creation entirely; the
-		// wooden circle behind it still renders. mnMapsSetLogoPosition is
-		// also skipped because there's no SObj to position.
+		// Port-introduced stages: emblem deliberately blank for now — every
+		// attempt to render either a port-derived sprite or a ROM fallback
+		// has hit format-edge bugs (TMEM overflow, IA4 bit-layout mismatch,
+		// multi-bitmap stride). Skip emblem creation entirely; the wooden
+		// circle behind it still renders. mnMapsSetLogoPosition is also
+		// skipped because there's no SObj to position.
 		return;
 	}
 #endif
@@ -1293,9 +1308,14 @@ void mnMapsMakeNameAndEmblem(s32 slot)
 	{
 		mnMapsMakeName(sMNMapsNameLogoGObj, mnMapsGetGroundKind(slot));
 #if defined(REGION_JP)
-		if (mnMapsGetGroundKind(slot) != nGRKindLast)
 		{
-			mnMapsMakeSubtitle(sMNMapsNameLogoGObj, mnMapsGetGroundKind(slot));
+			s32 ngkind = mnMapsGetGroundKind(slot);
+			// Port-introduced stages have no JP subtitle table entry; dMNMapsSubtitles[]
+			// is only sized for the original 9 stages.
+			if ((ngkind != nGRKindLast) && (ngkind != nGRKindMetal) && (ngkind != nGRKindZako))
+			{
+				mnMapsMakeSubtitle(sMNMapsNameLogoGObj, ngkind);
+			}
 		}
 #endif
 	}
@@ -1641,6 +1661,17 @@ GObj* mnMapsMakeLayer(s32 gkind, MPGroundData *ground_data, MPGroundDesc *ground
 		DObjGetStruct(gobj)->scale.vec.f.y = 0.35F;
 		DObjGetStruct(gobj)->scale.vec.f.z = 0.35F;
 	}
+#ifdef PORT
+	else if ((gkind == nGRKindMetal) || (gkind == nGRKindZako))
+	{
+		// Metal Cavern / Battlefield are mid-sized boss arenas. 0.5F matches
+		// the FD-class compact preview without clipping; tune up/down later
+		// after seeing the preview camera framing in practice.
+		DObjGetStruct(gobj)->scale.vec.f.x = 0.5F;
+		DObjGetStruct(gobj)->scale.vec.f.y = 0.5F;
+		DObjGetStruct(gobj)->scale.vec.f.z = 0.5F;
+	}
+#endif
 	else
 	{
 		DObjGetStruct(gobj)->scale.vec.f.x = scales[gkind];
@@ -1926,10 +1957,12 @@ void mnMapsSetPreviewCameraPosition(CObj *cobj, s32 gkind)
 		{ 1600.0F, 1600.0F, 0.0F },
 		{ 1200.0F, 1600.0F, 0.0F },
 #ifdef PORT
-		// Final Destination (nGRKindLast = 16) lives well past the starter+unlock block;
-		// extend the array via a designated initializer so positions[nGRKindLast] is
+		// Port-introduced playable stages live well past the starter+unlock block;
+		// extend the array via designated initializers so positions[<gkind>] is
 		// well-defined. Intervening 1P/bonus gkinds never reach this VS-CSS path.
-		[nGRKindLast] = { 1500.0F, 1.0F, 0.0F },
+		[nGRKindMetal] = { 1500.0F, 800.0F, 0.0F },
+		[nGRKindZako]  = { 1500.0F, 800.0F, 0.0F },
+		[nGRKindLast]  = { 1500.0F, 1.0F,   0.0F },
 #endif
 	};
 
