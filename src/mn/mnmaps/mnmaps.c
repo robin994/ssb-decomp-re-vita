@@ -1971,9 +1971,9 @@ void mnMapsSetPreviewCameraPosition(CObj *cobj, s32 gkind)
 		// Port-introduced playable stages live well past the starter+unlock block;
 		// extend the array via designated initializers so positions[<gkind>] is
 		// well-defined. Intervening 1P/bonus gkinds never reach this VS-CSS path.
-		[nGRKindMetal] = { 1500.0F, 800.0F, 0.0F },
-		[nGRKindZako]  = { 1500.0F, 800.0F, 0.0F },
-		[nGRKindLast]  = { 1500.0F, 1.0F,   0.0F },
+		[nGRKindMetal] = { 1600.0F, 1800.0F, 0.0F },
+		[nGRKindZako]  = { 1600.0F, 1800.0F, 0.0F },
+		[nGRKindLast]  = { 1600.0F, 1800.0F, 0.0F },
 #endif
 	};
 
