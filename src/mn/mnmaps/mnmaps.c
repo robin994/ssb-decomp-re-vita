@@ -259,6 +259,17 @@ GObj *sMNMapsScrollOldArrowsGObj;
 f32 sMNMapsScrollIconsDelta;
 f32 sMNMapsScrollCursorDelta;
 
+// Base "look-at" Y the preview camera oscillates around. The original ROM
+// implementation captured this value once on thread start (f32 y = cobj->vec.at.y
+// in mnMapsPreviewCameraThreadUpdate); switching stages writes the new gkind's
+// at.y but the thread immediately overwrites it next frame with sin(deg)*40 + y,
+// so the camera kept orbiting whichever stage's y was loaded when the thread
+// was first created. The visible regression: enter VS from a low-y stage like
+// Hyrule (positions[].y=1500), return to CSS, and every stage now renders with
+// camera at.y≈1500 — Castle (expects 1800) appears noticeably higher on screen.
+// SetPreviewCameraPosition writes this global; the thread reads it each frame.
+f32 sMNMapsPreviewBaseAtY;
+
 // Per-page gkind tables. Each row is exactly 10 slots (5 row 1 + 5 row 2, with the
 // last entry being the random/page-specific terminator). nMNMapsEmptyGKind marks a
 // slot with no stage on this page — mnMapsCheckLocked treats it as locked so the
@@ -1979,12 +1990,34 @@ void mnMapsSetPreviewCameraPosition(CObj *cobj, s32 gkind)
 	cobj->vec.at.x = positions[gkind].x;
 	cobj->vec.at.y = positions[gkind].y;
 	cobj->vec.at.z = positions[gkind].z;
+#ifdef PORT
+	// Track the base at.y the camera thread oscillates around. Without this,
+	// the thread (mnMapsPreviewCameraThreadUpdate) captures vec.at.y once at
+	// start and ignores subsequent SetPosition writes — switching stages or
+	// re-entering the CSS after a VS match would leave every stage rendered
+	// around whatever y was loaded first.
+	sMNMapsPreviewBaseAtY = positions[gkind].y;
+#endif
 }
 
 // 0x801339C4
 void mnMapsPreviewCameraThreadUpdate(GObj *gobj)
 {
 	CObj* cobj = CObjGetStruct(gobj);
+#ifdef PORT
+	// Re-read sMNMapsPreviewBaseAtY each frame so stage switches and scene
+	// re-entries take effect. The base is updated by mnMapsSetPreviewCameraPosition.
+	f32 deg = 0.0F;
+
+	while (TRUE)
+	{
+		cobj->vec.at.y = __sinf(F_CLC_DTOR32(deg)) * 40.0F + sMNMapsPreviewBaseAtY;
+
+		deg = (deg + 2.0F > 360.0F) ? deg + 2.0F - 360.0F : deg + 2.0F;
+
+		gcSleepCurrentGObjThread(1);
+	}
+#else
 	f32 y = cobj->vec.at.y;
 	f32 deg = 0.0F;
 
@@ -1996,6 +2029,7 @@ void mnMapsPreviewCameraThreadUpdate(GObj *gobj)
 
 		gcSleepCurrentGObjThread(1);
 	}
+#endif
 }
 
 // 0x80133A00
@@ -2356,6 +2390,10 @@ void mnMapsInitVars(void)
 	sMNMapsScrollOldArrowsGObj = NULL;
 	sMNMapsScrollIconsDelta    = 0.0F;
 	sMNMapsScrollCursorDelta   = 0.0F;
+	// Reset before mnMapsMakePreviewCamera (which calls SetPreviewCameraPosition)
+	// runs — guards against a stale value if something queries the global before
+	// the camera is rebuilt.
+	sMNMapsPreviewBaseAtY      = 0.0F;
 #endif
 
 	for (i = 0; i < ARRAY_COUNT(sMNMapsHeap0LayerGObjs); i++)
