@@ -1059,6 +1059,17 @@ void sc1PGameSetupStageAll(void)
 
     gSCManagerBattleState->gkind = stagesetup->gkind;
     gSCManagerBattleState->is_team_attack = comsetup->is_team_attack;
+#ifdef PORT
+    /* Co-op: both humans are on team 0 with is_team_battle forced TRUE, so
+     * the stage tables' is_team_attack would let them hit each other.
+     * Friendly fire is off by default, opt-in via the port menu. (Also
+     * stops the Giant DK CPU ally trading hits with the humans.) */
+    if (sc1PManagerIsCoopActive())
+    {
+        extern int port_classic_coop_friendly_fire(void);
+        gSCManagerBattleState->is_team_attack = port_classic_coop_friendly_fire() ? TRUE : FALSE;
+    }
+#endif
 
     switch (gSCManagerSceneData.spgame_stage)
     {
@@ -2393,11 +2404,13 @@ void sc1PGameFuncStart(void)
 
 #ifdef PORT
         /* Co-op: on stages without an authored ally spawn point P2 shares
-         * P1's map point — nudge them apart so the fighters don't stack. */
+         * P1's map point — separate them by about a body width so the two
+         * fighters read as distinct from the first frame. (The bonus-stage
+         * spawn keeps a smaller offset; its start platforms are narrow.) */
         if (sc1PManagerIsCoopActive() && (i == gSCManagerSceneData.coop_player2) &&
             (sSC1PGamePlayerSetups[i].mapobj_kind == sSC1PGamePlayerSetups[gSCManagerSceneData.player].mapobj_kind))
         {
-            desc.pos.x += 30.0F;
+            desc.pos.x += 120.0F;
         }
 #endif
         desc.lr = sc1PGameGetEnemyStartLR(i);

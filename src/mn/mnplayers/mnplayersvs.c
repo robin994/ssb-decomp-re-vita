@@ -2436,6 +2436,18 @@ sb32 mnPlayersVSCheckPuckInRange(GObj *gobj, s32 cursor_player, s32 player)
 // 0x80135C84
 void mnPlayersVSUpdatePlayerKind(s32 player)
 {
+#ifdef PORT
+	{
+		/* Classic Co-op context: only two players exist in a classic run —
+		 * slots 3 and 4 are locked closed and their HMN/CPU/NOT button is
+		 * inert. */
+		extern int port_classic_coop_context(void);
+		if (port_classic_coop_context() && (player >= 2))
+		{
+			return;
+		}
+	}
+#endif
 	switch (sMNPlayersVSSlots[player].pkind)
 	{
 	case nFTPlayerKindMan:
@@ -5283,6 +5295,26 @@ void mnPlayersVSInitVars(void)
 
 		sMNPlayersVSSlots[i].recall_end_tic = 0;
 	}
+#ifdef PORT
+	{
+		/* Classic Co-op context: a classic run has at most two players —
+		 * lock slots 3 and 4 closed (their kind button is also disabled in
+		 * mnPlayersVSUpdatePlayerKind). */
+		extern int port_classic_coop_context(void);
+		if (port_classic_coop_context())
+		{
+			for (i = 2; i < GMCOMMON_PLAYERS_MAX; i++)
+			{
+				sMNPlayersVSSlots[i].pkind = nFTPlayerKindNot;
+				sMNPlayersVSSlots[i].fkind = nFTKindNull;
+				sMNPlayersVSSlots[i].is_fighter_selected = FALSE;
+				sMNPlayersVSSlots[i].is_selected = FALSE;
+				sMNPlayersVSSlots[i].holder_player = GMCOMMON_PLAYERS_MAX;
+				sMNPlayersVSSlots[i].held_player = -1;
+			}
+		}
+	}
+#endif
 	sMNPlayersVSFighterMask = gSCManagerBackupData.fighter_mask;
 }
 

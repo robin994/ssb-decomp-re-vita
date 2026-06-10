@@ -464,6 +464,22 @@ void sc1PBonusStageInitVars(void)
 #endif
 		else gSCManagerBattleState->players[player].pkind = nFTPlayerKindNot;
 	}
+#ifdef PORT
+	/* Co-op: the default bonus battle state is free-for-all, which would
+	 * let the two players hit each other. Put both on team 0 with team
+	 * battle on so the friendly-fire setting governs here exactly like the
+	 * battle stages (is_not_teamshadows keeps the stock black shadows). */
+	if (sc1PManagerIsCoopActive() && (gSCManagerSceneData.scene_prev == nSCKind1PGame))
+	{
+		extern int port_classic_coop_friendly_fire(void);
+
+		gSCManagerBattleState->is_team_battle = TRUE;
+		gSCManagerBattleState->is_not_teamshadows = TRUE;
+		gSCManagerBattleState->is_team_attack = port_classic_coop_friendly_fire() ? TRUE : FALSE;
+		gSCManagerBattleState->players[gSCManagerSceneData.player].team = 0;
+		gSCManagerBattleState->players[gSCManagerSceneData.coop_player2].team = 0;
+	}
+#endif
 }
 
 // 0x8018D330
