@@ -1126,6 +1126,21 @@ void sc1PGameSetupStageAll(void)
         gSCManagerBattleState->players[p2_slot].pkind = nFTPlayerKindMan;
         gSCManagerBattleState->players[p2_slot].is_single_stockicon = FALSE;
         sSC1PGamePlayerSetups[p2_slot].mapobj_kind = nMPMapObjKind1PGamePlayer;
+
+        /* Co-op revive: a partner eliminated on the previous stage rejoins
+         * here on their last life. Within a stage, elimination still means
+         * sitting the rest of it out — but the counter must never be
+         * negative at spawn: a fighter spawned at -1 decrements to -2 on
+         * death and ftCommonDeadCheckRebirth's `== -1` elimination test
+         * never fires again, i.e. infinite stocks. */
+        if (gSCManagerBattleState->players[p2_slot].stock_count < 0)
+        {
+            gSCManagerBattleState->players[p2_slot].stock_count = 0;
+        }
+        if (gSCManagerBattleState->players[gSCManagerSceneData.player].stock_count < 0)
+        {
+            gSCManagerBattleState->players[gSCManagerSceneData.player].stock_count = 0;
+        }
     }
 #endif
     if (gSCManagerSceneData.spgame_stage <= nSC1PGameStageCommonEnd)
@@ -2404,13 +2419,13 @@ void sc1PGameFuncStart(void)
 
 #ifdef PORT
         /* Co-op: on stages without an authored ally spawn point P2 shares
-         * P1's map point — separate them by about a body width so the two
-         * fighters read as distinct from the first frame. (The bonus-stage
-         * spawn keeps a smaller offset; its start platforms are narrow.) */
+         * P1's map point — offset by a good two fighter-widths so the pair
+         * spawns side by side rather than stacked. (The bonus-stage spawn
+         * keeps a smaller offset; its start platforms are narrow.) */
         if (sc1PManagerIsCoopActive() && (i == gSCManagerSceneData.coop_player2) &&
             (sSC1PGamePlayerSetups[i].mapobj_kind == sSC1PGamePlayerSetups[gSCManagerSceneData.player].mapobj_kind))
         {
-            desc.pos.x += 120.0F;
+            desc.pos.x += 250.0F;
         }
 #endif
         desc.lr = sc1PGameGetEnemyStartLR(i);
