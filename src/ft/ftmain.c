@@ -4591,10 +4591,10 @@ void ftMainSetStatus(GObj *fighter_gobj, s32 status_id, f32 frame_begin, f32 ani
      * .center values; returning 0 leaves the engine's defaults. */
     if (fp->attr != NULL)
     {
-        extern int port_fighter_ecb_override(FTStruct *fp, int next_status_id,
+        extern int port_fighter_ecb_override(int fkind, FTStruct *fp, int next_status_id,
                                              float *out_upper, float *out_middle);
         float new_upper = 0.0F, new_middle = 0.0F;
-        if (port_fighter_ecb_override(fp, status_id, &new_upper, &new_middle))
+        if (port_fighter_ecb_override(fp->fkind, fp, status_id, &new_upper, &new_middle))
         {
             fp->attr->map_coll.top    = new_upper;
             fp->attr->map_coll.center = new_middle;
