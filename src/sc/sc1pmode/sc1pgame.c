@@ -2425,7 +2425,7 @@ void sc1PGameFuncStart(void)
         if (sc1PManagerIsCoopActive() && (i == gSCManagerSceneData.coop_player2) &&
             (sSC1PGamePlayerSetups[i].mapobj_kind == sSC1PGamePlayerSetups[gSCManagerSceneData.player].mapobj_kind))
         {
-            desc.pos.x += 250.0F;
+            desc.pos.x += 750.0F;
         }
 #endif
         desc.lr = sc1PGameGetEnemyStartLR(i);
