@@ -97,6 +97,7 @@ void ftAnimParseDObjFigatree(DObj *root_dobj)
          * the first 16 bytes at event16 once per synth fkind so we can
          * verify the u16-halfswap applied during file load (opcode and
          * payload u16s should be in the LE-readable layout). */
+#ifdef SSB64_ANIM_DEBUG
         {
             s32 _fkind_parse = (s32)(*(s32 *)((char *)root_dobj->parent_gobj->user_data.p + 16));
             if (_fkind_parse >= 27 && _fkind_parse <= 64) {
@@ -121,6 +122,7 @@ void ftAnimParseDObjFigatree(DObj *root_dobj)
                 s_figatree_parse_count++;
             }
         }
+#endif /* SSB64_ANIM_DEBUG */
 #endif
         if (root_dobj->anim_wait == AOBJ_ANIM_CHANGED)
         {
@@ -155,7 +157,7 @@ void ftAnimParseDObjFigatree(DObj *root_dobj)
         {
             if (root_dobj->anim_joint.event16 == NULL)
             {
-#ifdef PORT
+#if defined(PORT) && defined(SSB64_ANIM_DEBUG)
                 {
                     static int s_appear_end_dump = 0;
                     s32 _fkind_end_dump = -1;
@@ -200,7 +202,7 @@ void ftAnimParseDObjFigatree(DObj *root_dobj)
                 root_dobj->anim_frame = root_dobj->anim_wait;
                 root_dobj->parent_gobj->anim_frame = root_dobj->anim_wait;
                 root_dobj->anim_wait = AOBJ_ANIM_END;
-#ifdef PORT
+#if defined(PORT) && defined(SSB64_ANIM_DEBUG)
                 {
                     s32 _fkind_end = -1;
                     if (root_dobj->parent_gobj != NULL &&
@@ -226,6 +228,7 @@ void ftAnimParseDObjFigatree(DObj *root_dobj)
             }
             command_kind = root_dobj->anim_joint.event16->command.opcode;
 #ifdef PORT
+#ifdef SSB64_ANIM_DEBUG
             /* APPEARDUMP one-shot: dump the real opcode stream the parser walks
              * for Crash's match-entry APPEAR (fkind 30). Capped to the first
              * ~200 lines so it captures one appear instance (~22 joints, a few
@@ -250,6 +253,7 @@ void ftAnimParseDObjFigatree(DObj *root_dobj)
                         (double)root_dobj->anim_frame);
                 }
             }
+#endif /* SSB64_ANIM_DEBUG */
             if (++watchdog >= 256)
             {
                 u16 *raw16 = (u16*)root_dobj->anim_joint.event16;
@@ -477,6 +481,7 @@ void ftAnimParseDObjFigatree(DObj *root_dobj)
                          * Terminate this joint's stream so the next loop pass
                          * takes the clean End path; the TraI keyframes already
                          * parsed for this joint stand. */
+#ifdef SSB64_ANIM_DEBUG
                         {
                             static int s_appear_term_dump = 0;
                             s32 _fkind_term_dump = -1;
@@ -494,9 +499,11 @@ void ftAnimParseDObjFigatree(DObj *root_dobj)
                                     (double)root_dobj->anim_frame);
                             }
                         }
+#endif /* SSB64_ANIM_DEBUG */
                         root_dobj->anim_joint.event16 = NULL;
                         break;
                     }
+#ifdef SSB64_ANIM_DEBUG
                     if (_block_payload > 1000 || _block_payload < -1000) {
                         s32 _fkind_blk = (s32)(*(s32 *)((char *)root_dobj->parent_gobj->user_data.p + 16));
                         static s32 s_blk_log = 0;
@@ -508,6 +515,7 @@ void ftAnimParseDObjFigatree(DObj *root_dobj)
                         }
                         s_blk_log++;
                     }
+#endif /* SSB64_ANIM_DEBUG */
                     root_dobj->anim_wait += _block_payload;
 #else
                     root_dobj->anim_wait += AObjAnimAdvance(root_dobj->anim_joint.event16)->u;
@@ -685,7 +693,7 @@ void ftAnimParseDObjFigatree(DObj *root_dobj)
                 root_dobj->anim_frame = root_dobj->anim_wait;
                 root_dobj->parent_gobj->anim_frame = root_dobj->anim_wait;
                 root_dobj->anim_wait = AOBJ_ANIM_END;
-#ifdef PORT
+#if defined(PORT) && defined(SSB64_ANIM_DEBUG)
                 {
                     s32 _fkind_end = -1;
                     if (root_dobj->parent_gobj != NULL &&
