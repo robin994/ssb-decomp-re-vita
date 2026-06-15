@@ -4,6 +4,7 @@
 #ifdef PORT
 #include <sc/scmanager.h>
 #include <sys/debug.h>
+#include <port_log.h>
 #endif
 
 // // // // // // // // // // // //

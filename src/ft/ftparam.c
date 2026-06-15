@@ -11,6 +11,7 @@ extern alSoundEffect* func_800269C0_275C0(u16);
 
 #ifdef PORT
 extern void *portFixupFTTexturePartContainer(void *container);
+#include <port_log.h>
 #include "fighter_registry.h"
 #endif
 
