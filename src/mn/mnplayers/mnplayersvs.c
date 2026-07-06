@@ -2675,6 +2675,15 @@ void mnPlayersVSUpdateFighter(s32 player)
 				sMNPlayersVSSlots[player].costume = costume;
 				ftParamInitAllParts(fighter_gobj, costume, sMNPlayersVSSlots[player].shade);
 			}
+			DObjGetStruct(fighter_gobj)->translate.vec.f.x = (player * 840) - 1250;
+			DObjGetStruct(fighter_gobj)->translate.vec.f.y = -850.0F;
+			{
+				f32 scale = port_widescreen_clip_x_scale();
+				if (scale > 0.0F && scale < 1.0F)
+				{
+					DObjGetStruct(fighter_gobj)->translate.vec.f.x /= scale;
+				}
+			}
 			fighter_gobj->flags = GOBJ_FLAG_NONE;
 		}
 		else
