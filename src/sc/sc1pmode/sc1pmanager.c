@@ -7,6 +7,25 @@
 #include <mn/mncommon/mnmessage.h>
 #include <mn/mn1pmode/mn1pcontinue.h>
 #include <mv/mvending/mvending.h>
+
+/* Console reset (portSCManagerRequestReset in scmanager.c) fired inside a
+ * 1P sub-scene: bail out to scManagerRunLoop instead of chaining the next
+ * sub-scene against half-torn-down battle state (a mid-match reset crashed
+ * in ftManagerSetupFilesAllKind otherwise). The consume re-points
+ * scene_curr at the reset target, which this manager's own scene_curr
+ * writes would otherwise clobber. Checked after every sub-scene call in
+ * sc1PManagerUpdateScene. */
+extern sb32 portSCManagerConsumeReset(void);
+#define SC1P_PORT_RESET_BAIL()               \
+	do                                       \
+	{                                        \
+		if (portSCManagerConsumeReset())     \
+		{                                    \
+			return;                          \
+		}                                    \
+	} while (0)
+#else
+#define SC1P_PORT_RESET_BAIL() do { } while (0)
 #endif
 
 // // // // // // // // // // // //
@@ -465,6 +484,7 @@ void sc1PManagerUpdateScene(void)
             gSCManagerSceneData.scene_curr = nSCKind1PIntro;
 
             sc1PIntroStartScene();
+            SC1P_PORT_RESET_BAIL();
 
             switch (gSCManagerSceneData.spgame_stage)
             {
@@ -477,6 +497,7 @@ void sc1PManagerUpdateScene(void)
                 gSCManagerSceneData.scene_curr = nSCKind1PBonusStage;
 
                 sc1PBonusStageStartScene();
+                SC1P_PORT_RESET_BAIL();
                 break;
 
             default:
@@ -495,6 +516,7 @@ void sc1PManagerUpdateScene(void)
                 gSCManagerSceneData.scene_curr = nSCKind1PGame;
 #endif
                 sc1PGameStartScene();
+                SC1P_PORT_RESET_BAIL();
 
                 if (gSCManagerSceneData.spgame_stage != nSC1PGameStageBonus3)
                 {
@@ -532,6 +554,7 @@ void sc1PManagerUpdateScene(void)
                 syDmaLoadOverlay(&dSC1PManager1PContinueOverlay);
 
                 mnPlayers1PGameContinueStartScene();
+                SC1P_PORT_RESET_BAIL();
 
                 if (gSCManagerSceneData.is_continue != FALSE)
                 {
@@ -601,6 +624,7 @@ void sc1PManagerUpdateScene(void)
                 gSCManagerSceneData.scene_curr = nSCKind1PStageClear;
 
                 sc1PStageClearStartScene();
+                SC1P_PORT_RESET_BAIL();
             }
             gSCManagerSceneData.spgame_stage++;
         }
@@ -613,6 +637,7 @@ void sc1PManagerUpdateScene(void)
         gSCManagerSceneData.scene_curr = nSCKindEnding;
 
         mvEndingStartScene();
+        SC1P_PORT_RESET_BAIL();
 
         syDmaLoadOverlay(&dSC1PManagerStaffrollOverlay);
 
@@ -620,6 +645,7 @@ void sc1PManagerUpdateScene(void)
         gSCManagerSceneData.scene_curr = nSCKindStaffroll;
 
         scStaffrollStartScene();
+        SC1P_PORT_RESET_BAIL();
 
 #if defined(REGION_US)
         syDmaLoadOverlay(&dSC1PManagerCongraOverlay);
@@ -628,6 +654,7 @@ void sc1PManagerUpdateScene(void)
         gSCManagerSceneData.scene_curr = nSCKindCongra;
 
         mnCongraStartScene();
+        SC1P_PORT_RESET_BAIL();
 #endif
 
         gSCManagerSceneData.spgame_stage--;
@@ -658,6 +685,7 @@ skip_main_stages:
         gSCManagerSceneData.scene_curr = nSCKind1PChallenger;
 
         sc1PChallengerStartScene();
+        SC1P_PORT_RESET_BAIL();
 
         gSCManager1PGameBattleState.players[gSCManagerSceneData.player].stock_count = 0;
 #ifdef PORT
@@ -682,6 +710,7 @@ skip_main_stages:
         gSCManagerSceneData.scene_curr = nSCKind1PGame;
 #endif
         sc1PGameStartScene();
+        SC1P_PORT_RESET_BAIL();
 
         if (gSCManagerSceneData.is_reset != FALSE)
         {
@@ -713,6 +742,7 @@ skip_main_stages:
             gSCManagerSceneData.scene_curr = nSCKindMessage;
 
             mnMessageStartScene();
+            SC1P_PORT_RESET_BAIL();
         }
         else if (gSCManagerSceneData.challenger_level_drop < 9)
         {
@@ -747,6 +777,7 @@ skip_main_stages:
                 gSCManagerSceneData.scene_curr = nSCKindMessage;
 
                 mnMessageStartScene();
+                SC1P_PORT_RESET_BAIL();
             }
         }
     }
