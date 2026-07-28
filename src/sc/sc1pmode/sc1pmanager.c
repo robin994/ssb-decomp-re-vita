@@ -370,11 +370,26 @@ void sc1PManagerUpdateScene(void)
             }
         }
         gSCManager1PGameBattleState.players[p2_slot].handicap = FTCOMMON_HANDICAP_DEFAULT;
-        gSCManager1PGameBattleState.players[p2_slot].pkind = nFTPlayerKindMan;
+        //gSCManager1PGameBattleState.players[p2_slot].pkind = nFTPlayerKindMan;
+        // Remove the hardcoded nFTPlayerKindMan and replace it with our passed data:
+        gSCManager1PGameBattleState.players[p2_slot].pkind = gSCManagerSceneData.coop_pkind2;
+        // If it's a CPU, apply the difficulty level
+        if (gSCManagerSceneData.coop_pkind2 == nFTPlayerKindCom) {
+            gSCManager1PGameBattleState.players[p2_slot].level = gSCManagerSceneData.coop_level2;
+        }
+
         gSCManager1PGameBattleState.players[p2_slot].team = 0;
         gSCManager1PGameBattleState.players[p2_slot].shade = gSCManagerSceneData.coop_shade2;
-        gSCManager1PGameBattleState.players[p2_slot].color = p2_slot;
-        gSCManager1PGameBattleState.players[p2_slot].tag = p2_slot;
+
+        // colors for teammate (human or CPU)
+        if (gSCManagerSceneData.coop_pkind2 == nFTPlayerKindCom) {
+            gSCManager1PGameBattleState.players[p2_slot].color = 4; // 4 = Grey CPU color
+            gSCManager1PGameBattleState.players[p2_slot].tag = 4;   // 4 = CP tag
+        } else {
+            gSCManager1PGameBattleState.players[p2_slot].color = p2_slot;
+            gSCManager1PGameBattleState.players[p2_slot].tag = p2_slot;
+        }
+
         gSCManager1PGameBattleState.players[p2_slot].fkind = gSCManagerSceneData.coop_fkind2;
         gSCManager1PGameBattleState.players[p2_slot].costume = gSCManagerSceneData.coop_costume2;
         gSCManager1PGameBattleState.players[p2_slot].stock_count = gSCManagerBackupData.spgame_stock_count;
