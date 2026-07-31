@@ -1223,6 +1223,21 @@ void gmCameraMakeBattleCamera(void)
 // 0x8010DB2C
 GObj* gmCameraMakeMovieCamera(void (*func_camera)(GObj*))
 {
+#ifdef PORT
+    /* Issue #72: the opening-montage motion windows are created mid-scene
+     * (FuncRun tic 15) together with stage setup + fighter creation. On N64
+     * that work overruns the frame by a few VIs, so the first tics after
+     * creation — whose authored camera state is display-degenerate (eye-at
+     * dist.z == 0 slams the wallpaper parallax to its clamps, showing a
+     * full-window gold smear) — never reach the screen; VI keeps scanning
+     * the previous frame. The port completes setup within one host frame,
+     * so suppress the next two gfx submissions to reproduce the held-frame
+     * behavior verified against a cycle-accurate emulator. */
+    {
+        extern void port_sim_load_stall(int n);
+        port_sim_load_stall(2);
+    }
+#endif
     return gmCameraMakeDefaultCamera(nGCMatrixKindPerspFastF, 8, func_camera);
 }
 
