@@ -6,6 +6,10 @@
 #include <sys/rdp.h>
 #ifdef PORT
 #include <sys/debug.h>
+/* Enhanced-framerate frame interpolation recording hook — observational
+ * only. Tag 1 = projection-stack matrix (combined view*persp here).
+ * See port/interpolation/frame_interpolation.h. */
+extern void portInterpRecordMtx(void *mtx, void *owner, int ordinal, int tag);
 #endif
 // #include <sys/taskman.h>
 
@@ -1026,6 +1030,9 @@ sb32 gmCameraPrepLookAtFuncMatrix(Mtx *mtx, CObj *cobj, Gfx **dls)
     gSPLookAtX(dls[0]++, &gGMCameraStruct.look_at.l[0]);
     gSPLookAtY(dls[0]++, &gGMCameraStruct.look_at.l[1]);
 
+#ifdef PORT
+    portInterpRecordMtx(mtx, cobj, 0, 1 /* combined view*persp projection */);
+#endif
     gSPMatrix(dls[0]++, mtx, G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_PROJECTION);
 
     gSPPerspNormalize(dls[0]++, cobj->projection.persp.norm);
@@ -1390,6 +1397,9 @@ sb32 gmCameraOrthoLookAtFuncMatrix(Mtx *mtx, CObj *cobj, Gfx **dls)
 // 0x8010E10C
 sb32 gmCameraPrepProjectionFuncMatrix(Mtx *mtx, CObj *cobj, Gfx **dls)
 {
+#ifdef PORT
+    portInterpRecordMtx(mtx, cobj, 0, 1 /* combined view*persp projection */);
+#endif
     gSPMatrix(dls[0]++, mtx, G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_PROJECTION);
 
     return 0;
