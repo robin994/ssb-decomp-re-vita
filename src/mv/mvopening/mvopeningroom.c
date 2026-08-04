@@ -1279,6 +1279,21 @@ void mvOpeningRoomFuncRun(GObj *gobj)
 {
 	sMVOpeningRoomTotalTimeTics++;
 
+#ifdef PORT
+	/* The desk-to-stage explosion uses the previous color buffer outside its
+	 * expanding redirect-to-Z mask. Preserve the complete widened framebuffer
+	 * for exactly that transition; normal widescreen frames still clear unused
+	 * 4:3 side strips so authored menus cannot show stale scene pixels. */
+	{
+		extern void GfxSetWidescreenFramebufferPersistence(int active);
+		GfxSetWidescreenFramebufferPersistence
+		(
+			(sMVOpeningRoomTotalTimeTics >= 1040) &&
+			(sMVOpeningRoomTotalTimeTics < I_SEC_TO_TICS(18))
+		);
+	}
+#endif
+
 	if (sMVOpeningRoomTotalTimeTics >= 10)
 	{
 		if (sMVOpeningRoomUnused0x80134D54 != 0)
@@ -1388,6 +1403,13 @@ void mvOpeningRoomFuncStart(void)
 {
 	s32 unused;
 	LBRelocSetup rl_setup;
+
+#ifdef PORT
+	{
+		extern void GfxSetWidescreenFramebufferPersistence(int active);
+		GfxSetWidescreenFramebufferPersistence(0);
+	}
+#endif
 
 	syTaskmanSetFuncSwapBuffer(mvOpeningRoomCheckSetFramebuffer);
 
