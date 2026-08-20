@@ -839,18 +839,35 @@ void scManagerRunLoop(sb32 arg)
 	syDebugSetFuncPrint(scManagerFuncPrint);
 	syDebugStartRmonThread5Hang();
 
+#ifdef PORT
+	port_log("SSB64: MARKER scManagerRunLoop before syDmaLoadOverlay[0]\n");
+#endif
 	syDmaLoadOverlay(&dSCManagerOverlays[0]);
+#ifdef PORT
+	port_log("SSB64: MARKER scManagerRunLoop after syDmaLoadOverlay[0]\n");
+	port_log("SSB64: MARKER scManagerRunLoop before syDmaLoadOverlay[2]\n");
+#endif
 	syDmaLoadOverlay(&dSCManagerOverlays[2]);
+#ifdef PORT
+	port_log("SSB64: MARKER scManagerRunLoop after syDmaLoadOverlay[2]\n");
+	port_log("SSB64: MARKER scManagerRunLoop before syDmaLoadOverlay[1]\n");
+#endif
 	syDmaLoadOverlay(&dSCManagerOverlays[1]);
+#ifdef PORT
+	port_log("SSB64: MARKER scManagerRunLoop after syDmaLoadOverlay[1]\n");
+#endif
 
 	gSCManagerBackupData = dSCManagerDefaultBackupData;
 	gSCManagerSceneData = dSCManagerDefaultSceneData;
 
-	gSCManager1PGameBattleState   = 
+	gSCManager1PGameBattleState   =
 	gSCManagerTransferBattleState =
 	gSCManagerVSBattleState       = dSCManagerDefaultBattleState;
 
 	ftManagerSetupFileSize();
+#ifdef PORT
+	port_log("SSB64: MARKER scManagerRunLoop after ftManagerSetupFileSize\n");
+#endif
 	dSYAudioPublicSettings.unk31 = 72;
 
 	/* Wait for the audio thread to finish its settings-update restart
@@ -971,6 +988,8 @@ void scManagerRunLoop(sb32 arg)
 	}
 	port_log("SSB64: scManagerRunLoop — controllers=%d scene=%d\n",
 	         (int)gSYControllerConnectedNum, (int)gSCManagerSceneData.scene_curr);
+	port_log("SSB64: MARKER scManagerRunLoop before first scene dispatch, scene=%d\n",
+	         (int)gSCManagerSceneData.scene_curr);
 #endif
 	while (TRUE)
 	{

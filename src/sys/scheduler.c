@@ -1,6 +1,8 @@
 #include "common.h"
 #include "scheduler.h"
 
+#include <port_log.h>
+
 #include <sys/debug.h>
 #include <sys/main.h>
 #include <sys/video.h>
@@ -1084,6 +1086,16 @@ void func_80001FF4(void) {
 void sySchedulerVRetrace(void)
 {
     SYClient *curr, *temp;
+
+#ifdef PORT
+    {
+        static int sLoggedFirstVRetrace = 0;
+        if (!sLoggedFirstVRetrace) {
+            sLoggedFirstVRetrace = 1;
+            port_log("SSB64: MARKER first sySchedulerVRetrace reached\n");
+        }
+    }
+#endif
 
     sSYSchedulerTicCount++;
 
