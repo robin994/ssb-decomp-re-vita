@@ -915,7 +915,7 @@ void lbCommonAddFighterPartsFigatree(DObj *root_dobj, void **figatree, f32 anim_
         current_dobj = lbCommonGetTreeDObjNextFromRoot(current_dobj, root_dobj);
     }
 
-#ifdef PORT
+#if defined(PORT) && defined(PORT_RUNTIME_DIAGNOSTICS)
     /* Diagnostic: prints joint count walked vs anim-joints bound. For
      * vanilla characters bind == walked (figatree has data for every
      * joint). For synth characters whose figatree was extracted with the

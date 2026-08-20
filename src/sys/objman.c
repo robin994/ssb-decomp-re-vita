@@ -9,7 +9,7 @@
 
 extern void port_log(const char *fmt, ...);
 
-#ifdef PORT
+#if defined(PORT) && defined(PORT_RUNTIME_DIAGNOSTICS)
 /* PORT diag: log GObj allocations for the kinds known to leak stale
  * DObj.dl_link across scene boundaries (Ground=1010, Effect=1011).
  * Resolves to the caller of the wrapper (gcMakeGObjSPAfter / SPBefore /
@@ -1894,13 +1894,17 @@ void gcEjectGObj(GObj *gobj)
 		return;
 	}
 
-	/* PORT crash-diag: log eject so we can correlate with a later crash. */
+	/* The double-eject guard above remains active, but the normal ENTER/EXIT
+	 * trace is a release hot-path cost and is useful only in a focused
+	 * lifetime diagnostic build. */
+#ifdef PORT_RUNTIME_DIAGNOSTICS
 	port_log("SSB64: gcEjectGObj ENTER gobj=%p id=%u kind=%u link_id=%u dl_link_id=%u "
 	         "gpr_head=%p obj=%p link_next=%p link_prev=%p\n",
 	         (void*)gobj, gobj->id, (unsigned)gobj->obj_kind,
 	         (unsigned)gobj->link_id, (unsigned)gobj->dl_link_id,
 	         (void*)gobj->gobjproc_head, gobj->obj,
 	         (void*)gobj->link_next, (void*)gobj->link_prev);
+#endif
 
 	gcEndProcessAll(gobj);
 
@@ -1923,7 +1927,9 @@ void gcEjectGObj(GObj *gobj)
 	 * any subsequent eject attempt is detected above. */
 	gobj->obj_kind = GOBJ_PORT_EJECTED_SENTINEL;
 
+#ifdef PORT_RUNTIME_DIAGNOSTICS
 	port_log("SSB64: gcEjectGObj EXIT gobj=%p\n", (void*)gobj);
+#endif
 }
 
 // 0x80009B48

@@ -1764,7 +1764,7 @@ sb32 gmCollisionCheckItemAttackFighterDamageCollide(ITAttackColl *attack_coll, s
     FTParts *parts;
     DObj *dobj;
 
-#ifdef PORT
+#if defined(PORT) && defined(PORT_RUNTIME_DIAGNOSTICS)
     port_log("SSB64: gmCollItemFighterDmg damage_coll=%p joint=%p joint_id=%d\n",
         (void*)damage_coll,
         damage_coll ? (void*)damage_coll->joint : NULL,

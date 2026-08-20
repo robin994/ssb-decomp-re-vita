@@ -4243,9 +4243,11 @@ void ftMainUpdateHiddenPartID(FTStruct *fp, s32 hiddenpart_id)
                 (int)fp->fkind, hiddenpart_id, (int)hiddenpart->root_joint_id);
             return;
         }
+#ifdef PORT_RUNTIME_DIAGNOSTICS
         port_log("SSB64: ftMainUpdateHiddenPartID OK fkind=%d hpid=%d joint=%d parent=%d kind=%d\n",
             (int)fp->fkind, hiddenpart_id, (int)hiddenpart->root_joint_id,
             (int)hiddenpart->parent_joint_id, (int)hiddenpart->joint_kind);
+#endif
     }
 #else
     hiddenpart = &((FTHiddenPart*)PORT_RESOLVE(attr->hiddenparts))[hiddenpart_id];
@@ -4880,7 +4882,7 @@ void ftMainSetStatus(GObj *fighter_gobj, s32 status_id, f32 frame_begin, f32 ani
             fp->figatree = fp->figatree_heap;
         }
         else fp->figatree = NULL;
-#ifdef PORT
+#if defined(PORT) && defined(PORT_RUNTIME_DIAGNOSTICS)
         port_log("SSB64: ftMainSetStatus - status=0x%x motion=%d figatree=%p anim_flags=0x%08x\n",
             status_id, motion_id, fp->figatree, motion_desc->anim_desc.word);
 #endif
@@ -4996,11 +4998,11 @@ void ftMainSetStatus(GObj *fighter_gobj, s32 status_id, f32 frame_begin, f32 ani
                 }
 #endif
             }
-#ifdef PORT
+#if defined(PORT) && defined(PORT_RUNTIME_DIAGNOSTICS)
             port_log("SSB64: ftMainSetStatus - before figatree attach status=0x%x motion=%d\n", status_id, motion_id);
 #endif
             lbCommonAddFighterPartsFigatree(fp->joints[nFTPartsJointTopN]->child, fp->figatree, frame_begin);
-#ifdef PORT
+#if defined(PORT) && defined(PORT_RUNTIME_DIAGNOSTICS)
             port_log("SSB64: ftMainSetStatus - after figatree attach status=0x%x motion=%d\n", status_id, motion_id);
 #endif
 
@@ -5140,7 +5142,7 @@ void ftMainSetStatus(GObj *fighter_gobj, s32 status_id, f32 frame_begin, f32 ani
         }
         if (frame_begin != 0.0F)
         {
-#ifdef PORT
+#if defined(PORT) && defined(PORT_RUNTIME_DIAGNOSTICS)
             port_log("SSB64: ftMainSetStatus - before play forward events status=0x%x motion=%d frame_begin=%f\n",
                 status_id, motion_id, frame_begin);
 #endif
@@ -5148,11 +5150,11 @@ void ftMainSetStatus(GObj *fighter_gobj, s32 status_id, f32 frame_begin, f32 ani
         }
         else
         {
-#ifdef PORT
+#if defined(PORT) && defined(PORT_RUNTIME_DIAGNOSTICS)
             port_log("SSB64: ftMainSetStatus - before play all events status=0x%x motion=%d\n", status_id, motion_id);
 #endif
             ftMainPlayAnimEventsAll(fighter_gobj);
-#ifdef PORT
+#if defined(PORT) && defined(PORT_RUNTIME_DIAGNOSTICS)
             port_log("SSB64: ftMainSetStatus - after play all events status=0x%x motion=%d\n", status_id, motion_id);
 #endif
             ftMainRunUpdateColAnim(fighter_gobj);

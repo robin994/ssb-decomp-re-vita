@@ -412,6 +412,7 @@ void gcParseDObjAnimJoint(DObj *dobj)
     if (dobj->anim_joint.event32 != NULL) {
         port_aobj_event32_unhalfswap_stream(dobj->anim_joint.event32);
     }
+#ifdef PORT_RUNTIME_DIAGNOSTICS
     /* Diagnostic: count entries per anim-root dobj for synth fighters.
      * If the count grows without an "anim END" log firing, the stream
      * is parsing valid opcodes but never hitting End (either looping
@@ -447,6 +448,7 @@ void gcParseDObjAnimJoint(DObj *dobj)
             s_synth_parse_count++;
         }
     }
+#endif
 #endif
 
     if (dobj->anim_wait != AOBJ_ANIM_NULL)
@@ -767,7 +769,7 @@ void gcParseDObjAnimJoint(DObj *dobj)
                 {
                     dobj->parent_gobj->func_anim(dobj, -1, 0);
                 }
-#ifdef PORT
+#if defined(PORT) && defined(PORT_RUNTIME_DIAGNOSTICS)
                 /* Diagnostic: log when an anim stream hits End. For synth
                  * fighters we want to confirm it actually fires (and
                  * therefore that gobj->anim_frame becomes negative which
