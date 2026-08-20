@@ -268,7 +268,7 @@ static void gcRenderDiagLogMObj(DObj *dobj, MObj *mobj, u16 flags, void *current
 
 static void gcLogMObjResolveWarning(const char *issue, DObj *dobj, MObj *mobj, u32 array_token, void *array_ptr, s32 index, u32 value_token)
 {
-    if (sGCMObjResolveWarningCount < 64)
+    if (sGCMObjResolveWarningCount < 8)
     {
         port_log
         (
@@ -355,7 +355,7 @@ static void gcLogSuspiciousDLPointer(const char *issue, DObj *dobj, unsigned lon
         return;
     }
     resolved_dl = PORT_RESOLVE((u32)draw_dl_raw);
-    if (sGCDLPointerWarningCount < 64)
+    if (sGCDLPointerWarningCount < 8)
     {
         port_log
         (
