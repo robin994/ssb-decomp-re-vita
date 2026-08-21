@@ -1434,6 +1434,40 @@ void gcRemoveMObjAll(DObj *dobj)
 	dobj->mobj = NULL;
 }
 
+#ifdef PORT
+/* VISDRAW companion counters (2026-08-21): created/ejected DObj counts,
+ * read alongside objdisplay.c's drawn/skipped counters to compare "how
+ * many DObjs exist" against "how many actually reach the renderer" for
+ * the scene under investigation. See objdisplay.c's VISDRAW block for the
+ * per-object trace. Remove once the defect under investigation is
+ * resolved. */
+static u32 sGCDObjCreatedCount;
+static u32 sGCDObjEjectedCount;
+
+static void gcVisDrawReportObjCountsIfDue(void)
+{
+	static u32 sTick = 0;
+	if ((++sTick % 300) == 0)
+	{
+		port_log("SSB64: VISDRAW_OBJ_COUNTS created=%u ejected=%u live=%u\n",
+		         sGCDObjCreatedCount, sGCDObjEjectedCount,
+		         sGCDObjCreatedCount - sGCDObjEjectedCount);
+	}
+}
+
+/* Exposed to objdisplay.c's VISDRAW_SCENE_SUMMARY so created/ejected/live
+ * appear alongside drawn/hidden/no_dv/no_texture in one snapshot instead of
+ * two independently-scheduled log lines. */
+u32 gcVisDrawGetCreatedCount(void) { return sGCDObjCreatedCount; }
+u32 gcVisDrawGetEjectedCount(void) { return sGCDObjEjectedCount; }
+
+/* objdisplay.c's VISDRAW state table is keyed by DObj*; gcGetDObjSetNextAlloc
+ * reuses ejected slots, so a freed entry must be forgotten here or a new
+ * DObj allocated at the same address would compare equal to stale state and
+ * never emit its own VISDRAW_NEW/CHANGE. */
+extern void gcVisDrawForget(const void *dobj);
+#endif
+
 // 0x8000926C
 void gcInitDObj(DObj *dobj)
 {
@@ -1455,6 +1489,10 @@ void gcInitDObj(DObj *dobj)
 	dobj->anim_frame = 0.0F;
 	dobj->mobj = NULL;
 	dobj->user_data.p = NULL;
+#ifdef PORT
+	sGCDObjCreatedCount++;
+	gcVisDrawReportObjCountsIfDue();
+#endif
 }
 
 // 0x800092D0
@@ -1560,6 +1598,10 @@ void gcEjectDObj(DObj *dobj)
 	AObj *current_aobj, *next_aobj;
 	MObj *current_mobj, *next_mobj;
 
+#ifdef PORT
+	sGCDObjEjectedCount++;
+	gcVisDrawForget(dobj);
+#endif
 	while (dobj->child != NULL)
 	{
 		gcEjectDObj(dobj->child);

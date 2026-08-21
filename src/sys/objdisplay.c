@@ -11,6 +11,9 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sc/scene.h> /* gSCManagerSceneData.scene_curr for VISDRAW — pulls in the
+                        * complete SCCommonData body (scmanager.h alone only
+                        * forward-declares it via scdef.h) */
 /* Enhanced-framerate frame interpolation recording hook — observational
  * only, near-zero cost while the feature is disabled. Tags: 0 = DObj
  * modelview, 1 = projection (possibly combined view*persp), 2 = view.
@@ -375,6 +378,294 @@ static void gcLogSuspiciousDLPointer(const char *issue, DObj *dobj, unsigned lon
         );
     }
     sGCDLPointerWarningCount++;
+}
+
+/* VISDRAW (2026-08-21): correlates one visible DObj with its full draw-path
+ * state, for chasing a specific reported visual defect scene-by-scene
+ * instead of scanning generic logs for anomalies (see the CLAMPED and
+ * suspicious-dl investigations this session, both false leads). Covers both
+ * the objects that reach gcDrawMObjForDObj/gSPDisplayList and the ones
+ * gated out before that point (DOBJ_FLAG_HIDDEN, dv==NULL,
+ * DOBJ_FLAG_NOTEXTURE) — a missing model may never reach the renderer at
+ * all, which a draw-call-only trace can't show.
+ *
+ * Tracks a compact per-DObj state signature rather than a one-shot "seen"
+ * set: an object that renders correctly for a while and then disappears
+ * needs its *transition* logged (VISDRAW_CHANGE), not just its first
+ * appearance (VISDRAW_NEW) — a pure dedup would go silent exactly at the
+ * moment the defect appears. Table entries are freed on DObj ejection
+ * (gcVisDrawForget, called from objman.c's gcEjectDObj) so pointer reuse
+ * after an eject can't make a newly-created DObj at the same address look
+ * like "no change" against stale state.
+ *
+ * DOBJ_FLAG_NOTEXTURE verified against every call site in the decomp
+ * (ft/ftdisplaymain.c, lb/lbcommon.c, sys/objdisplay.c): despite the name,
+ * it always gates the display-list submission itself (paired with the
+ * dl/dv null-check in the same `if`), not just texture setup — so
+ * "tree-skip-notexture-flag" below correctly means "geometry not
+ * submitted", the same class of gap as dv==NULL, just a different cause.
+ * Named separately from "no-dv" per instruction: don't collapse causes
+ * the control flow keeps distinct.
+ *
+ * Remove this whole block once the defect under investigation is
+ * resolved. */
+typedef struct GCVisDrawState
+{
+    const void *dobj; /* NULL marks a free slot */
+    u32 flags;
+    void *dv;
+    void *dl_raw;
+    void *dl_resolved;
+    void *mobj;
+    s32 tex_curr;
+    s32 fmt;
+    s32 siz;
+    s32 reason;
+} GCVisDrawState;
+
+enum
+{
+    GC_VISDRAW_TREE_DRAWN,
+    GC_VISDRAW_TREE_SKIP_HIDDEN,
+    GC_VISDRAW_TREE_SKIP_NO_DV,
+    GC_VISDRAW_TREE_SKIP_NOTEXTURE_FLAG,
+    GC_VISDRAW_FORGOBJ_DRAWN,
+    GC_VISDRAW_FORGOBJ_SKIP_FLAGS,
+    GC_VISDRAW_FORGOBJ_SKIP_NO_DV,
+    GC_VISDRAW_REASON_COUNT
+};
+static const char *const kGCVisDrawReasonNames[GC_VISDRAW_REASON_COUNT] =
+{
+    "tree-drawn",
+    "tree-skip-hidden",
+    "tree-skip-no-dv",
+    "tree-skip-notexture-flag",
+    "forgobj-drawn",
+    "forgobj-skip-flags",
+    "forgobj-skip-no-dv",
+};
+
+#define GC_VISDRAW_MAX 192
+static GCVisDrawState sGCVisDrawStates[GC_VISDRAW_MAX];
+static bool sGCVisDrawTableFullWarned = FALSE;
+
+/* [0]=drawn [1]=hidden [2]=no_dv [3]=no_texture */
+static u32 sGCVisDrawCounters[4];        /* rolling 300-draw-attempt window */
+static u32 sGCVisDrawSceneCounters[4];   /* reset on scene change */
+static s32 sGCVisDrawLastScene = -1;
+
+static GCVisDrawState *gcVisDrawFind(const void *dobj)
+{
+    s32 i;
+    for (i = 0; i < GC_VISDRAW_MAX; i++)
+    {
+        if (sGCVisDrawStates[i].dobj == dobj)
+        {
+            return &sGCVisDrawStates[i];
+        }
+    }
+    return NULL;
+}
+
+static GCVisDrawState *gcVisDrawFindFreeSlot(void)
+{
+    s32 i;
+    for (i = 0; i < GC_VISDRAW_MAX; i++)
+    {
+        if (sGCVisDrawStates[i].dobj == NULL)
+        {
+            return &sGCVisDrawStates[i];
+        }
+    }
+    if (!sGCVisDrawTableFullWarned)
+    {
+        sGCVisDrawTableFullWarned = TRUE;
+        port_log("SSB64: VISDRAW table full (%d entries) — further new DObjs untracked\n", GC_VISDRAW_MAX);
+    }
+    return NULL;
+}
+
+/* Called from objman.c's gcEjectDObj so a freed slot's address can't be
+ * mistaken for "no change" once a new DObj is allocated there. */
+void gcVisDrawForget(const void *dobj)
+{
+    GCVisDrawState *state = gcVisDrawFind(dobj);
+    if (state != NULL)
+    {
+        state->dobj = NULL;
+    }
+}
+
+extern u32 gcVisDrawGetCreatedCount(void);
+extern u32 gcVisDrawGetEjectedCount(void);
+
+static void gcVisDrawSceneTickIfChanged(void)
+{
+    s32 scene = (s32)gSCManagerSceneData.scene_curr;
+    s32 i;
+    u32 live_tracked = 0;
+
+    if (sGCVisDrawLastScene == -1)
+    {
+        sGCVisDrawLastScene = scene;
+        return;
+    }
+    if (scene == sGCVisDrawLastScene)
+    {
+        return;
+    }
+
+    for (i = 0; i < GC_VISDRAW_MAX; i++)
+    {
+        if (sGCVisDrawStates[i].dobj != NULL)
+        {
+            live_tracked++;
+        }
+    }
+
+    port_log
+    (
+        "SSB64: VISDRAW_SCENE_SUMMARY scene=%d created=%u ejected=%u live=%u unique_dobjs_seen=%u "
+        "drawn=%u hidden=%u no_dv=%u no_texture=%u\n",
+        sGCVisDrawLastScene,
+        gcVisDrawGetCreatedCount(), gcVisDrawGetEjectedCount(),
+        gcVisDrawGetCreatedCount() - gcVisDrawGetEjectedCount(),
+        live_tracked,
+        sGCVisDrawSceneCounters[0], sGCVisDrawSceneCounters[1],
+        sGCVisDrawSceneCounters[2], sGCVisDrawSceneCounters[3]
+    );
+    sGCVisDrawSceneCounters[0] = sGCVisDrawSceneCounters[1] =
+        sGCVisDrawSceneCounters[2] = sGCVisDrawSceneCounters[3] = 0;
+    sGCVisDrawLastScene = scene;
+}
+
+static void gcLogVisDraw(s32 reason, DObj *dobj, void *raw_dl, void *resolved_dl)
+{
+    GCVisDrawState *state;
+    GCVisDrawState newstate;
+    uintptr_t resource_base = 0;
+    size_t resource_size = 0;
+    u32 file_id = 0xFFFFFFFFu;
+    const char *resource_path = NULL;
+    bool has_reloc = FALSE;
+    s32 fmt = -1, siz = -1;
+
+    if (resolved_dl != NULL)
+    {
+        has_reloc = portRelocDescribePointer(resolved_dl, &resource_base, &resource_size, &file_id, &resource_path);
+    }
+    if (dobj->mobj != NULL)
+    {
+        fmt = dobj->mobj->sub.block_fmt;
+        siz = dobj->mobj->sub.block_siz;
+    }
+
+    newstate.dobj = dobj;
+    newstate.flags = dobj->flags;
+    newstate.dv = dobj->dv;
+    newstate.dl_raw = raw_dl;
+    newstate.dl_resolved = resolved_dl;
+    newstate.mobj = dobj->mobj;
+    newstate.tex_curr = (s32)(dobj->mobj != NULL ? dobj->mobj->texture_id_curr : (u16)0xFFFF);
+    newstate.fmt = fmt;
+    newstate.siz = siz;
+    newstate.reason = reason;
+
+    state = gcVisDrawFind(dobj);
+    if (state == NULL)
+    {
+        state = gcVisDrawFindFreeSlot();
+        if (state == NULL)
+        {
+            return;
+        }
+        *state = newstate;
+        port_log
+        (
+            "SSB64: VISDRAW_NEW reason=%s scene=%u frame=%u gobj=%p dobj=%p parent=%p child=%p sib=%p flags=0x%02x "
+            "dl_raw=%p dl_resolved=%p resource=%s file_id=%u file_off=0x%x "
+            "mobj=%p tex_curr=%d tex_next=%d fmt=%d siz=%d "
+            "pos=(%.2f,%.2f,%.2f) rot=(%.2f,%.2f,%.2f,ang=%.2f) scale=(%.2f,%.2f,%.2f)\n",
+            kGCVisDrawReasonNames[reason],
+            (unsigned)gSCManagerSceneData.scene_curr, (unsigned)dSYTaskmanFrameCount,
+            (void*)dobj->parent_gobj,
+            (void*)dobj, (void*)dobj->parent, (void*)dobj->child, (void*)dobj->sib_next,
+            (unsigned)dobj->flags,
+            raw_dl, resolved_dl,
+            has_reloc ? resource_path : "(none)",
+            has_reloc ? (unsigned)file_id : 0xFFFFFFFFu,
+            (unsigned)(has_reloc ? ((uintptr_t)resolved_dl - resource_base) : 0),
+            (void*)dobj->mobj,
+            newstate.tex_curr,
+            (int)(dobj->mobj != NULL ? dobj->mobj->texture_id_next : (u16)0xFFFF),
+            (int)fmt, (int)siz,
+            dobj->translate.vec.f.x, dobj->translate.vec.f.y, dobj->translate.vec.f.z,
+            dobj->rotate.vec.f.x, dobj->rotate.vec.f.y, dobj->rotate.vec.f.z, dobj->rotate.a,
+            dobj->scale.vec.f.x, dobj->scale.vec.f.y, dobj->scale.vec.f.z
+        );
+        return;
+    }
+
+    if (state->flags != newstate.flags || state->dv != newstate.dv ||
+        state->dl_raw != newstate.dl_raw || state->dl_resolved != newstate.dl_resolved ||
+        state->mobj != newstate.mobj || state->tex_curr != newstate.tex_curr ||
+        state->fmt != newstate.fmt || state->siz != newstate.siz || state->reason != newstate.reason)
+    {
+        port_log
+        (
+            "SSB64: VISDRAW_CHANGE scene=%u frame=%u gobj=%p dobj=%p previous=%s current=%s "
+            "flags=0x%02x->0x%02x dv=%p->%p dl_raw=%p->%p dl_resolved=%p->%p mobj=%p->%p "
+            "tex_curr=%d->%d fmt=%d->%d siz=%d->%d\n",
+            (unsigned)gSCManagerSceneData.scene_curr, (unsigned)dSYTaskmanFrameCount,
+            (void*)dobj->parent_gobj, (void*)dobj,
+            kGCVisDrawReasonNames[state->reason], kGCVisDrawReasonNames[reason],
+            (unsigned)state->flags, (unsigned)newstate.flags,
+            state->dv, newstate.dv,
+            state->dl_raw, newstate.dl_raw,
+            state->dl_resolved, newstate.dl_resolved,
+            state->mobj, newstate.mobj,
+            state->tex_curr, newstate.tex_curr,
+            state->fmt, newstate.fmt,
+            state->siz, newstate.siz
+        );
+        *state = newstate;
+    }
+}
+
+static void gcVisDrawCount(s32 reason)
+{
+    s32 bucket;
+    switch (reason)
+    {
+    case GC_VISDRAW_TREE_DRAWN:
+    case GC_VISDRAW_FORGOBJ_DRAWN:
+        bucket = 0;
+        break;
+    case GC_VISDRAW_TREE_SKIP_HIDDEN:
+        bucket = 1;
+        break;
+    case GC_VISDRAW_TREE_SKIP_NO_DV:
+    case GC_VISDRAW_FORGOBJ_SKIP_NO_DV:
+        bucket = 2;
+        break;
+    default: /* NOTEXTURE flag, or forgobj's generic flags-mismatch skip */
+        bucket = 3;
+        break;
+    }
+    sGCVisDrawCounters[bucket]++;
+    sGCVisDrawSceneCounters[bucket]++;
+}
+
+static void gcVisDrawReportCountersIfDue(void)
+{
+    static u32 sTick = 0;
+    if ((++sTick % 300) == 0)
+    {
+        port_log("SSB64: VISDRAW_COUNTS drawn=%u hidden=%u no_dv=%u no_texture=%u\n",
+                 sGCVisDrawCounters[0], sGCVisDrawCounters[1],
+                 sGCVisDrawCounters[2], sGCVisDrawCounters[3]);
+    }
+    gcVisDrawSceneTickIfChanged();
 }
 #endif
 
@@ -1967,6 +2258,9 @@ void gcDrawDObjForGObj(GObj *gobj, Gfx **dl_head)
             gcDrawMObjForDObj(dobj, dl_head);
 #ifdef PORT
             gcLogSuspiciousDLPointer("dobj", dobj, (unsigned long long)dobj->dl, -1, NULL);
+            gcLogVisDraw(GC_VISDRAW_FORGOBJ_DRAWN, dobj, dobj->dl, dobj->dl);
+            gcVisDrawCount(GC_VISDRAW_FORGOBJ_DRAWN);
+            gcVisDrawReportCountersIfDue();
 #endif
             gSPDisplayList(dl_head[0]++, dobj->dl);
 
@@ -1978,7 +2272,27 @@ void gcDrawDObjForGObj(GObj *gobj, Gfx **dl_head)
                 }
             }
         }
+#ifdef PORT
+        else
+        {
+            /* dobj->flags != DOBJ_FLAG_NONE: some other flag bit is set
+             * (may or may not include NOTEXTURE) and this whole draw is
+             * skipped — the check here is stricter than the tree walker's
+             * (any non-zero flags value, not just NOTEXTURE/HIDDEN), so
+             * this is reported as its own reason rather than folded into
+             * "no_texture". */
+            gcLogVisDraw(GC_VISDRAW_FORGOBJ_SKIP_FLAGS, dobj, dobj->dl, dobj->dl);
+            gcVisDrawCount(GC_VISDRAW_FORGOBJ_SKIP_FLAGS);
+        }
+#endif
     }
+#ifdef PORT
+    else
+    {
+        gcLogVisDraw(GC_VISDRAW_FORGOBJ_SKIP_NO_DV, dobj, NULL, NULL);
+        gcVisDrawCount(GC_VISDRAW_FORGOBJ_SKIP_NO_DV);
+    }
+#endif
 }
 
 // 0x80013E68
@@ -2022,11 +2336,21 @@ void gcDrawDObjTree(DObj *this_dobj)
             gcDrawMObjForDObj(this_dobj, gSYTaskmanDLHeads);
 #ifdef PORT
             gcLogSuspiciousDLPointer("tree-dobj", this_dobj, (unsigned long long)this_dobj->dl, 0, NULL);
+            gcLogVisDraw(GC_VISDRAW_TREE_DRAWN, this_dobj, this_dobj->dl, this_dobj->dl);
+            gcVisDrawCount(GC_VISDRAW_TREE_DRAWN);
 #endif
             gSPDisplayList(gSYTaskmanDLHeads[0]++, this_dobj->dl);
         }
+#ifdef PORT
+        else
+        {
+            s32 skip_reason = (this_dobj->dv == NULL) ? GC_VISDRAW_TREE_SKIP_NO_DV : GC_VISDRAW_TREE_SKIP_NOTEXTURE_FLAG;
+            gcLogVisDraw(skip_reason, this_dobj, this_dobj->dl, this_dobj->dl);
+            gcVisDrawCount(skip_reason);
+        }
+#endif
         if (this_dobj->child != NULL)
-        { 
+        {
             gcDrawDObjTree(this_dobj->child);
         }
         if (num != 0)
@@ -2038,7 +2362,19 @@ void gcDrawDObjTree(DObj *this_dobj)
         }
         gGCScaleX = bak;
     }
-    if (this_dobj->sib_prev == NULL) 
+#ifdef PORT
+    else
+    {
+        /* HIDDEN gates this_dobj AND its whole child subtree out of this
+         * frame's draw walk (the recursion above sits inside the same
+         * `if (!HIDDEN)` block) — a hidden ancestor silently hides
+         * children that never individually reach gcDrawDObjTree. */
+        gcLogVisDraw(GC_VISDRAW_TREE_SKIP_HIDDEN, this_dobj, this_dobj->dl, this_dobj->dl);
+        gcVisDrawCount(GC_VISDRAW_TREE_SKIP_HIDDEN);
+    }
+    gcVisDrawReportCountersIfDue();
+#endif
+    if (this_dobj->sib_prev == NULL)
     {
         current_dobj = this_dobj->sib_next;
 
