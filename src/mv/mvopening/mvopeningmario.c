@@ -13,6 +13,8 @@
 extern u32 sySchedulerGetTicCount();
 #ifdef PORT
 extern void port_coroutine_yield(void);
+extern void port_log(const char *fmt, ...);
+extern u32 dSYTaskmanFrameCount;
 #endif
 
 // // // // // // // // // // // //
@@ -160,6 +162,11 @@ void mvOpeningMarioMakeName(void)
 
 	sMVOpeningMarioNameGObj = gobj = gcMakeGObjSPAfter(0, NULL, 17, GOBJ_PRIORITY_DEFAULT);
 	gcAddGObjDisplay(gobj, lbCommonDrawSObjAttr, 27, GOBJ_PRIORITY_DEFAULT, ~0);
+#ifdef PORT
+	port_log("SSB64: INTRO_NAME_GOBJ scene=%d gobj=%p head=%p obj_kind=%d dl_link_id=%u camera_tag=0x%x\n",
+	         gSCManagerSceneData.scene_curr, (void*)gobj, (void*)SObjGetStruct(gobj),
+	         (int)gobj->obj_kind, (unsigned)gobj->dl_link_id, (unsigned)gobj->camera_tag);
+#endif
 
 	for (i = 0; offsets[i] != 0x0; i++)
 	{
@@ -170,6 +177,13 @@ void mvOpeningMarioMakeName(void)
 
 		sobj->pos.x = pos_x[i] + 80.0F;
 		sobj->pos.y = 100.0F;
+#ifdef PORT
+		port_log("SSB64: INTRO_LETTER scene=%d frame=%u index=%d sobj=%p sprite_bitmap_tok=0x%x "
+		         "bmfmt=%u bmsiz=%u attr=0x%x pos=(%.2f,%.2f)\n",
+		         gSCManagerSceneData.scene_curr, (unsigned)dSYTaskmanFrameCount, i, (void*)sobj,
+		         (unsigned)sobj->sprite.bitmap, (unsigned)sobj->sprite.bmfmt, (unsigned)sobj->sprite.bmsiz,
+		         (unsigned)sobj->sprite.attr, sobj->pos.x, sobj->pos.y);
+#endif
 
 		mvOpeningMarioInitName(sobj);
 	}

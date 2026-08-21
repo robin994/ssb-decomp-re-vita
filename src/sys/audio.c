@@ -1138,6 +1138,9 @@ void syAudioThreadMain(void *arg)
 
         while (TRUE)
         {
+#ifdef PORT
+            OSTime port_mix_start;
+#endif
             osRecvMesg(&sSYAudioTicMesgQueue, NULL, OS_MESG_BLOCK);
 
             port_i = dSYAudioCurrentTic & 1;
@@ -1159,9 +1162,11 @@ void syAudioThreadMain(void *arg)
                 }
             }
 
+            port_mix_start = osGetTime();
             n_alAudioFrame(sSYAudioCurrentAcmdListBuffer, &port_cmdLen,
                            sSYAudioDataBuffers[port_id_mod3],
                            dSYAudioSampleCounts[port_id_mod3]);
+            portAudioRecordMixTime((unsigned int)OS_CYCLES_TO_USEC(osGetTime() - port_mix_start));
 
             acmd_trace_end_task();
 

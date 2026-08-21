@@ -4110,6 +4110,47 @@ void mpCollisionInitGroundData(void)
 {
     MPGeometryData *gdata;
 
+#ifdef PORT
+    /* Common/UI resources are loaded before this function, but most of the
+     * remaining battle setup requires valid ground metadata.  A NULL file
+     * base cannot be passed through lbRelocGetFileData: adding the header
+     * offset would turn it into a misleading non-NULL near-address.  Keep a
+     * known-good stage as a bounded fallback so HUD initialization can still
+     * complete when the requested stage fails relocation. */
+    s32 requested_gkind = gSCManagerBattleState->gkind;
+    u32 requested_file_id = dMPCollisionGroundFileInfos[requested_gkind].file_id;
+    u32 fallback_file_id = dMPCollisionGroundFileInfos[nGRKindPupupu].file_id;
+    size_t requested_size = lbRelocGetFileSize(requested_file_id);
+    size_t fallback_size = lbRelocGetFileSize(fallback_file_id);
+    size_t allocation_size = (requested_size > fallback_size) ? requested_size : fallback_size;
+    void *ground_heap = syTaskmanMalloc(allocation_size, 0x10);
+    void *ground_file = lbRelocGetExternHeapFile(requested_file_id, ground_heap);
+
+    if ((ground_file == NULL) && (requested_gkind != nGRKindPupupu))
+    {
+        port_log("SSB64: STAGE_LOAD requested_gkind=%d file_id=%u status=FAIL "
+                 "fallback_gkind=%d fallback_file_id=%u\n",
+                 requested_gkind, requested_file_id, nGRKindPupupu, fallback_file_id);
+        gSCManagerBattleState->gkind = nGRKindPupupu;
+        ground_file = lbRelocGetExternHeapFile(fallback_file_id, ground_heap);
+    }
+
+    if (ground_file == NULL)
+    {
+        port_log("SSB64: STAGE_LOAD requested_gkind=%d file_id=%u status=FATAL "
+                 "fallback_file_id=%u ui_resources=READY\n",
+                 requested_gkind, requested_file_id, fallback_file_id);
+        gMPCollisionGroundData = NULL;
+        return;
+    }
+
+    gMPCollisionGroundData = lbRelocGetFileData
+    (
+        MPGroundData*,
+        ground_file,
+        dMPCollisionGroundFileInfos[gSCManagerBattleState->gkind].offset
+    );
+#else
     gMPCollisionGroundData = lbRelocGetFileData
     (
         MPGroundData*,
@@ -4124,6 +4165,7 @@ void mpCollisionInitGroundData(void)
         ),
         dMPCollisionGroundFileInfos[gSCManagerBattleState->gkind].offset
     );
+#endif
 #ifdef PORT
     port_log("[ground] InitGroundData scene=%d gkind=%d file_id=%d offset=0x%x gd=%p",
         gSCManagerSceneData.scene_curr,

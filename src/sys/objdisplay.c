@@ -11,9 +11,8 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sc/scene.h> /* gSCManagerSceneData.scene_curr for VISDRAW — pulls in the
-                        * complete SCCommonData body (scmanager.h alone only
-                        * forward-declares it via scdef.h) */
+#include <sc/scene.h> /* gSCManagerSceneData for VISDRAW/stage diagnostics */
+#include <gr/grdef.h>   /* nGRKindCastle / nGRKindLast */
 /* Enhanced-framerate frame interpolation recording hook — observational
  * only, near-zero cost while the feature is disabled. Tags: 0 = DObj
  * modelview, 1 = projection (possibly combined view*persp), 2 = view.
@@ -2242,6 +2241,63 @@ void gcDrawMObjForDObj(DObj *dobj, Gfx **dl_head)
     gSYTaskmanGraphicsHeap.ptr = (void*) branch_dl;
 }
 
+#ifdef PORT
+/* TRACK B round 5 (2026-08-21): target the stages the user is actually
+ * reporting instead of hard-coding scene 34. Scene 34 is OpeningLink and its
+ * gkind=4 resource is Hyrule Castle, so the old "Peach castle" capture could
+ * never describe Peach's Castle in VS mode and could never see Final
+ * Destination. Capture unique DObjs only while the active stage is Castle or
+ * Last, in scenes that actually render stage geometry. Reset the dedupe table
+ * whenever scene/stage changes so both targets can be exercised in one run. */
+#define GC_TRACKB_MAX_DOBJS 96
+static const void *sGCTrackBSeenDObjs[GC_TRACKB_MAX_DOBJS];
+static int sGCTrackBSeenCount = 0;
+static s32 sGCTrackBLastScene = -1;
+static s32 sGCTrackBLastGKind = -1;
+extern void portArmCastleGpuStateCapture(const void *gobj, const void *dobj, const void *root_dl);
+
+static bool gcTrackBIsStageRenderScene(s32 scene)
+{
+    return (scene == nSCKindVSBattle) ||
+           (scene == nSCKind1PGame) ||
+           (scene == nSCKindAutoDemo) ||
+           (scene == nSCKindOpeningMario);
+}
+
+static bool gcTrackBShouldFingerprint(const void *dobj)
+{
+    s32 scene = (s32)gSCManagerSceneData.scene_curr;
+    s32 gkind = (s32)gSCManagerSceneData.gkind;
+    int i;
+
+    if ((scene != sGCTrackBLastScene) || (gkind != sGCTrackBLastGKind))
+    {
+        sGCTrackBLastScene = scene;
+        sGCTrackBLastGKind = gkind;
+        sGCTrackBSeenCount = 0;
+    }
+
+    if (!gcTrackBIsStageRenderScene(scene) ||
+        ((gkind != nGRKindCastle) && (gkind != nGRKindLast)))
+    {
+        return FALSE;
+    }
+    if (sGCTrackBSeenCount >= GC_TRACKB_MAX_DOBJS)
+    {
+        return FALSE;
+    }
+    for (i = 0; i < sGCTrackBSeenCount; i++)
+    {
+        if (sGCTrackBSeenDObjs[i] == dobj)
+        {
+            return FALSE;
+        }
+    }
+    sGCTrackBSeenDObjs[sGCTrackBSeenCount++] = dobj;
+    return TRUE;
+}
+#endif
+
 // 0x80013D90
 void gcDrawDObjForGObj(GObj *gobj, Gfx **dl_head)
 {
@@ -2261,6 +2317,10 @@ void gcDrawDObjForGObj(GObj *gobj, Gfx **dl_head)
             gcLogVisDraw(GC_VISDRAW_FORGOBJ_DRAWN, dobj, dobj->dl, dobj->dl);
             gcVisDrawCount(GC_VISDRAW_FORGOBJ_DRAWN);
             gcVisDrawReportCountersIfDue();
+            if (gcTrackBShouldFingerprint(dobj))
+            {
+                portArmCastleGpuStateCapture(gobj, dobj, dobj->dl);
+            }
 #endif
             gSPDisplayList(dl_head[0]++, dobj->dl);
 
@@ -2338,6 +2398,10 @@ void gcDrawDObjTree(DObj *this_dobj)
             gcLogSuspiciousDLPointer("tree-dobj", this_dobj, (unsigned long long)this_dobj->dl, 0, NULL);
             gcLogVisDraw(GC_VISDRAW_TREE_DRAWN, this_dobj, this_dobj->dl, this_dobj->dl);
             gcVisDrawCount(GC_VISDRAW_TREE_DRAWN);
+            if (gcTrackBShouldFingerprint(this_dobj))
+            {
+                portArmCastleGpuStateCapture(this_dobj->parent_gobj, this_dobj, this_dobj->dl);
+            }
 #endif
             gSPDisplayList(gSYTaskmanDLHeads[0]++, this_dobj->dl);
         }
@@ -4082,6 +4146,14 @@ void gcRunFuncCamera(CObj *cobj, s32 dl_id)
 }
 
 // 0x80017868
+#ifdef PORT
+/* DISPLAY_CAPTURE (2026-08-21): is the wallpaper GObj's proc_display
+ * actually reached by the camera-capture walk? See grwallpaper.c's
+ * WALLPAPER_GOBJ log for the GObj's own recorded camera_tag/flags — this
+ * one shows what the CAMERA side of the same check evaluates to. */
+extern GObj *sGRWallpaperGObj;
+#endif
+
 void gcCaptureTaggedGObjs(GObj *camera_gobj, s32 link_id, sb32 is_tag_mask_or_id)
 {
     GObj *current_gobj = gGCCommonDLLinks[link_id];
@@ -4113,6 +4185,31 @@ void gcCaptureTaggedGObjs(GObj *camera_gobj, s32 link_id, sb32 is_tag_mask_or_id
                      (void *)current_gobj, link_id, (void *)camera_gobj,
                      (int)is_tag_mask_or_id, (unsigned)dSYTaskmanFrameCount);
             __asan_describe_address((void *)current_gobj);
+        }
+#endif
+#ifdef PORT
+        {
+#ifndef SSB64_SOBJ_TRACE_DETAIL
+#define SSB64_SOBJ_TRACE_DETAIL 1
+#endif
+        static s32 sWallpaperCaptureLogBudget = SSB64_SOBJ_TRACE_DETAIL ? 40 : 0;
+        if (current_gobj == sGRWallpaperGObj && sWallpaperCaptureLogBudget > 0)
+        {
+            sWallpaperCaptureLogBudget--;
+            bool hidden = (current_gobj->flags & GOBJ_FLAG_HIDDEN) != 0;
+            bool tag_match =
+                ((is_tag_mask_or_id == 0) && (camera_gobj->camera_tag & current_gobj->camera_tag)) ||
+                ((is_tag_mask_or_id == 1) && (camera_gobj->camera_tag == current_gobj->camera_tag));
+            port_log("SSB64: DISPLAY_CAPTURE scene=%d frame=%u camera_gobj=%p wallpaper_gobj=%p link_id=%d "
+                     "is_tag_mask_or_id=%d camera_tag_cam=0x%x camera_tag_wp=0x%x hidden=%s tag_match=%s "
+                     "eligible=%s proc_display_called=%s\n",
+                     gSCManagerSceneData.scene_curr, (unsigned)dSYTaskmanFrameCount,
+                     (void*)camera_gobj, (void*)current_gobj, link_id, (int)is_tag_mask_or_id,
+                     (unsigned)camera_gobj->camera_tag, (unsigned)current_gobj->camera_tag,
+                     hidden ? "yes" : "no", tag_match ? "yes" : "no",
+                     (!hidden && tag_match) ? "yes" : "no",
+                     (!hidden && tag_match) ? "yes" : "no");
+        }
         }
 #endif
         if (!(current_gobj->flags & GOBJ_FLAG_HIDDEN))

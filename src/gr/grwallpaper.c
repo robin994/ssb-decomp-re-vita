@@ -244,6 +244,18 @@ void grWallpaperMakeCommon(void)
         3
     );
     wallpaper_sobj = SObjGetStruct(wallpaper_gobj);
+#ifdef PORT
+    port_log("SSB64: WALLPAPER_GOBJ scene=%d gobj=%p obj_kind=%d sobj=%p link_id=%u link_priority=%u "
+             "dl_link_id=%u dl_link_priority=%u camera_tag=0x%x camera_mask=0x%llx proc_display=%p "
+             "(lbCommonDrawSObjAttr=%p match=%s) gobj_flags=0x%x\n",
+             gSCManagerSceneData.scene_curr, (void*)wallpaper_gobj, (int)wallpaper_gobj->obj_kind,
+             (void*)wallpaper_sobj, (unsigned)wallpaper_gobj->link_id, (unsigned)wallpaper_gobj->link_priority,
+             (unsigned)wallpaper_gobj->dl_link_id, (unsigned)wallpaper_gobj->dl_link_priority,
+             (unsigned)wallpaper_gobj->camera_tag, (unsigned long long)wallpaper_gobj->camera_mask,
+             (void*)wallpaper_gobj->proc_display, (void*)lbCommonDrawSObjAttr,
+             (wallpaper_gobj->proc_display == lbCommonDrawSObjAttr) ? "yes" : "NO",
+             (unsigned)wallpaper_gobj->flags);
+#endif
 
     wallpaper_sobj->pos.x = 10.0F;
     wallpaper_sobj->pos.y = 10.0F;
