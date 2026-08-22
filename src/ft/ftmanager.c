@@ -7,6 +7,117 @@
 #include <string.h>
 #include <sys/debug.h>
 extern void port_log(const char *fmt, ...);
+extern bool portRelocDescribePointer(const void *ptr, uintptr_t *out_base, size_t *out_size, u32 *out_file_id, const char **out_path);
+
+/* Fighter-model audit used while bringing the N64 display-list/material path up on Vita.
+ * It is deliberately read-only and bounded: one Mario and one Fox creation dump per
+ * scene.  Mario is the control sample; Fox is the currently reproducible partial model. */
+static u8 sPortFighterAuditScene = 0xFF;
+static u8 sPortFighterAuditCreateMask = 0;
+
+static bool portFighterAuditIsTargetKind(s32 fkind)
+{
+    return (fkind == nFTKindMario) || (fkind == nFTKindFox);
+}
+
+static u8 portFighterAuditKindBit(s32 fkind)
+{
+    return (fkind == nFTKindFox) ? 2 : 1;
+}
+
+static void portFighterAuditDescribeDL(const void *dl, u32 *file_id, uintptr_t *file_off, const char **path)
+{
+    uintptr_t base = 0;
+    size_t size = 0;
+    u32 id = 0xFFFFFFFFu;
+    const char *p = NULL;
+
+    if ((dl != NULL) && portRelocDescribePointer(dl, &base, &size, &id, &p))
+    {
+        if (file_off != NULL) *file_off = (uintptr_t)dl - base;
+    }
+    else
+    {
+        if (file_off != NULL) *file_off = 0;
+    }
+    if (file_id != NULL) *file_id = id;
+    if (path != NULL) *path = (p != NULL) ? p : "(none)";
+}
+
+static s32 portFighterAuditCountMObjs(DObj *dobj)
+{
+    s32 count = 0;
+    MObj *mobj = (dobj != NULL) ? dobj->mobj : NULL;
+
+    while ((mobj != NULL) && (count < 32))
+    {
+        count++;
+        mobj = mobj->next;
+    }
+    return count;
+}
+
+static void portFighterAuditCreation(FTStruct *fp)
+{
+    FTCommonPartContainer *commonparts;
+    DObjDesc *high_desc;
+    s32 i;
+    u8 bit;
+
+    if ((fp == NULL) || !portFighterAuditIsTargetKind(fp->fkind)) return;
+
+    if (sPortFighterAuditScene != gSCManagerSceneData.scene_curr)
+    {
+        sPortFighterAuditScene = gSCManagerSceneData.scene_curr;
+        sPortFighterAuditCreateMask = 0;
+    }
+    bit = portFighterAuditKindBit(fp->fkind);
+    if (sPortFighterAuditCreateMask & bit) return;
+    sPortFighterAuditCreateMask |= bit;
+
+    commonparts = (FTCommonPartContainer*)PORT_RESOLVE(fp->attr->commonparts_container);
+    high_desc = (commonparts != NULL) ? FTPARTS_GET_DOBJDESC(&commonparts->commonparts[nFTPartsDetailHigh - nFTPartsDetailStart]) : NULL;
+
+    port_log("SSB64: FIGHTER_PART_AUDIT_CREATE scene=%u fkind=%d gobj=%p detail=%d costume=%d shade=%d commonparts=%p high_desc=%p setup_parts=%p common_flags=0x%02x\n",
+        (unsigned)gSCManagerSceneData.scene_curr, fp->fkind, fp->fighter_gobj, fp->detail_curr, fp->costume, fp->shade,
+        commonparts, high_desc, PORT_RESOLVE(fp->attr->setup_parts),
+        (commonparts != NULL) ? FTPARTS_GET_FLAGS(&commonparts->commonparts[fp->detail_curr - nFTPartsDetailStart]) : 0xFF);
+
+    for (i = nFTPartsJointCommonStart; i < ARRAY_COUNT(fp->joints); i++)
+    {
+        DObj *dobj = fp->joints[i];
+        FTParts *parts;
+        const void *expected_dl = NULL;
+        u32 dl_file = 0xFFFFFFFFu, expected_file = 0xFFFFFFFFu;
+        uintptr_t dl_off = 0, expected_off = 0;
+        const char *dl_path = "(none)", *expected_path = "(none)";
+        s32 mobj_count;
+        MObj *mobj;
+
+        if (dobj == NULL) continue;
+        parts = ftGetParts(dobj);
+        mobj_count = portFighterAuditCountMObjs(dobj);
+        mobj = dobj->mobj;
+
+        if (high_desc != NULL)
+        {
+            expected_dl = PORT_RESOLVE_GFX(high_desc[i - nFTPartsJointCommonStart].dl);
+        }
+        portFighterAuditDescribeDL(dobj->dl, &dl_file, &dl_off, &dl_path);
+        portFighterAuditDescribeDL(expected_dl, &expected_file, &expected_off, &expected_path);
+
+        port_log("SSB64: FIGHTER_PART_AUDIT_CREATE_JOINT scene=%u fkind=%d joint=%d dobj=%p flags=0x%02x parts_flags=0x%02x model_base=%d model_curr=%d dl=%p dl_file=%u dl_off=0x%lx expected_dl=%p expected_file=%u expected_off=0x%lx match=%s mobjs=%d first_mobj=%p mfmt=%d msiz=%d mflags=0x%04x sprites_tok=0x%08x palettes_tok=0x%08x\n",
+            (unsigned)gSCManagerSceneData.scene_curr, fp->fkind, i, dobj, dobj->flags,
+            (parts != NULL) ? parts->flags : 0xFF,
+            fp->modelpart_status[i - nFTPartsJointCommonStart].modelpart_id_base,
+            fp->modelpart_status[i - nFTPartsJointCommonStart].modelpart_id_curr,
+            dobj->dl, dl_file, (unsigned long)dl_off, expected_dl, expected_file, (unsigned long)expected_off,
+            (dobj->dl == expected_dl) ? "yes" : "no", mobj_count, mobj,
+            (mobj != NULL) ? mobj->sub.fmt : -1, (mobj != NULL) ? mobj->sub.siz : -1,
+            (mobj != NULL) ? mobj->sub.flags : 0, (mobj != NULL) ? mobj->sub.sprites : 0,
+            (mobj != NULL) ? mobj->sub.palettes : 0);
+    }
+}
 #endif
 #ifdef PORT
 extern void portFixupFTAttributes(void *attr);
@@ -986,6 +1097,9 @@ GObj* ftManagerMakeFighter(FTDesc *desc) // Create fighter
             fp->modelpart_status[i - nFTPartsJointCommonStart].modelpart_id_curr = (fp->joints[i]->dl != NULL) ? 0 : -1;
         }
     }
+#ifdef PORT
+    portFighterAuditCreation(fp);
+#endif
     for (i = 0; i < ARRAY_COUNT(fp->texturepart_status); i++)
     {
         fp->texturepart_status[i].texture_id_base = fp->texturepart_status[i].texture_id_curr = 0;

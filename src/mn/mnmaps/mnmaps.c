@@ -8,6 +8,7 @@
 #include <sys/rdp.h>
 #include <reloc_data.h>
 #ifdef PORT
+extern void port_log(const char *fmt, ...);
 extern void *func_800269C0_275C0(u16 id);
 // Port-built CSS sprites (baked into the binary at compile time). Declared as
 // `extern` rather than a header include because the port symbols live outside
@@ -1572,6 +1573,35 @@ GObj* mnMapsMakePreviewWallpaper(s32 gkind)
 	else
 	{
 		// If not Random, check if Training Mode
+#ifdef PORT
+        /* The three stages exposed by the port did not exist in the retail
+         * Training CSS.  Showing the generic blue Smash training wallpaper
+         * here hides the actual preview and also makes the preview disagree
+         * with the stage-native wallpaper used in gameplay.  Prefer the
+         * ROM-derived PNG when installed, otherwise fall back to the valid
+         * wallpaper already resolved from the stage reloc. */
+        if (sMNMapsIsTrainingMode == TRUE)
+        {
+            /* Vita/PORT: use the selected stage's real wallpaper for every
+             * Training CSS preview.  The old retail path below rebases a
+             * training-wallpaper file into a synthetic heap using
+             * pointer-minus-offset arithmetic; custom stages already had to
+             * bypass it, and retail stages can hit the same host-reloc/token
+             * failure mode.  Prefer an installed ROM-derived PNG, otherwise
+             * use the already-fixed-up wallpaper from the stage reloc. */
+            Sprite *port_wp = portCSSGetStageBackgroundSprite(gkind);
+            const char *wallpaper_source = "png";
+            if (port_wp == NULL)
+            {
+                port_wp = (Sprite*)PORT_RESOLVE(sMNMapsGroundInfo->wallpaper);
+                wallpaper_source = "reloc";
+            }
+            port_log("SSB64: CSS_PREVIEW_WALLPAPER native gkind=%d source=%s sprite=%p\n",
+                     gkind, wallpaper_source, port_wp);
+            sobj = lbCommonMakeSObjForGObj(gobj, port_wp);
+        }
+        else
+#endif
 		if (sMNMapsIsTrainingMode == TRUE)
 		{
 			/* PORT: hoist the #ifdef-PORT conditional values out of the

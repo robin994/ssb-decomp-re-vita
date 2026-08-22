@@ -11,6 +11,37 @@ extern bool portRelocDescribePointer(const void *ptr, uintptr_t *out_base, size_
 extern void portDiagArmImportCapture(int n);
 extern char *getenv(const char *name);
 extern int atoi(const char *nptr);
+
+/* Diagnostic 2026-08-22: grWallpaperMakeCommon() already logs a WALLPAPER_GOBJ
+ * line, but grWallpaperMakeSector()/grWallpaperMakeStatic() (Sector Z /
+ * Yoshi's Island) have never had equivalent coverage, so nothing in
+ * ssb64.log could confirm or rule out whether their wallpaper resource
+ * actually resolves and reaches the renderer. Same tag, one extra "path"
+ * field, so `grep WALLPAPER_GOBJ` still catches all three call sites. */
+static void portLogWallpaperDiag(const char *path_tag, GObj *wallpaper_gobj, SObj *wallpaper_sobj)
+{
+    Sprite *sp = (Sprite*)PORT_RESOLVE(gMPCollisionGroundData->wallpaper);
+    void *bm = (sp != NULL) ? PORT_RESOLVE(sp->bitmap) : NULL;
+    Bitmap *b0 = (Bitmap*)bm;
+    port_log("SSB64: WALLPAPER_GOBJ path=%s scene=%d gkind=%d gd=%p wp_tok=0x%x wp_resolved=%p "
+             "sp_w=%d sp_h=%d fmt=%d siz=%d nbitmaps=%d bm=%p bm_w=%d bm_wimg=%d "
+             "gobj=%p obj_kind=%d sobj=%p proc_display=%p (lbCommonDrawSObjAttr=%p match=%s)\n",
+             path_tag,
+             gSCManagerSceneData.scene_curr,
+             gSCManagerBattleState ? gSCManagerBattleState->gkind : -1,
+             (void*)gMPCollisionGroundData,
+             (unsigned)(uintptr_t)gMPCollisionGroundData->wallpaper,
+             (void*)sp,
+             sp ? (int)sp->width : -1, sp ? (int)sp->height : -1,
+             sp ? (int)sp->bmfmt : -1, sp ? (int)sp->bmsiz : -1, sp ? (int)sp->nbitmaps : -1,
+             bm,
+             (b0 != NULL) ? (int)b0->width : -1, (b0 != NULL) ? (int)b0->width_img : -1,
+             (void*)wallpaper_gobj, wallpaper_gobj ? (int)wallpaper_gobj->obj_kind : -1,
+             (void*)wallpaper_sobj,
+             wallpaper_gobj ? (void*)wallpaper_gobj->proc_display : NULL,
+             (void*)lbCommonDrawSObjAttr,
+             (wallpaper_gobj != NULL && wallpaper_gobj->proc_display == lbCommonDrawSObjAttr) ? "yes" : "NO");
+}
 #endif
 
 // // // // // // // // // // // //
@@ -286,6 +317,9 @@ void grWallpaperMakeStatic(void)
         3
     );
     wallpaper_sobj = SObjGetStruct(wallpaper_gobj);
+#ifdef PORT
+    portLogWallpaperDiag("static", wallpaper_gobj, wallpaper_sobj);
+#endif
 
     wallpaper_sobj->pos.x = 10.0F;
     wallpaper_sobj->pos.y = 10.0F;
@@ -344,6 +378,9 @@ void grWallpaperMakeSector(void)
     gcAddGObjDisplay(wallpaper_gobj, lbCommonDrawSObjAttr, 0, GOBJ_PRIORITY_DEFAULT, ~0);
 
     wallpaper_sobj = lbCommonMakeSObjForGObj(wallpaper_gobj, (Sprite*)PORT_RESOLVE(gMPCollisionGroundData->wallpaper));
+#ifdef PORT
+    portLogWallpaperDiag("sector", wallpaper_gobj, wallpaper_sobj);
+#endif
 
     wallpaper_sobj->pos.x = 10.0F;
     wallpaper_sobj->pos.y = 10.0F;

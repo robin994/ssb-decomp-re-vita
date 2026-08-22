@@ -13,6 +13,43 @@ extern alSoundEffect* func_800269C0_275C0(u16);
 extern void *portFixupFTTexturePartContainer(void *container);
 #include <port_log.h>
 #include "fighter_registry.h"
+
+static u8 sPortFighterModelChangeScene = 0xFF;
+static u32 sPortFighterModelChangeCount = 0;
+
+static bool portFighterModelChangeAuditEnabled(FTStruct *fp)
+{
+    if ((fp == NULL) || ((fp->fkind != nFTKindMario) && (fp->fkind != nFTKindFox))) return false;
+    if (sPortFighterModelChangeScene != gSCManagerSceneData.scene_curr)
+    {
+        sPortFighterModelChangeScene = gSCManagerSceneData.scene_curr;
+        sPortFighterModelChangeCount = 0;
+    }
+    return sPortFighterModelChangeCount < 96;
+}
+
+static void portFighterModelChangeAudit(FTStruct *fp, s32 joint_id, s32 old_id, s32 new_id, DObj *joint, FTParts *parts, const char *where)
+{
+    MObj *mobj;
+    s32 mobj_count = 0;
+
+    if (!portFighterModelChangeAuditEnabled(fp)) return;
+    sPortFighterModelChangeCount++;
+
+    mobj = (joint != NULL) ? joint->mobj : NULL;
+    while ((mobj != NULL) && (mobj_count < 32))
+    {
+        mobj_count++;
+        mobj = mobj->next;
+    }
+    mobj = (joint != NULL) ? joint->mobj : NULL;
+
+    port_log("SSB64: FIGHTER_PART_AUDIT_MODELCHANGE scene=%u fkind=%d where=%s joint=%d old=%d new=%d dobj=%p dl=%p dobj_flags=0x%02x parts_flags=0x%02x mobjs=%d first_mobj=%p mfmt=%d msiz=%d mflags=0x%04x\n",
+        (unsigned)gSCManagerSceneData.scene_curr, fp->fkind, (where != NULL) ? where : "?", joint_id, old_id, new_id, joint,
+        (joint != NULL) ? joint->dl : NULL, (joint != NULL) ? joint->flags : 0xFF, (parts != NULL) ? parts->flags : 0xFF,
+        mobj_count, mobj, (mobj != NULL) ? mobj->sub.fmt : -1, (mobj != NULL) ? mobj->sub.siz : -1,
+        (mobj != NULL) ? mobj->sub.flags : 0);
+}
 #endif
 
 /* Resolve `attr->textureparts_container` (a reloc token under PORT, a real
@@ -855,6 +892,10 @@ void ftParamSetModelPartID(GObj *fighter_gobj, s32 joint_id, s32 modelpart_id)
     {
         if (modelpart_status->modelpart_id_curr != modelpart_id)
         {
+#ifdef PORT
+            s32 port_old_modelpart_id = modelpart_status->modelpart_id_curr;
+            portFighterModelChangeAudit(fp, joint_id, port_old_modelpart_id, modelpart_id, joint, parts, "before-set");
+#endif
             modelpart_status->modelpart_id_curr = modelpart_id;
 
             gcRemoveMObjAll(joint);
@@ -916,6 +957,9 @@ void ftParamSetModelPartID(GObj *fighter_gobj, s32 joint_id, s32 modelpart_id)
             }
             else joint->dl = NULL;
 
+#ifdef PORT
+            portFighterModelChangeAudit(fp, joint_id, port_old_modelpart_id, modelpart_id, joint, parts, "after-set");
+#endif
             fp->is_modelpart_modify = TRUE;
         }
     }

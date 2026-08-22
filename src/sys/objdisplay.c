@@ -2258,10 +2258,14 @@ extern void portArmCastleGpuStateCapture(const void *gobj, const void *dobj, con
 
 static bool gcTrackBIsStageRenderScene(s32 scene)
 {
+    /* TRACK B is a gameplay-stage diagnostic.  OpeningMario happens to use
+     * gkind=Castle too, but its movie display lists contain runtime segment
+     * 0x0E sub-lists and are not the Castle stage we are trying to compare.
+     * Arming the static fingerprint there can turn a segmented N64 address
+     * into an unsafe host dereference. */
     return (scene == nSCKindVSBattle) ||
            (scene == nSCKind1PGame) ||
-           (scene == nSCKindAutoDemo) ||
-           (scene == nSCKindOpeningMario);
+           (scene == nSCKindAutoDemo);
 }
 
 static bool gcTrackBShouldFingerprint(const void *dobj)

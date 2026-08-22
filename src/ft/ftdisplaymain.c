@@ -9,6 +9,103 @@
 #include <enhancements/enhancements.h>
 #include "hooks/Events.h"
 extern float port_widescreen_clip_x_scale(void);
+extern void port_log(const char *fmt, ...);
+extern bool portRelocDescribePointer(const void *ptr, uintptr_t *out_base, size_t *out_size, u32 *out_file_id, const char **out_path);
+
+/* Draw-side half of FIGHTER_PART_AUDIT.  Log each Mario/Fox joint at most once
+ * per scene so we can distinguish CPU-side missing/hidden parts from display
+ * lists that are submitted correctly and disappear later in Fast3D. */
+static u8 sPortFighterDrawAuditScene = 0xFF;
+static u64 sPortFighterDrawAuditSeenMario = 0;
+static u64 sPortFighterDrawAuditSeenFox = 0;
+
+static void portFighterAuditDraw(FTStruct *fp, DObj *dobj, FTParts *parts, const char *draw_path, u8 effective_flags,
+                                 Gfx *effective_dl0, Gfx *effective_dl1)
+{
+    u64 *seen;
+    u64 bit;
+    s32 joint;
+    const void *describe_dl;
+    u32 dl_file = 0xFFFFFFFFu;
+    uintptr_t base = 0, dl_off = 0;
+    size_t resource_size = 0;
+    const char *path = "(none)";
+    s32 mobj_count = 0;
+    MObj *mobj;
+    const char *reason;
+    bool will_submit;
+    u8 mode = effective_flags & 0xF;
+
+    if ((fp == NULL) || (dobj == NULL) || (parts == NULL)) return;
+    if ((fp->fkind != nFTKindMario) && (fp->fkind != nFTKindFox)) return;
+
+    joint = parts->joint_id;
+    if ((joint < 0) || (joint >= 64)) return;
+
+    if (sPortFighterDrawAuditScene != gSCManagerSceneData.scene_curr)
+    {
+        sPortFighterDrawAuditScene = gSCManagerSceneData.scene_curr;
+        sPortFighterDrawAuditSeenMario = 0;
+        sPortFighterDrawAuditSeenFox = 0;
+    }
+    seen = (fp->fkind == nFTKindFox) ? &sPortFighterDrawAuditSeenFox : &sPortFighterDrawAuditSeenMario;
+    bit = ((u64)1) << joint;
+    if ((*seen & bit) != 0) return;
+    *seen |= bit;
+
+    if ((dobj->flags & DOBJ_FLAG_HIDDEN) != 0)
+    {
+        reason = "hidden";
+        will_submit = false;
+    }
+    else if ((dobj->flags & DOBJ_FLAG_NOTEXTURE) != 0)
+    {
+        reason = "notexture-flag";
+        will_submit = false;
+    }
+    else if (mode == 0)
+    {
+        will_submit = (effective_dl0 != NULL);
+        reason = will_submit ? "submit-dl" : "null-dl";
+    }
+    else if (mode == 1)
+    {
+        will_submit = (effective_dl0 != NULL) || (effective_dl1 != NULL);
+        reason = will_submit ? "submit-dls" : "null-dls";
+    }
+    else
+    {
+        will_submit = false;
+        reason = "unsupported-parts-mode";
+    }
+
+    describe_dl = (effective_dl0 != NULL) ? effective_dl0 : effective_dl1;
+    if ((describe_dl != NULL) && portRelocDescribePointer(describe_dl, &base, &resource_size, &dl_file, &path))
+    {
+        dl_off = (uintptr_t)describe_dl - base;
+    }
+    else
+    {
+        path = "(none)";
+    }
+
+    mobj = dobj->mobj;
+    while ((mobj != NULL) && (mobj_count < 32))
+    {
+        mobj_count++;
+        mobj = mobj->next;
+    }
+    mobj = dobj->mobj;
+
+    port_log("SSB64: FIGHTER_PART_AUDIT_DRAW scene=%u fkind=%d joint=%d path=%s dobj=%p dobj_flags=0x%02x parts_flags=0x%02x effective_flags=0x%02x mode=%u model_curr=%d dobj_dl=%p dl0=%p dl1=%p dl_file=%u dl_off=0x%lx dl_path=%s mobjs=%d first_mobj=%p mfmt=%d msiz=%d mflags=0x%04x tex_curr=%d tex_next=%d will_submit=%s reason=%s\n",
+        (unsigned)gSCManagerSceneData.scene_curr, fp->fkind, joint, (draw_path != NULL) ? draw_path : "?", dobj,
+        dobj->flags, parts->flags, effective_flags, mode,
+        (joint >= nFTPartsJointCommonStart) ? fp->modelpart_status[joint - nFTPartsJointCommonStart].modelpart_id_curr : -127,
+        dobj->dl, effective_dl0, effective_dl1, dl_file, (unsigned long)dl_off, (path != NULL) ? path : "(none)",
+        mobj_count, mobj, (mobj != NULL) ? mobj->sub.fmt : -1, (mobj != NULL) ? mobj->sub.siz : -1,
+        (mobj != NULL) ? mobj->sub.flags : 0, (mobj != NULL) ? mobj->texture_id_curr : -1,
+        (mobj != NULL) ? mobj->texture_id_next : -1, will_submit ? "yes" : "no", reason);
+}
 #endif
 
 // // // // // // // // // // // //
@@ -773,6 +870,24 @@ void ftDisplayMainDrawDefault(DObj *dobj)
 
     parts = ftGetParts(dobj);
 
+#ifdef PORT
+    if (parts != NULL)
+    {
+        Gfx *audit_dl0 = NULL;
+        Gfx *audit_dl1 = NULL;
+        if ((parts->flags & 0xF) == 0)
+        {
+            audit_dl0 = dobj->dl;
+        }
+        else if (((parts->flags & 0xF) == 1) && (dobj->dls != NULL))
+        {
+            audit_dl0 = PORT_RESOLVE_ARRAY(dobj->dls, 0);
+            audit_dl1 = PORT_RESOLVE_ARRAY(dobj->dls, 1);
+        }
+        portFighterAuditDraw(fp, dobj, parts, "default", parts->flags, audit_dl0, audit_dl1);
+    }
+#endif
+
     if (!(dobj->flags & DOBJ_FLAG_HIDDEN))
     {
         sp48 = gLBCommonScale;
@@ -882,6 +997,27 @@ void ftDisplayMainDrawSkeleton(DObj *dobj)
         {
             skeletons = PORT_RESOLVE(fp->attr->skeleton);
             skeleton = &((FTSkeleton*)PORT_RESOLVE(skeletons[fp->colanim.skeleton_id]))[parts->joint_id - nFTPartsJointCommonStart];
+
+#ifdef PORT
+            {
+                Gfx *audit_dl0 = NULL;
+                Gfx *audit_dl1 = NULL;
+                if ((skeleton->flags & 0xF) == 0)
+                {
+                    audit_dl0 = FTSKELETON_GET_DL(skeleton);
+                }
+                else if ((skeleton->flags & 0xF) == 1)
+                {
+                    void *audit_dls = FTSKELETON_GET_DLS(skeleton);
+                    if (audit_dls != NULL)
+                    {
+                        audit_dl0 = PORT_RESOLVE_ARRAY(audit_dls, 0);
+                        audit_dl1 = PORT_RESOLVE_ARRAY(audit_dls, 1);
+                    }
+                }
+                portFighterAuditDraw(fp, dobj, parts, "skeleton", skeleton->flags, audit_dl0, audit_dl1);
+            }
+#endif
 
             switch (skeleton->flags & 0xF)
             {

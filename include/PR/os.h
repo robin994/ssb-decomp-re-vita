@@ -905,11 +905,23 @@ extern "C"
 #endif
 	extern void* osPhysicalToVirtual(u32);
 
+#ifdef PORT
+/*
+ * Host ports do not have N64 KSEG0/KSEG1 aliases.  Applying the original
+ * subtraction/mask to a Vita pointer such as 0x86f6e6f0 produces the invalid
+ * low address 0x06f6e6f0 — exactly the recurring reloc memcpy crash signature.
+ * Keep host pointers unchanged, matching PR/R4300.h's PORT conversion macros.
+ */
+#define OS_K0_TO_PHYSICAL(x) ((u64)(x))
+#define OS_K1_TO_PHYSICAL(x) ((u64)(x))
+#define OS_PHYSICAL_TO_K0(x) ((void*)(x))
+#define OS_PHYSICAL_TO_K1(x) ((void*)(x))
+#else
 #define OS_K0_TO_PHYSICAL(x) (u32)(((char*)(x)-0x80000000))
 #define OS_K1_TO_PHYSICAL(x) (u32)(((char*)(x)-0xa0000000))
-
 #define OS_PHYSICAL_TO_K0(x) (void*)(((u32)(x) + 0x80000000))
 #define OS_PHYSICAL_TO_K1(x) (void*)(((u32)(x) + 0xa0000000))
+#endif
 
 	/* I/O operations */
 

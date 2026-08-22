@@ -20,6 +20,7 @@ extern void portFixupBitmapArray(void* bitmaps, unsigned int count);
 extern void portFixupSpriteBitmapData(void* sprite, void* bitmaps);
 extern void portDeswizzleDecodedSprite4c(void* sprite, void* bitmaps);
 extern void portFixupMObjSub(void* mobjsub);
+extern GObj *sGRWallpaperGObj; /* grwallpaper.c — for the WALLPAPER_DRAW correlation trace below */
 #endif
 
 extern void syInterpCubic(void*, void*, f32);
@@ -3261,28 +3262,59 @@ void lbCommonDrawSObjAttr(GObj* gobj)
 		{
 #ifdef PORT
 			bool sobj_trace = gcSObjTraceTake();
+			/* Diagnostic 2026-08-22: is this SObj the wallpaper created by
+			 * grWallpaperMake{Common,Sector,Static}() (see WALLPAPER_GOBJ logs
+			 * in grwallpaper.c)? If so, force the same dl_before/after capture
+			 * used by SOBJ_SUBMIT below regardless of the sobj_trace sampling
+			 * gate, which is armed on its own schedule with no reason to line
+			 * up with the one frame the wallpaper's gobj is walked. */
+			bool is_wallpaper = (gobj == sGRWallpaperGObj);
 			Gfx *dl_before_attr = NULL, *dl_after_attr = NULL, *dl_after_draw = NULL;
-			if (sobj_trace)
+			if (sobj_trace || is_wallpaper)
 			{
 				dl_before_attr = gSYTaskmanDLHeads[0];
 			}
 #endif
 			lbCommonPrepSObjAttr(gSYTaskmanDLHeads, sobj);
 #ifdef PORT
-			if (sobj_trace)
+			if (sobj_trace || is_wallpaper)
 			{
 				dl_after_attr = gSYTaskmanDLHeads[0];
 			}
 #endif
 			lbCommonPrepSObjDraw(gSYTaskmanDLHeads, sobj);
 #ifdef PORT
-			if (sobj_trace)
+			if (sobj_trace || is_wallpaper)
 			{
 				dl_after_draw = gSYTaskmanDLHeads[0];
+			}
+			if (sobj_trace)
+			{
 				port_log("SSB64: SOBJ_SUBMIT index=%d sobj=%p dl_before=%p dl_after_attr=%p dl_after_draw=%p "
 						 "commands_attr=%d commands_draw=%d\n",
 						 sobj_index, (void*)sobj, (void*)dl_before_attr, (void*)dl_after_attr, (void*)dl_after_draw,
 						 (int)(dl_after_attr - dl_before_attr), (int)(dl_after_draw - dl_after_attr));
+			}
+			/* WALLPAPER_DRAW: same correlation, capped at 8 fires total (not
+			 * per-scene) since this is a point diagnostic, not something meant
+			 * to run for a whole play session. */
+			if (is_wallpaper)
+			{
+				static int s_wallpaper_draw_log_count = 0;
+				if (s_wallpaper_draw_log_count < 8)
+				{
+					port_log("SSB64: WALLPAPER_DRAW scene=%d frame=%u gobj=%p sobj=%p "
+							 "proc_display=%p (lbCommonDrawSObjAttr=%p match=%s) "
+							 "dl_before=%p dl_after_attr=%p dl_after_draw=%p "
+							 "commands_attr=%d commands_draw=%d\n",
+							 (int)gSCManagerSceneData.scene_curr, (unsigned)dSYTaskmanFrameCount,
+							 (void*)gobj, (void*)sobj,
+							 (void*)gobj->proc_display, (void*)lbCommonDrawSObjAttr,
+							 (gobj->proc_display == lbCommonDrawSObjAttr) ? "yes" : "NO",
+							 (void*)dl_before_attr, (void*)dl_after_attr, (void*)dl_after_draw,
+							 (int)(dl_after_attr - dl_before_attr), (int)(dl_after_draw - dl_after_attr));
+					s_wallpaper_draw_log_count++;
+				}
 			}
 #endif
 			lbCommonSetExternSpriteParams(&sobj->sprite);

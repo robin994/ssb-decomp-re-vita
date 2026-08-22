@@ -1,5 +1,6 @@
 #include <ft/fighter.h>
 #ifdef PORT
+extern void port_log(const char *fmt, ...);
 extern void port_coroutine_yield(void);
 extern void portFixupStructU16(void *base, unsigned int byte_offset, unsigned int num_words);
 #endif
@@ -729,9 +730,47 @@ void sc1PTrainingModeLoadSprites(void)
 	sSC1PTrainingModeMenu.unk_trainmenu_0x38 = lbRelocGetFileData(SC1PTrainingModeSprites*, file, llSC1PTrainingMode0x1B8PosSpriteArray);
 }
 
+#ifdef PORT
+static sb32 sc1PTrainingModeUseNativePortWallpaper(s32 gkind)
+{
+#ifdef __vita__
+    /* On Vita keep the wallpaper that came with the selected stage for every
+     * stage.  The retail Training rebase path reconstructs a force-extern heap
+     * from pointer-minus-offset arithmetic; that path is fragile with host
+     * reloc tokens and was the reason port-only stages initially produced
+     * invalid/white sprites.  The native wallpaper is already loaded and
+     * fixed up correctly by the stage reloc, so use the same safe path for
+     * retail stages too. */
+    (void)gkind;
+    return TRUE;
+#else
+    return (gkind == nGRKindMetal) || (gkind == nGRKindZako) || (gkind == nGRKindLast);
+#endif
+}
+#endif
+
 // 0x8018DDB0
 void sc1PTrainingModeLoadWallpaper(void)
 {
+#ifdef PORT
+    /* The original training tables contain one entry per retail VS stage
+     * (Castle..Inishie, 9 entries).  The port exposes Metal Cavern,
+     * Battlefield and Final Destination in the CSS, whose GRKind values are
+     * 13/14/16.  Indexing the original arrays with those values reads past
+     * the tables and turns the already-valid stage wallpaper token into a
+     * bogus heap address.  Keep the native wallpaper loaded by the stage
+     * reloc instead; this also gives the port-only stages their real
+     * background in Training Mode instead of a generic training backdrop. */
+    if (sc1PTrainingModeUseNativePortWallpaper(gSCManagerBattleState->gkind))
+    {
+        Sprite *native = (Sprite*)PORT_RESOLVE(gMPCollisionGroundData->wallpaper);
+        port_log("SSB64: TRAINING_WALLPAPER native gkind=%d token=0x%08x resolved=%p\n",
+                 gSCManagerBattleState->gkind,
+                 (unsigned int)gMPCollisionGroundData->wallpaper, native);
+        return;
+    }
+#endif
+
 	Sprite *sprite = lbRelocGetFileData
 	(
 		Sprite*,
@@ -757,7 +796,17 @@ void sc1PTrainingModeLoadWallpaper(void)
 // 0x8018DE60
 void sc1PTrainingModeInitDisplayVars(void)
 {
+#ifdef PORT
+    /* Same bounds rule as sc1PTrainingModeLoadWallpaper(): for port-only
+     * stages preserve the fog colour authored in MPGroundData rather than
+     * indexing the 9-entry retail training table out of bounds. */
+    if (!sc1PTrainingModeUseNativePortWallpaper(gSCManagerBattleState->gkind))
+    {
+        gMPCollisionGroundData->fog_color = dSC1PTrainingModeWallpaperDescs[dSC1PTrainingModeWallpaperIDs[gSCManagerBattleState->gkind]].fog_color;
+    }
+#else
 	gMPCollisionGroundData->fog_color = dSC1PTrainingModeWallpaperDescs[dSC1PTrainingModeWallpaperIDs[gSCManagerBattleState->gkind]].fog_color;
+#endif
 	ifCommonPlayerMagnifyMakeInterface();
 	gIFCommonPlayerInterface.is_magnify_display = TRUE;
 }
