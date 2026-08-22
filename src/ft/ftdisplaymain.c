@@ -19,6 +19,95 @@ static u8 sPortFighterDrawAuditScene = 0xFF;
 static u64 sPortFighterDrawAuditSeenMario = 0;
 static u64 sPortFighterDrawAuditSeenFox = 0;
 
+/* v12: dump the actual runtime joint graph independently of recursive draw
+ * traversal. This decides whether a visually missing limb is absent/unlinked
+ * on the CPU side or reaches Fast3D and disappears later. */
+static u8 sPortFighterTreeAuditScene = 0xFF;
+static u32 sPortFighterTreeAuditKinds = 0;
+
+static bool portFighterTreeAuditReachable(DObj *root, DObj *node)
+{
+    DObj *walk = node;
+    s32 guard = 0;
+
+    while ((walk != NULL) && (walk != DOBJ_PARENT_NULL) && (guard++ < 64))
+    {
+        if (walk == root) return true;
+        walk = walk->parent;
+    }
+    return false;
+}
+
+static void portFighterAuditTree(FTStruct *fp, DObj *root)
+{
+    s32 joint;
+    u32 kind_bit;
+
+    if ((fp == NULL) || (root == NULL)) return;
+    if ((fp->fkind != nFTKindMario) && (fp->fkind != nFTKindFox)) return;
+
+    if (sPortFighterTreeAuditScene != gSCManagerSceneData.scene_curr)
+    {
+        sPortFighterTreeAuditScene = gSCManagerSceneData.scene_curr;
+        sPortFighterTreeAuditKinds = 0;
+    }
+
+    kind_bit = (1u << (u32)fp->fkind);
+    if ((sPortFighterTreeAuditKinds & kind_bit) != 0) return;
+    sPortFighterTreeAuditKinds |= kind_bit;
+
+    port_log("SSB64: FIGHTER_TREE_AUDIT_BEGIN scene=%u fkind=%d root=%p\n",
+        (unsigned)gSCManagerSceneData.scene_curr, fp->fkind, root);
+
+    for (joint = 0; joint < ARRAY_COUNT(fp->joints); joint++)
+    {
+        DObj *dobj = fp->joints[joint];
+        FTParts *parts = NULL;
+        uintptr_t base = 0, dl_off = 0;
+        size_t resource_size = 0;
+        u32 dl_file = 0xFFFFFFFFu;
+        const char *dl_path = "(none)";
+        bool reachable = false;
+
+        if (dobj != NULL)
+        {
+            parts = ftGetParts(dobj);
+            reachable = portFighterTreeAuditReachable(root, dobj);
+
+            if ((dobj->dl != NULL) &&
+                portRelocDescribePointer(dobj->dl, &base, &resource_size, &dl_file, &dl_path))
+            {
+                dl_off = (uintptr_t)dobj->dl - base;
+            }
+            else if (dobj->dl == NULL)
+            {
+                dl_path = "(none)";
+            }
+            else
+            {
+                dl_path = "(unregistered)";
+            }
+
+            port_log("SSB64: FIGHTER_TREE_AUDIT scene=%u fkind=%d joint=%d dobj=%p reachable=%s "
+                     "parent=%p child=%p sib_prev=%p sib_next=%p flags=0x%02x parts=%p parts_joint=%d "
+                     "parts_flags=0x%02x dl=%p dl_file=%u dl_off=0x%lx dl_path=%s\n",
+                (unsigned)gSCManagerSceneData.scene_curr, fp->fkind, joint, dobj,
+                reachable ? "yes" : "no", dobj->parent, dobj->child, dobj->sib_prev, dobj->sib_next,
+                dobj->flags, parts, (parts != NULL) ? parts->joint_id : -1,
+                (parts != NULL) ? parts->flags : 0, dobj->dl, dl_file,
+                (unsigned long)dl_off, (dl_path != NULL) ? dl_path : "(none)");
+        }
+        else
+        {
+            port_log("SSB64: FIGHTER_TREE_AUDIT scene=%u fkind=%d joint=%d dobj=(nil) reachable=no\n",
+                (unsigned)gSCManagerSceneData.scene_curr, fp->fkind, joint);
+        }
+    }
+
+    port_log("SSB64: FIGHTER_TREE_AUDIT_END scene=%u fkind=%d\n",
+        (unsigned)gSCManagerSceneData.scene_curr, fp->fkind);
+}
+
 static void portFighterAuditDraw(FTStruct *fp, DObj *dobj, FTParts *parts, const char *draw_path, u8 effective_flags,
                                  Gfx *effective_dl0, Gfx *effective_dl1)
 {
@@ -1086,6 +1175,10 @@ void ftDisplayMainDrawAll(GObj *fighter_gobj)
     FTStruct *fp = ftGetStruct(fighter_gobj);
     FTAttributes *attr = fp->attr;
     u32 *skeletons = PORT_RESOLVE(attr->skeleton);
+
+#ifdef PORT
+    portFighterAuditTree(fp, DObjGetStruct(fighter_gobj));
+#endif
 
     if
     (
