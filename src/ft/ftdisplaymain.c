@@ -6,6 +6,7 @@
 #include <sys/develop.h>
 
 #ifdef PORT
+#include <stdbool.h>
 #include <enhancements/enhancements.h>
 #include "hooks/Events.h"
 extern float port_widescreen_clip_x_scale(void);
@@ -24,6 +25,86 @@ static u64 sPortFighterDrawAuditSeenFox = 0;
  * on the CPU side or reaches Fast3D and disappears later. */
 static u8 sPortFighterTreeAuditScene = 0xFF;
 static u32 sPortFighterTreeAuditKinds = 0;
+
+/* v16: traversal audit independent of FTParts.  The v11 draw audit returns
+ * immediately when dobj->user_data/FTParts is NULL or has an invalid joint id,
+ * which made a corrupted FTParts pointer indistinguishable from a recursion
+ * chain that actually stopped.  Resolve the joint index from fp->joints[] so
+ * every DObj entry is observable even if its metadata is damaged. */
+static u8 sPortFighterTraverseAuditScene = 0xFF;
+static u64 sPortFighterTraverseSeenMario = 0;
+static u64 sPortFighterTraverseSeenFox = 0;
+
+static s32 portFighterFindJointIndex(FTStruct *fp, DObj *dobj)
+{
+    s32 joint;
+
+    if ((fp == NULL) || (dobj == NULL)) return -1;
+
+    for (joint = 0; joint < ARRAY_COUNT(fp->joints); joint++)
+    {
+        if (fp->joints[joint] == dobj) return joint;
+    }
+    return -1;
+}
+
+static s32 portFighterAuditTraverseEntry(FTStruct *fp, DObj *dobj)
+{
+    u64 *seen;
+    u64 bit;
+    s32 joint;
+    FTParts *parts;
+
+    if ((fp == NULL) || (dobj == NULL)) return -1;
+    if ((fp->fkind != nFTKindMario) && (fp->fkind != nFTKindFox)) return -1;
+
+    joint = portFighterFindJointIndex(fp, dobj);
+    if ((joint < 0) || (joint >= 64)) return joint;
+
+    if (sPortFighterTraverseAuditScene != gSCManagerSceneData.scene_curr)
+    {
+        sPortFighterTraverseAuditScene = gSCManagerSceneData.scene_curr;
+        sPortFighterTraverseSeenMario = 0;
+        sPortFighterTraverseSeenFox = 0;
+    }
+
+    seen = (fp->fkind == nFTKindFox) ? &sPortFighterTraverseSeenFox : &sPortFighterTraverseSeenMario;
+    bit = ((u64)1) << joint;
+    if ((*seen & bit) != 0) return joint;
+    *seen |= bit;
+
+    parts = ftGetParts(dobj);
+    port_log("SSB64: FIGHTER_TRAVERSE_ENTRY scene=%u fkind=%d joint=%d dobj=%p "
+             "child=%p sib_prev=%p sib_next=%p flags=0x%02x user_data=%p "
+             "parts_joint=%d parts_flags=0x%02x dl=%p mobj=%p\n",
+        (unsigned)gSCManagerSceneData.scene_curr, fp->fkind, joint, dobj,
+        dobj->child, dobj->sib_prev, dobj->sib_next, dobj->flags, dobj->user_data.p,
+        (parts != NULL) ? parts->joint_id : -999, (parts != NULL) ? parts->flags : 0,
+        dobj->dl, dobj->mobj);
+
+    return joint;
+}
+
+static void portFighterAuditTraverseMutation(FTStruct *fp, DObj *dobj, s32 joint,
+                                             DObj *child_before, DObj *sib_before,
+                                             void *user_before, u8 flags_before)
+{
+    if ((fp == NULL) || (dobj == NULL) || (joint < 0)) return;
+    if ((fp->fkind != nFTKindMario) && (fp->fkind != nFTKindFox)) return;
+
+    if ((dobj->child != child_before) || (dobj->sib_next != sib_before) ||
+        (dobj->user_data.p != user_before) || (dobj->flags != flags_before))
+    {
+        FTParts *parts = ftGetParts(dobj);
+        port_log("SSB64: FIGHTER_TRAVERSE_MUTATION scene=%u fkind=%d joint=%d dobj=%p "
+                 "child=%p->%p sib_next=%p->%p user_data=%p->%p flags=0x%02x->0x%02x "
+                 "parts_joint_now=%d\n",
+            (unsigned)gSCManagerSceneData.scene_curr, fp->fkind, joint, dobj,
+            child_before, dobj->child, sib_before, dobj->sib_next,
+            user_before, dobj->user_data.p, flags_before, dobj->flags,
+            (parts != NULL) ? parts->joint_id : -999);
+    }
+}
 
 static bool portFighterTreeAuditReachable(DObj *root, DObj *node)
 {
@@ -956,6 +1037,13 @@ void ftDisplayMainDrawDefault(DObj *dobj)
     void *dls;
     Gfx *dl0;
     Gfx *dl1;
+#ifdef PORT
+    DObj *audit_child_before = dobj->child;
+    DObj *audit_sib_before = dobj->sib_next;
+    void *audit_user_before = dobj->user_data.p;
+    u8 audit_flags_before = dobj->flags;
+    s32 audit_joint = portFighterAuditTraverseEntry(fp, dobj);
+#endif
 
     parts = ftGetParts(dobj);
 
@@ -1037,6 +1125,18 @@ void ftDisplayMainDrawDefault(DObj *dobj)
         {
             ftDisplayMainDrawAccessory(fp, dobj, parts);
         }
+#ifdef PORT
+        portFighterAuditTraverseMutation(fp, dobj, audit_joint, audit_child_before, audit_sib_before,
+                                         audit_user_before, audit_flags_before);
+        if ((fp->fkind == nFTKindFox) && (audit_joint == 8))
+        {
+            FTParts *audit_parts_now = ftGetParts(dobj);
+            port_log("SSB64: FIGHTER_TRAVERSE_PRECHILD scene=%u fkind=%d joint=8 dobj=%p child=%p "
+                     "user_data=%p parts_joint=%d flags=0x%02x\n",
+                (unsigned)gSCManagerSceneData.scene_curr, fp->fkind, dobj, dobj->child,
+                dobj->user_data.p, (audit_parts_now != NULL) ? audit_parts_now->joint_id : -999, dobj->flags);
+        }
+#endif
         if (dobj->child != NULL)
         {
             ftDisplayMainDrawDefault(dobj->child);

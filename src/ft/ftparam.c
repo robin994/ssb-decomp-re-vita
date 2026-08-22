@@ -10,6 +10,7 @@ extern void func_80026738_27338(void *arg0);
 extern alSoundEffect* func_800269C0_275C0(u16);
 
 #ifdef PORT
+#include <stdbool.h>
 extern void *portFixupFTTexturePartContainer(void *container);
 #include <port_log.h>
 #include "fighter_registry.h"
