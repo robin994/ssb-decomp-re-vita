@@ -13,6 +13,9 @@
 #include <string.h>
 #include <sc/scene.h> /* gSCManagerSceneData for VISDRAW/stage diagnostics */
 #include <gr/grdef.h>   /* nGRKindCastle / nGRKindLast */
+#ifndef SSB64_SOBJ_TRACE_DETAIL
+#define SSB64_SOBJ_TRACE_DETAIL 1
+#endif
 /* Enhanced-framerate frame interpolation recording hook — observational
  * only, near-zero cost while the feature is disabled. Tags: 0 = DObj
  * modelview, 1 = projection (possibly combined view*persp), 2 = view.
@@ -489,11 +492,15 @@ static GCVisDrawState *gcVisDrawFindFreeSlot(void)
  * mistaken for "no change" once a new DObj is allocated there. */
 void gcVisDrawForget(const void *dobj)
 {
+#if !SSB64_SOBJ_TRACE_DETAIL
+    (void)dobj;
+#else
     GCVisDrawState *state = gcVisDrawFind(dobj);
     if (state != NULL)
     {
         state->dobj = NULL;
     }
+#endif
 }
 
 extern u32 gcVisDrawGetCreatedCount(void);
@@ -515,6 +522,7 @@ static void gcVisDrawSceneTickIfChanged(void)
         return;
     }
 
+#if SSB64_SOBJ_TRACE_DETAIL
     for (i = 0; i < GC_VISDRAW_MAX; i++)
     {
         if (sGCVisDrawStates[i].dobj != NULL)
@@ -522,12 +530,16 @@ static void gcVisDrawSceneTickIfChanged(void)
             live_tracked++;
         }
     }
+#else
+    (void)i;
+#endif
 
     port_log
     (
-        "SSB64: VISDRAW_SCENE_SUMMARY scene=%d created=%u ejected=%u live=%u unique_dobjs_seen=%u "
+        "SSB64: VISDRAW_SCENE_SUMMARY scene=%d detail=%s created=%u ejected=%u live=%u unique_dobjs_seen=%u "
         "drawn=%u hidden=%u no_dv=%u no_texture=%u\n",
         sGCVisDrawLastScene,
+        SSB64_SOBJ_TRACE_DETAIL ? "on" : "off",
         gcVisDrawGetCreatedCount(), gcVisDrawGetEjectedCount(),
         gcVisDrawGetCreatedCount() - gcVisDrawGetEjectedCount(),
         live_tracked,
@@ -541,6 +553,13 @@ static void gcVisDrawSceneTickIfChanged(void)
 
 static void gcLogVisDraw(s32 reason, DObj *dobj, void *raw_dl, void *resolved_dl)
 {
+#if !SSB64_SOBJ_TRACE_DETAIL
+    (void)reason;
+    (void)dobj;
+    (void)raw_dl;
+    (void)resolved_dl;
+    return;
+#else
     GCVisDrawState *state;
     GCVisDrawState newstate;
     uintptr_t resource_base = 0;
@@ -630,6 +649,7 @@ static void gcLogVisDraw(s32 reason, DObj *dobj, void *raw_dl, void *resolved_dl
         );
         *state = newstate;
     }
+#endif
 }
 
 static void gcVisDrawCount(s32 reason)
@@ -4315,9 +4335,6 @@ void gcCaptureTaggedGObjs(GObj *camera_gobj, s32 link_id, sb32 is_tag_mask_or_id
 #endif
 #ifdef PORT
         {
-#ifndef SSB64_SOBJ_TRACE_DETAIL
-#define SSB64_SOBJ_TRACE_DETAIL 1
-#endif
         static s32 sWallpaperCaptureLogBudget = SSB64_SOBJ_TRACE_DETAIL ? 40 : 0;
         if (current_gobj == sGRWallpaperGObj && sWallpaperCaptureLogBudget > 0)
         {

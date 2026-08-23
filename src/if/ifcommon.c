@@ -16,6 +16,7 @@ extern void syAudioSetBGMVolume(u32, u32);
 #include <stddef.h>
 #include <stdbool.h>
 #include <sys/scheduler.h>
+#include "port_log.h"
 extern void func_800266A0_272A0(void);
 extern s32 func_80026594_27194(void);
 extern s32 func_800264A4_270A4(void);
@@ -522,14 +523,24 @@ ub8 sIFCommonIsAnnouncedSecond[5];
 void ifCommonPlayerDamageSetShowInterface(void)
 {
     s32 i;
+#ifdef PORT
+    s32 active_count = 0;
+#endif
 
     for (i = 0; i < ARRAY_COUNT(sIFCommonPlayerDamageInterface); i++)
     {
         if (sIFCommonPlayerDamageInterface[i].interface_gobj != NULL)
         {
             sIFCommonPlayerDamageInterface[i].is_show_interface = TRUE;
+#ifdef PORT
+            active_count++;
+#endif
         }
     }
+#ifdef PORT
+    port_log("SSB64: HUD_SHOW scene=%d frame=%u active_players=%d action=show-interface\n",
+        gSCManagerSceneData.scene_curr, (unsigned)dSYTaskmanFrameCount, active_count);
+#endif
 }
 
 // 0x8010E700 - Gets position of special character (% or H.P.) in damage display character array?
@@ -810,6 +821,7 @@ void ifCommonPlayerDamageProcDisplay(GObj *interface_gobj)
 {
 #ifdef PORT
     if (port_enhancement_is_hud_disabled()) return;
+    Gfx *hud_dl_before = gSYTaskmanDLHeads[0];
 #endif
     f32 pos_x;
     f32 scale;
@@ -823,14 +835,13 @@ void ifCommonPlayerDamageProcDisplay(GObj *interface_gobj)
     SObj *sobj, *sub_sobj;
     IFDCharacter *ifchar;
 
+    player = ifGetPlayer(interface_gobj);
     sobj = SObjGetStruct(interface_gobj);
 
     lbCommonPrepSObjAttr(gSYTaskmanDLHeads, sobj);
     lbCommonPrepSObjDraw(gSYTaskmanDLHeads, sobj);
 
     lbCommonSetExternSpriteParams(&sobj->sprite);
-
-    player = ifGetPlayer(interface_gobj);
 
     if
     (
@@ -916,6 +927,53 @@ void ifCommonPlayerDamageProcDisplay(GObj *interface_gobj)
         }
         lbCommonClearExternSpriteParams();
     }
+#ifdef PORT
+    {
+        static s32 sHUDDiagScene = -1;
+        static s8 sHUDDiagShow[GMCOMMON_PLAYERS_MAX] = { -1, -1, -1, -1 };
+        sb32 is_show = sIFCommonPlayerDamageInterface[player].is_show_interface;
+        sb32 should_log;
+
+        if (sHUDDiagScene != gSCManagerSceneData.scene_curr)
+        {
+            s32 i;
+
+            sHUDDiagScene = gSCManagerSceneData.scene_curr;
+            for (i = 0; i < ARRAY_COUNT(sHUDDiagShow); i++)
+            {
+                sHUDDiagShow[i] = -1;
+            }
+        }
+        should_log = (dSYTaskmanFrameCount < 8) ||
+                     ((dSYTaskmanFrameCount % 300) == 0) ||
+                     (sHUDDiagShow[player] != is_show);
+
+        if (should_log)
+        {
+            SObj *emblem_sobj = SObjGetStruct(interface_gobj);
+            Bitmap *bitmap = (Bitmap*)PORT_RESOLVE(emblem_sobj->sprite.bitmap);
+
+            port_log("SSB64: HUD_PLAYER_DRAW scene=%d frame=%u player=%d gobj=%p hidden=%s "
+                     "camera_tag=0x%x show=%s stock=%d dead_wait=%d dl0_commands=%d "
+                     "emblem=%p attr=0x%x size=%ux%u nbitmaps=%u bitmap=%p\n",
+                gSCManagerSceneData.scene_curr, (unsigned)dSYTaskmanFrameCount, player,
+                (void*)interface_gobj,
+                (interface_gobj->flags & GOBJ_FLAG_HIDDEN) ? "yes" : "no",
+                (unsigned)interface_gobj->camera_tag,
+                is_show ? "yes" : "no",
+                gSCManagerBattleState->players[player].stock_count,
+                sIFCommonPlayerDamageInterface[player].dead_stopupdate_wait,
+                (int)(gSYTaskmanDLHeads[0] - hud_dl_before),
+                (void*)emblem_sobj,
+                (unsigned)emblem_sobj->sprite.attr,
+                (unsigned)emblem_sobj->sprite.width,
+                (unsigned)emblem_sobj->sprite.height,
+                (unsigned)emblem_sobj->sprite.nbitmaps,
+                (void*)bitmap);
+        }
+        sHUDDiagShow[player] = is_show;
+    }
+#endif
 }
 
 // 0x8010F334
@@ -1023,6 +1081,20 @@ void ifCommonPlayerDamageInitInterface(void)
             sIFCommonPlayerDamageInterface[player].is_update_anim = FALSE;
             sIFCommonPlayerDamageInterface[player].dead_stopupdate_wait = 180;
             sIFCommonPlayerDamageInterface[player].is_show_interface = FALSE;
+
+#ifdef PORT
+            port_log("SSB64: HUD_PLAYER_INIT scene=%d frame=%u player=%d gobj=%p pos=(%d,%d) "
+                     "stock=%d emblem_attr=0x%x emblem_size=%ux%u emblem_nbitmaps=%u emblem_bitmap=%p\n",
+                gSCManagerSceneData.scene_curr, (unsigned)dSYTaskmanFrameCount, player,
+                (void*)interface_gobj,
+                gIFCommonPlayerInterface.player_pos_x[player], gIFCommonPlayerInterface.player_pos_y,
+                gSCManagerBattleState->players[player].stock_count,
+                (unsigned)SObjGetStruct(interface_gobj)->sprite.attr,
+                (unsigned)SObjGetStruct(interface_gobj)->sprite.width,
+                (unsigned)SObjGetStruct(interface_gobj)->sprite.height,
+                (unsigned)SObjGetStruct(interface_gobj)->sprite.nbitmaps,
+                (void*)PORT_RESOLVE(SObjGetStruct(interface_gobj)->sprite.bitmap));
+#endif
 
             ifSetPlayer(interface_gobj, player); // Cast is probably redundant but I don't want any compilers screaming at me
 

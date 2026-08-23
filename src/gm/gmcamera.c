@@ -6,6 +6,8 @@
 #include <sys/rdp.h>
 #ifdef PORT
 #include <sys/debug.h>
+#include <sys/taskman.h>
+#include "port_log.h"
 /* Enhanced-framerate frame interpolation recording hook — observational
  * only. Tag 1 = projection-stack matrix (combined view*persp here).
  * See port/interpolation/frame_interpolation.h. */
@@ -1499,6 +1501,67 @@ void gmCameraMakePlayerArrowsCamera(void)
 }
 
 // 0x8010E374
+#ifdef PORT
+static void gmCameraInterfaceProcDisplay(GObj *camera_gobj)
+{
+    Gfx *dl_before[ARRAY_COUNT(gSYTaskmanDLHeads)];
+    GObj *interface_gobj;
+    s32 link23_count = 0;
+    s32 link23_visible = 0;
+    s32 link24_count = 0;
+    s32 link24_visible = 0;
+    s32 i;
+    sb32 should_log = (dSYTaskmanFrameCount < 8) || ((dSYTaskmanFrameCount % 300) == 0);
+
+    if (!should_log)
+    {
+        lbCommonDrawSprite(camera_gobj);
+        return;
+    }
+
+    for (i = 0; i < ARRAY_COUNT(gSYTaskmanDLHeads); i++)
+    {
+        dl_before[i] = gSYTaskmanDLHeads[i];
+    }
+    for (interface_gobj = gGCCommonDLLinks[23]; interface_gobj != NULL; interface_gobj = interface_gobj->dl_link_next)
+    {
+        link23_count++;
+        if (!(interface_gobj->flags & GOBJ_FLAG_HIDDEN) && (camera_gobj->camera_tag & interface_gobj->camera_tag))
+        {
+            link23_visible++;
+        }
+    }
+    for (interface_gobj = gGCCommonDLLinks[24]; interface_gobj != NULL; interface_gobj = interface_gobj->dl_link_next)
+    {
+        link24_count++;
+        if (!(interface_gobj->flags & GOBJ_FLAG_HIDDEN) && (camera_gobj->camera_tag & interface_gobj->camera_tag))
+        {
+            link24_visible++;
+        }
+    }
+
+    /* Keep the original N64 sprite-camera contract intact. In particular,
+     * lbCommonDrawSprite does not rewrite the taskman's secondary-DL branch
+     * graph after drawing an overlay. */
+    lbCommonDrawSprite(camera_gobj);
+
+    {
+        CObj *cobj = CObjGetStruct(camera_gobj);
+
+        port_log("SSB64: HUD_CAMERA_DRAW scene=%d frame=%u camera=%p flags=0x%x mask=0x%llx "
+                 "link23=%d/%d link24=%d/%d dl_commands=(%d,%d,%d,%d)\n",
+            gSCManagerSceneData.scene_curr, (unsigned)dSYTaskmanFrameCount,
+            (void*)camera_gobj, (unsigned)cobj->flags,
+            (unsigned long long)camera_gobj->camera_mask,
+            link23_visible, link23_count, link24_visible, link24_count,
+            (int)(gSYTaskmanDLHeads[0] - dl_before[0]),
+            (int)(gSYTaskmanDLHeads[1] - dl_before[1]),
+            (int)(gSYTaskmanDLHeads[2] - dl_before[2]),
+            (int)(gSYTaskmanDLHeads[3] - dl_before[3]));
+    }
+}
+#endif
+
 GObj* gmCameraMakeInterfaceCamera(void)
 {
     GObj *camera_gobj = gcMakeCameraGObj
@@ -1507,7 +1570,11 @@ GObj* gmCameraMakeInterfaceCamera(void)
         NULL,
         nGCCommonLinkIDCamera,
         GOBJ_PRIORITY_DEFAULT,
+#ifdef PORT
+        gmCameraInterfaceProcDisplay,
+#else
         lbCommonDrawSprite,
+#endif
         20,
         COBJ_MASK_DLLINK(24) | COBJ_MASK_DLLINK(23),
         ~0,

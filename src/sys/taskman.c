@@ -32,6 +32,10 @@ extern char *getenv(const char *name); /* decomp include/stdlib.h shadows the ho
  * but reserve a Vita-only redzone behind every DL/RDP buffer so modest
  * overruns are contained rather than corrupting adjacent state. */
 #define PORT_VITA_DL_REDZONE_BYTES (8u * 1024u)
+extern u8 port_diag_get_scene_curr(void);
+extern u8 port_diag_get_stage_kind(void);
+extern u32 portRelocGetLifetimeGeneration(void);
+
 static void *syTaskmanAllocGuardedBuffer(size_t logical_size, u32 align)
 {
     size_t physical_size = logical_size;
@@ -263,6 +267,117 @@ void (*sSYTaskmanFuncController)(void);
 // 0x8004666C
 SYTaskCallback D_8004666C;  // function pointer?
 
+#ifdef __vita__
+/* The 300-frame renderer totals are not aligned to scene transitions, so they
+ * cannot distinguish a broken first entry from a good reload.  Keep one
+ * compact structural signature for each of the first eight scene frames.
+ * It records every camera stitch point plus the final four DL-buffer shapes,
+ * without logging every camera/GObj and saturating the asynchronous logger. */
+static u32 sVitaTaskmanStitchCount;
+static u32 sVitaTaskmanStitchDiffs;
+static u32 sVitaTaskmanSealCount;
+static u64 sVitaTaskmanStitchSignature;
+
+static u32 syTaskmanVitaDLCommandOffset(s32 dl_id, const Gfx *ptr)
+{
+	const Gfx *start = sSYTaskmanDLBuffers[gSYTaskmanTaskID][dl_id].start;
+
+	if ((start == NULL) || (ptr == NULL) || (ptr < start))
+	{
+		return 0xFFFFFFFFU;
+	}
+	return (u32)(ptr - start);
+}
+
+static void syTaskmanVitaHashU32(u32 value)
+{
+	s32 i;
+
+	for (i = 0; i < 4; i++)
+	{
+		sVitaTaskmanStitchSignature ^= (u8)(value >> (i * 8));
+		sVitaTaskmanStitchSignature *= 1099511628211ULL;
+	}
+}
+
+static u64 syTaskmanVitaDLOpcodeHash(s32 dl_id)
+{
+	const Gfx *start = sSYTaskmanDLBuffers[gSYTaskmanTaskID][dl_id].start;
+	u32 count = syTaskmanVitaDLCommandOffset(dl_id, gSYTaskmanDLHeads[dl_id]);
+	u32 alloc_count = (u32)(sSYTaskmanDLBuffers[gSYTaskmanTaskID][dl_id].length / sizeof(Gfx));
+	u64 hash = 1469598103934665603ULL;
+	u32 i;
+
+	if ((start == NULL) || (count == 0xFFFFFFFFU) || (count > alloc_count))
+	{
+		return 0;
+	}
+	for (i = 0; i < count; i++)
+	{
+		hash ^= (u8)(start[i].words.w0 >> 24);
+		hash *= 1099511628211ULL;
+	}
+	return hash;
+}
+
+static void syTaskmanVitaResetStitchSignature(void)
+{
+	sVitaTaskmanStitchCount = 0;
+	sVitaTaskmanStitchDiffs = 0;
+	sVitaTaskmanSealCount = 0;
+	sVitaTaskmanStitchSignature = 1469598103934665603ULL;
+}
+
+static void syTaskmanVitaRecordStitch(s32 diffs)
+{
+	s32 i;
+
+	if (dSYTaskmanFrameCount >= 8)
+	{
+		return;
+	}
+	if (sVitaTaskmanStitchCount < 8)
+	{
+		sVitaTaskmanStitchDiffs |= ((u32)diffs & 0xFU) << (sVitaTaskmanStitchCount * 4);
+	}
+	syTaskmanVitaHashU32((u32)diffs);
+	for (i = 0; i < 4; i++)
+	{
+		syTaskmanVitaHashU32(syTaskmanVitaDLCommandOffset(i, gSYTaskmanDLHeads[i]));
+	}
+	sVitaTaskmanStitchCount++;
+}
+
+static void syTaskmanVitaLogSeal(s32 diffs, s32 dl_id, const Gfx *root)
+{
+	if (dSYTaskmanFrameCount >= 8)
+	{
+		return;
+	}
+	port_log("SSB64: TASK_SEAL scene=%u stage=%u frame=%u generation=%u task=%d seal=%u "
+	         "phases=%u phase_diffs=0x%08x phase_sig=%016llx final_diffs=0x%x "
+	         "used=%u,%u,%u,%u branch=%u,%u,%u,%u op_hash=%016llx,%016llx,%016llx,%016llx "
+	         "root_list=%d root_off=%u root=%p\n",
+	         (u32)port_diag_get_scene_curr(), (u32)port_diag_get_stage_kind(),
+	         dSYTaskmanFrameCount, portRelocGetLifetimeGeneration(), gSYTaskmanTaskID,
+	         sVitaTaskmanSealCount++, sVitaTaskmanStitchCount, sVitaTaskmanStitchDiffs,
+	         (unsigned long long)sVitaTaskmanStitchSignature, (u32)diffs,
+	         syTaskmanVitaDLCommandOffset(0, gSYTaskmanDLHeads[0]),
+	         syTaskmanVitaDLCommandOffset(1, gSYTaskmanDLHeads[1]),
+	         syTaskmanVitaDLCommandOffset(2, gSYTaskmanDLHeads[2]),
+	         syTaskmanVitaDLCommandOffset(3, gSYTaskmanDLHeads[3]),
+	         syTaskmanVitaDLCommandOffset(0, sSYTaskmanDLBranches[0]),
+	         syTaskmanVitaDLCommandOffset(1, sSYTaskmanDLBranches[1]),
+	         syTaskmanVitaDLCommandOffset(2, sSYTaskmanDLBranches[2]),
+	         syTaskmanVitaDLCommandOffset(3, sSYTaskmanDLBranches[3]),
+	         (unsigned long long)syTaskmanVitaDLOpcodeHash(0),
+	         (unsigned long long)syTaskmanVitaDLOpcodeHash(1),
+	         (unsigned long long)syTaskmanVitaDLOpcodeHash(2),
+	         (unsigned long long)syTaskmanVitaDLOpcodeHash(3),
+	         dl_id, syTaskmanVitaDLCommandOffset(dl_id, root), root);
+}
+#endif
+
 // // // // // // // // // // // //
 //                               //
 //           FUNCTIONS           //
@@ -370,6 +485,10 @@ void syTaskmanSetDLBuffer(SYTaskmanDLBuffer (*src)[4])
 void func_80004AB0()
 {
 	s32 i;
+
+#ifdef __vita__
+	syTaskmanVitaResetStitchSignature();
+#endif
 
 	for (i = 0; i < (ARRAY_COUNT(gSYTaskmanDLHeads) + ARRAY_COUNT(sSYTaskmanDLBranches) + ARRAY_COUNT(sSYTaskmanDLBuffers[0])) / 3; i++)
 	{
@@ -847,6 +966,9 @@ void func_800053CC()
 		cmdPtr = gSYTaskmanDLHeads[dl_id];
 		gSPDisplayList(gSYTaskmanDLHeads[dl_id]++, sSYTaskmanRdpResetDL);
 		gSPBranchList(gSYTaskmanDLHeads[dl_id]++, sSYTaskmanDLBranches[dl_id]);
+#ifdef __vita__
+		syTaskmanVitaLogSeal(diffs, dl_id, cmdPtr);
+#endif
 		func_80005240(a0, (u64*)cmdPtr);
 
 		sSYTaskmanDLBranches[0] = gSYTaskmanDLHeads[0];
@@ -876,6 +998,9 @@ void syTaskmanUpdateDLBuffers(void)
 			diffs |= 8;
 		}
 	}
+#ifdef __vita__
+	syTaskmanVitaRecordStitch(diffs);
+#endif
 	if (diffs != 0)
 	{
 		if (diffs & 1)
