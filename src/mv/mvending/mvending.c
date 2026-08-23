@@ -170,10 +170,15 @@ void mvEndingMakeRoomBackground(void)
     sMVEndingRoomBackgroundGObj = gobj = gcMakeGObjSPAfter(0, NULL, 17, GOBJ_PRIORITY_DEFAULT);
 
 #ifdef PORT
-    gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVEndingFiles[0], llMVCommonRoomBackgroundDObjDesc), NULL);
+    if (!gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVEndingFiles[0], llMVCommonRoomBackgroundDObjDesc), NULL, nGCModelDisplayKindDLLinks))
 #else
-    gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVEndingFiles[0], &llMVCommonRoomBackgroundDObjDesc), NULL);
+    if (!gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVEndingFiles[0], &llMVCommonRoomBackgroundDObjDesc), NULL, nGCModelDisplayKindDLLinks))
 #endif
+    {
+        gcEjectGObj(gobj);
+        sMVEndingRoomBackgroundGObj = NULL;
+        return;
+    }
     gcAddGObjDisplay(gobj, gcDrawDObjTreeDLLinksForGObj, 29, GOBJ_PRIORITY_DEFAULT, ~0);
 #ifdef PORT
     gcAddMObjAll(gobj, lbRelocGetFileData(MObjSub***, sMVEndingFiles[0], llMVCommonRoomBackgroundMObjSub));
@@ -193,10 +198,15 @@ void mvEndingMakeRoomDesk(void)
     sMVEndingRoomDeskGObj = gobj = gcMakeGObjSPAfter(0, NULL, 17, GOBJ_PRIORITY_DEFAULT);
 
 #ifdef PORT
-    gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVEndingFiles[0], llMVCommonRoomDeskDObjDesc), NULL);
+    if (!gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVEndingFiles[0], llMVCommonRoomDeskDObjDesc), NULL, nGCModelDisplayKindDObj))
 #else
-    gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVEndingFiles[0], &llMVCommonRoomDeskDObjDesc), NULL);
+    if (!gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVEndingFiles[0], &llMVCommonRoomDeskDObjDesc), NULL, nGCModelDisplayKindDObj))
 #endif
+    {
+        gcEjectGObj(gobj);
+        sMVEndingRoomDeskGObj = NULL;
+        return;
+    }
     gcAddGObjDisplay(gobj, gcDrawDObjTreeForGObj, 29, GOBJ_PRIORITY_DEFAULT, ~0);
 }
 
@@ -208,10 +218,15 @@ void mvEndingMakeRoomBooks(void)
     sMVEndingRoomBooksGObj = gobj = gcMakeGObjSPAfter(0, NULL, 17, GOBJ_PRIORITY_DEFAULT);
 
 #ifdef PORT
-    gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVEndingFiles[0], llMVCommonRoomBooksDObjDesc), NULL);
+    if (!gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVEndingFiles[0], llMVCommonRoomBooksDObjDesc), NULL, nGCModelDisplayKindDObj))
 #else
-    gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVEndingFiles[0], &llMVCommonRoomBooksDObjDesc), NULL);
+    if (!gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVEndingFiles[0], &llMVCommonRoomBooksDObjDesc), NULL, nGCModelDisplayKindDObj))
 #endif
+    {
+        gcEjectGObj(gobj);
+        sMVEndingRoomBooksGObj = NULL;
+        return;
+    }
     gcAddGObjDisplay(gobj, gcDrawDObjTreeForGObj, 29, GOBJ_PRIORITY_DEFAULT, ~0);
 #ifdef PORT
     gcAddAnimJointAll(gobj, lbRelocGetFileData(AObjEvent32**, sMVEndingFiles[0], llMVCommonRoomBooksAnimJoint), 300.0F);
@@ -229,10 +244,15 @@ void mvEndingMakeRoomPencils(void)
     sMVEndingRoomPencilsGObj = gobj = gcMakeGObjSPAfter(0, NULL, 17, GOBJ_PRIORITY_DEFAULT);
 
 #ifdef PORT
-    gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVEndingFiles[0], llMVCommonRoomPencilsDObjDesc), NULL);
+    if (!gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVEndingFiles[0], llMVCommonRoomPencilsDObjDesc), NULL, nGCModelDisplayKindDObj))
 #else
-    gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVEndingFiles[0], &llMVCommonRoomPencilsDObjDesc), NULL);
+    if (!gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVEndingFiles[0], &llMVCommonRoomPencilsDObjDesc), NULL, nGCModelDisplayKindDObj))
 #endif
+    {
+        gcEjectGObj(gobj);
+        sMVEndingRoomPencilsGObj = NULL;
+        return;
+    }
     gcAddGObjDisplay(gobj, gcDrawDObjTreeForGObj, 29, GOBJ_PRIORITY_DEFAULT, ~0);
 #ifdef PORT
     gcAddAnimJointAll(gobj, lbRelocGetFileData(AObjEvent32**, sMVEndingFiles[0], llMVCommonRoomPencilsAnimJoint), 300.0F);
@@ -250,10 +270,15 @@ void mvEndingMakeRoomLamp(void)
     sMVEndingRoomLampGObj = gobj = gcMakeGObjSPAfter(0, NULL, 17, GOBJ_PRIORITY_DEFAULT);
 
 #ifdef PORT
-    gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVEndingFiles[0], llMVCommonRoomLampDObjDesc), NULL);
+    if (!gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVEndingFiles[0], llMVCommonRoomLampDObjDesc), NULL, nGCModelDisplayKindDObj))
 #else
-    gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVEndingFiles[0], &llMVCommonRoomLampDObjDesc), NULL);
+    if (!gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVEndingFiles[0], &llMVCommonRoomLampDObjDesc), NULL, nGCModelDisplayKindDObj))
 #endif
+    {
+        gcEjectGObj(gobj);
+        sMVEndingRoomLampGObj = NULL;
+        return;
+    }
     gcAddGObjDisplay(gobj, gcDrawDObjTreeForGObj, 29, GOBJ_PRIORITY_DEFAULT, ~0);
 #ifdef PORT
     gcAddAnimJointAll(gobj, lbRelocGetFileData(AObjEvent32**, sMVEndingFiles[0], llMVCommonRoomLampAnimJoint), 300.0F);

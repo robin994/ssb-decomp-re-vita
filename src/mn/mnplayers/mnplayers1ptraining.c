@@ -2861,7 +2861,11 @@ void mnPlayers1PTrainingMakeSpotlight(void)
 	for (i = 0; i < ARRAY_COUNT(sMNPlayers1PTrainingSlots); i++)
 	{
 		GObj *gobj = gcMakeGObjSPAfter(0, NULL, 21, GOBJ_PRIORITY_DEFAULT);
-		gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMNPlayers1PTrainingFiles[7], llMNPlayersSpotlightDObjDesc), 0);
+		if (!gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMNPlayers1PTrainingFiles[7], llMNPlayersSpotlightDObjDesc), 0, nGCModelDisplayKindDLLinks))
+		{
+			gcEjectGObj(gobj);
+			return;
+		}
 		gcAddGObjDisplay(gobj, gcDrawDObjTreeDLLinksForGObj, 9, GOBJ_PRIORITY_DEFAULT, ~0);
 
 		gobj->user_data.s = i;

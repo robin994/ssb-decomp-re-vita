@@ -85,7 +85,7 @@ GObj* grZebesMakeAcid(void)
     gGRCommonStruct.zebes.map_gobj = map_gobj;
 
     gcAddGObjDisplay(map_gobj, gcDrawDObjTreeDLLinksForGObj, 12, GOBJ_PRIORITY_DEFAULT, ~0);
-    gcSetupCustomDObjs
+    if (!gcSetupCustomDObjs
     (
         map_gobj, 
 #ifdef PORT
@@ -96,8 +96,14 @@ GObj* grZebesMakeAcid(void)
         NULL, 
         nGCMatrixKindTra, 
         nGCMatrixKindNull,
-        nGCMatrixKindNull
-    );
+        nGCMatrixKindNull,
+        nGCModelDisplayKindDLLinks
+    ))
+    {
+        gcEjectGObj(map_gobj);
+        gGRCommonStruct.zebes.map_gobj = NULL;
+        return NULL;
+    }
 #ifdef PORT
     gcAddMObjAll(map_gobj, lbRelocGetFileData(MObjSub***, map_head, llGRZebesMapAcidMObjSub));
 #else

@@ -209,7 +209,11 @@ void mvOpeningRunMakeCrash(void)
 {
 	GObj *gobj = gcMakeGObjSPAfter(0, NULL, 19, GOBJ_PRIORITY_DEFAULT);
 
-	gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVOpeningRunFiles[2], llMVOpeningRunCrashDObjDesc), NULL);
+	if (!gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVOpeningRunFiles[2], llMVOpeningRunCrashDObjDesc), NULL, nGCModelDisplayKindDObj))
+	{
+		gcEjectGObj(gobj);
+		return;
+	}
 	gcAddGObjDisplay(gobj, gcDrawDObjTreeForGObj, 6, GOBJ_PRIORITY_DEFAULT, ~0);
 
 	DObjGetStruct(gobj)->translate.vec.f.x = 960.0F;

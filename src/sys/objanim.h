@@ -130,8 +130,15 @@ extern DObj* gcAddSiblingForDObjTraRotSca(DObj *dobj, void *dvar);
 // Add child with Transform, Rotate and Scale XObjes for specific DObj
 extern DObj* gcAddChildForDObjTraRotSca(DObj *dobj, void *dvar);
 
+typedef enum GCModelDisplayKind
+{
+    nGCModelDisplayKindNone,
+    nGCModelDisplayKindDObj,
+    nGCModelDisplayKindDLLinks
+} GCModelDisplayKind;
+
 // Set up DObj node tree with common XObj transformations for GObj
-extern void gcSetupCommonDObjs(GObj *gobj, DObjDesc *dobjdesc, DObj **dobjs);
+extern sb32 gcSetupCommonDObjs(GObj *gobj, DObjDesc *dobjdesc, DObj **dobjs, GCModelDisplayKind display_kind);
 
 // Add three XObjes of transformation kind for specific DObj
 extern void gcAddDObj3TransformsKind(DObj *dobj, u8 tk1, u8 tk2, u8 tk3);
@@ -140,19 +147,24 @@ extern void gcAddDObj3TransformsKind(DObj *dobj, u8 tk1, u8 tk2, u8 tk3);
 extern void gcDecideDObj3TransformsKind(DObj *dobj, u8 tk1, u8 tk2, u8 tk3, s32 flags);
 
 // Set up DObj node tree with custom XObj transformations for GObj
-extern void gcSetupCustomDObjs(GObj *gobj, DObjDesc *dobjdesc, DObj **dobjs, u8 tk1, u8 tk2, u8 tk3);
+extern sb32 gcSetupCustomDObjs(GObj *gobj, DObjDesc *dobjdesc, DObj **dobjs, u8 tk1, u8 tk2, u8 tk3, GCModelDisplayKind display_kind);
 
 // Set up DObj node tree with MObj and custom XObj transformations for GObj
-extern void gcSetupCustomDObjsWithMObj
+extern sb32 gcSetupCustomDObjsWithMObj
 (
     GObj *gobj, 
     DObjDesc *dobjdesc, 
     MObjSub ***p_mobjsubs, 
     DObj **dobjs, 
-    u8 tk1, 
-    u8 tk2, 
-    u8 tk3
+    u8 tk1,
+    u8 tk2,
+    u8 tk3,
+    GCModelDisplayKind display_kind
 );
+
+#ifdef PORT
+extern sb32 gcPortValidateDObjDLLinkArray(DObjDLLink *dl_links, const char *context);
+#endif
 
 // Add MObj for all DObjs on a GObj
 extern void gcAddMObjAll(GObj *gobj, MObjSub ***p_mobjsubs);

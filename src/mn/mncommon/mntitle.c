@@ -1115,7 +1115,12 @@ void mnTitleMakeLogo(void)
 	else
 	{
 		animated_logo_gobj = gcMakeGObjSPAfter(7, NULL, 7, GOBJ_PRIORITY_DEFAULT);
-		gcSetupCommonDObjs(animated_logo_gobj, lbRelocGetFileData(DObjDesc*, sMNTitleFiles[0], llMNTitleLogoDObjDesc), 0);
+		if (!gcSetupCommonDObjs(animated_logo_gobj, lbRelocGetFileData(DObjDesc*, sMNTitleFiles[0], llMNTitleLogoDObjDesc), 0, nGCModelDisplayKindNone))
+		{
+			gcEjectGObj(animated_logo_gobj);
+			mnTitleMakeLogoNoOpening();
+			return;
+		}
 		gcAddAnimJointAll(animated_logo_gobj, lbRelocGetFileData(AObjEvent32**, sMNTitleFiles[0], llMNTitleLogoAnimJoint), 0.0F);
 		gcPlayAnimAll(animated_logo_gobj);
 
@@ -1207,7 +1212,11 @@ void mnTitleMakeLabels(void)
 	DObj *animation_dobj;
 
 	animation_gobj = gcMakeGObjSPAfter(10, NULL, 8, GOBJ_PRIORITY_DEFAULT);
-	gcSetupCommonDObjs(animation_gobj, lbRelocGetFileData(DObjDesc*, sMNTitleFiles[0], llMNTitleLabelsDObjDesc), 0);
+	if (!gcSetupCommonDObjs(animation_gobj, lbRelocGetFileData(DObjDesc*, sMNTitleFiles[0], llMNTitleLabelsDObjDesc), 0, nGCModelDisplayKindNone))
+	{
+		gcEjectGObj(animation_gobj);
+		return;
+	}
 	gcAddAnimJointAll(animation_gobj, lbRelocGetFileData(AObjEvent32**, sMNTitleFiles[0], llMNTitleLabelsAnimJoint), 0.0F);
 	gcPlayAnimAll(animation_gobj);
 
@@ -1261,7 +1270,11 @@ void mnTitleMakePressStart(void)
 	SObj *press_start_sobj;
 
 	press_start_anim_gobj = gcMakeGObjSPAfter(10, NULL, 8, GOBJ_PRIORITY_DEFAULT);
-	gcSetupCommonDObjs(press_start_anim_gobj, lbRelocGetFileData(DObjDesc*, sMNTitleFiles[0], llMNTitlePressStartDObjDesc), 0);
+	if (!gcSetupCommonDObjs(press_start_anim_gobj, lbRelocGetFileData(DObjDesc*, sMNTitleFiles[0], llMNTitlePressStartDObjDesc), 0, nGCModelDisplayKindNone))
+	{
+		gcEjectGObj(press_start_anim_gobj);
+		return;
+	}
 	gcAddAnimJointAll(press_start_anim_gobj, lbRelocGetFileData(AObjEvent32**, sMNTitleFiles[0], llMNTitlePressStartAnimJoint), 0.0F);
 	gcPlayAnimAll(press_start_anim_gobj);
 
@@ -1319,7 +1332,7 @@ void mnTitleMakeSlash(void)
 	{
 		gobj = gcMakeGObjSPAfter(12, NULL, 14, GOBJ_PRIORITY_DEFAULT);
 		gcAddGObjDisplay(gobj, gcDrawDObjTreeDLLinksForGObj, 2, GOBJ_PRIORITY_DEFAULT, ~0);
-		gcSetupCustomDObjsWithMObj
+		if (!gcSetupCustomDObjsWithMObj
 		(
 			gobj,
 			lbRelocGetFileData(DObjDesc*, sMNTitleFiles[0], llMNTitleSlashDObjDesc),
@@ -1327,8 +1340,13 @@ void mnTitleMakeSlash(void)
 			NULL,
 			nGCMatrixKindTraRotRpyRSca,
 			nGCMatrixKindNull,
-			nGCMatrixKindNull
-		);
+			nGCMatrixKindNull,
+			nGCModelDisplayKindDLLinks
+		))
+		{
+			gcEjectGObj(gobj);
+			return;
+		}
 		gcAddAnimJointAll(gobj, lbRelocGetFileData(AObjEvent32**, sMNTitleFiles[0], llMNTitleSlashAnimJoint), 0.0F);
 		gcAddMatAnimJointAll(gobj, lbRelocGetFileData(AObjEvent32***, sMNTitleFiles[0], llMNTitleSlashMatAnimJoint), 0.0F);
 		gcPlayAnimAll(gobj);
@@ -1338,7 +1356,12 @@ void mnTitleMakeSlash(void)
 #if defined(REGION_JP)
 	gobj = gcMakeGObjSPAfter(12, NULL, 13, GOBJ_PRIORITY_DEFAULT);
 	gcAddGObjDisplay(gobj, gcDrawDObjTreeDLLinksForGObj, 2, GOBJ_PRIORITY_DEFAULT, ~0);
-	gcSetupCustomDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMNTitleFiles[0], llMNTitleUnknownDObjDesc), NULL, nGCMatrixKindTraRotRpyRSca, nGCMatrixKindNull, nGCMatrixKindNull);
+	if (!gcSetupCustomDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMNTitleFiles[0], llMNTitleUnknownDObjDesc),
+		NULL, nGCMatrixKindTraRotRpyRSca, nGCMatrixKindNull, nGCMatrixKindNull, nGCModelDisplayKindDLLinks))
+	{
+		gcEjectGObj(gobj);
+		return;
+	}
 	gcAddAnimJointAll(gobj, lbRelocGetFileData(AObjEvent32**, sMNTitleFiles[0], llMNTitleUnknownAnimJoint), 0.0F);
 	gcPlayAnimAll(gobj);
 	gcAddGObjProcess(gobj, mnTitleSlashProcUpdate, nGCProcessKindFunc, 1);
@@ -1500,7 +1523,11 @@ void mnTitleMakeLogoFireParticles(void)
 	{
 		logo_fire_effect_gobj = gcMakeGObjSPAfter(14, NULL, 5, GOBJ_PRIORITY_DEFAULT);
 
-		gcSetupCommonDObjs(logo_fire_effect_gobj, lbRelocGetFileData(DObjDesc*, sMNTitleFiles[0], llMNTitleFireDObjDesc), NULL);
+		if (!gcSetupCommonDObjs(logo_fire_effect_gobj, lbRelocGetFileData(DObjDesc*, sMNTitleFiles[0], llMNTitleFireDObjDesc), NULL, nGCModelDisplayKindNone))
+		{
+			gcEjectGObj(logo_fire_effect_gobj);
+			return;
+		}
 		gcAddAnimJointAll(logo_fire_effect_gobj, lbRelocGetFileData(AObjEvent32**, sMNTitleFiles[0], llMNTitleFireAnimJoint), 0.0F);
 		gcPlayAnimAll(logo_fire_effect_gobj);
 		gcAddGObjProcess(logo_fire_effect_gobj, gcPlayAnimAll, nGCProcessKindFunc, 1);

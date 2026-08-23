@@ -2648,7 +2648,11 @@ void mnPlayers1PBonusMakeSpotlight(void)
 {
 	GObj *gobj = gcMakeGObjSPAfter(0, NULL, 21, GOBJ_PRIORITY_DEFAULT);
 
-	gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMNPlayers1PBonusFiles[10], llMNPlayersSpotlightDObjDesc), NULL);
+	if (!gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMNPlayers1PBonusFiles[10], llMNPlayersSpotlightDObjDesc), NULL, nGCModelDisplayKindDLLinks))
+	{
+		gcEjectGObj(gobj);
+		return;
+	}
 	gcAddGObjDisplay(gobj, gcDrawDObjTreeDLLinksForGObj, 9, GOBJ_PRIORITY_DEFAULT, ~0);
 	gcAddMObjAll(gobj, lbRelocGetFileData(MObjSub***, sMNPlayers1PBonusFiles[10], llMNPlayersSpotlightMObjSub));
 	gcAddGObjProcess(gobj, mnPlayers1PBonusSpotlightProcUpdate, nGCProcessKindFunc, 1);

@@ -703,7 +703,11 @@ void mnVSResultsMakeEmblem(void)
 		if (port_fighter_results_emblem(win_fkind, &p_dobj, &p_mobj, &p_matanim))
 		{
 			gobj = gcMakeGObjSPAfter(0, NULL, 23, GOBJ_PRIORITY_DEFAULT);
-			gcSetupCommonDObjs(gobj, (DObjDesc *)p_dobj, NULL);
+			if (!gcSetupCommonDObjs(gobj, (DObjDesc *)p_dobj, NULL, nGCModelDisplayKindDObj))
+			{
+				gcEjectGObj(gobj);
+				return;
+			}
 			gcAddGObjDisplay(gobj, gcDrawDObjTreeForGObj, 33, GOBJ_PRIORITY_DEFAULT, ~0);
 			gcAddMObjAll(gobj, (MObjSub ***)p_mobj);
 			gcAddMatAnimJointAll(gobj, (AObjEvent32 ***)p_matanim, color);
@@ -720,7 +724,11 @@ void mnVSResultsMakeEmblem(void)
 #endif
 	gobj = gcMakeGObjSPAfter(0, NULL, 23, GOBJ_PRIORITY_DEFAULT);
 
-	gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMNVSResultsFiles[4], dobjdescs[win_fkind]), NULL);
+	if (!gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMNVSResultsFiles[4], dobjdescs[win_fkind]), NULL, nGCModelDisplayKindDObj))
+	{
+		gcEjectGObj(gobj);
+		return;
+	}
 	gcAddGObjDisplay(gobj, gcDrawDObjTreeForGObj, 33, GOBJ_PRIORITY_DEFAULT, ~0);
 	gcAddMObjAll(gobj, lbRelocGetFileData(MObjSub***, sMNVSResultsFiles[4], mobjsubs[win_fkind]));
 	gcAddMatAnimJointAll(gobj, lbRelocGetFileData(AObjEvent32***, sMNVSResultsFiles[4], matanim_joints[win_fkind]), color);

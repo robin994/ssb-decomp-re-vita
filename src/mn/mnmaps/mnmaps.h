@@ -33,7 +33,7 @@ extern GObj* mnMapsMakePreviewWallpaper(s32 gkind);
 extern void mnMapsModelPriProcDisplay(GObj *gobj);
 extern void mnMapsModelSecProcDisplay(GObj *gobj);
 extern GObj* mnMapsMakeLayer(s32 gkind, MPGroundData *ground_data, MPGroundDesc *ground_desc, s32 id);
-extern void mnMapsMakeModel(s32 gkind, MPGroundData *ground_data, s32 heap_id);
+extern sb32 mnMapsMakeModel(s32 gkind, MPGroundData *ground_data, s32 heap_id);
 extern void mnMapsDestroyPreview(s32 heap_id);
 extern void mnMapsMakePreview(s32 gkind);
 extern void mnMapsMakeWallpaperCamera(void);

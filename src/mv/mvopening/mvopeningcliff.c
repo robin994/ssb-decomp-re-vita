@@ -141,7 +141,7 @@ void mvOpeningCliffHillsProcDisplay(GObj *hills_gobj)
 void mvOpeningCliffMakeHills(void)
 {
     GObj* hills_gobj = gcMakeGObjSPAfter(0, NULL, 17, GOBJ_PRIORITY_DEFAULT);
-    gcSetupCommonDObjs
+    if (!gcSetupCommonDObjs
     (
         hills_gobj,
         lbRelocGetFileData
@@ -150,8 +150,13 @@ void mvOpeningCliffMakeHills(void)
             sMVOpeningCliffFiles[0],
             llMVOpeningCliffHillsDObjDesc
         ),
-        NULL
-    );
+        NULL,
+        nGCModelDisplayKindDObj
+    ))
+    {
+        gcEjectGObj(hills_gobj);
+        return;
+    }
     gcAddGObjDisplay(hills_gobj, mvOpeningCliffHillsProcDisplay, 26, GOBJ_PRIORITY_DEFAULT, ~0);
 }
 
@@ -272,7 +277,7 @@ void mvOpeningCliffMakeOcarina(void)
     GObj *ocarina_gobj;
 
     sMVOpeningCliffOcarinaGObj = ocarina_gobj = gcMakeGObjSPAfter(0, NULL, 17, GOBJ_PRIORITY_DEFAULT);
-    gcSetupCustomDObjs
+    if (!gcSetupCustomDObjs
     (
         ocarina_gobj,
         lbRelocGetFileData
@@ -284,8 +289,14 @@ void mvOpeningCliffMakeOcarina(void)
         NULL,
         nGCMatrixKindTraRotRpyRSca,
         nGCMatrixKindNull,
-        nGCMatrixKindNull
-    );
+        nGCMatrixKindNull,
+        nGCModelDisplayKindDObj
+    ))
+    {
+        gcEjectGObj(ocarina_gobj);
+        sMVOpeningCliffOcarinaGObj = NULL;
+        return;
+    }
     gcAddGObjDisplay(ocarina_gobj, gcDrawDObjTreeForGObj, 26, GOBJ_PRIORITY_DEFAULT, ~0);
 
     DObjGetStruct(ocarina_gobj)->scale.vec.f.x = DObjGetStruct(sMVOpeningCliffFighterGObj)->scale.vec.f.x;

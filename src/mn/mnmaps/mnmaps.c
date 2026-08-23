@@ -1672,10 +1672,9 @@ GObj* mnMapsMakePreviewWallpaper(s32 gkind)
 void mnMapsModelPriProcDisplay(GObj *gobj)
 {
 #ifdef PORT
-	// Mirror grDisplayLayer0PriProcDisplay (grdisplay.c): clear Z and render in
-	// painter order. On N64 the original Z-buffered path leaned on AA-coverage
-	// to mask coplanar surfaces; Fast3D's GL_LESS depth-compare exposes those
-	// ties as per-pixel z-fight (visible on Dream Land's water-over-hill).
+	/* Stage previews are authored in painter order.  Keeping depth testing on
+	 * exposes coplanar ties in the host renderer (most visibly on water/cloud
+	 * layers), so match the gameplay layer-0 path and restore state afterward. */
 	gDPPipeSync(gSYTaskmanDLHeads[0]++);
 	gSPClearGeometryMode(gSYTaskmanDLHeads[0]++, G_ZBUFFER);
 	gDPSetRenderMode(gSYTaskmanDLHeads[0]++, G_RM_AA_OPA_SURF, G_RM_AA_OPA_SURF2);
@@ -1698,9 +1697,8 @@ void mnMapsModelPriProcDisplay(GObj *gobj)
 void mnMapsModelSecProcDisplay(GObj *gobj)
 {
 #ifdef PORT
-	// Mirror grDisplayLayer0SecProcDisplay (grdisplay.c): opaque pass in painter
-	// order, XLU pass keeps Z (XLU surfaces don't author back-to-front; Z is
-	// what prevents them from punching through later opaque draws).
+	/* Mirror the gameplay layer-0 paths and restore both display-list heads
+	 * after the preview model. */
 	gDPPipeSync(gSYTaskmanDLHeads[0]++);
 	gSPClearGeometryMode(gSYTaskmanDLHeads[0]++, G_ZBUFFER);
 	gDPSetRenderMode(gSYTaskmanDLHeads[0]++, G_RM_AA_OPA_SURF, G_RM_AA_OPA_SURF2);
@@ -1746,9 +1744,21 @@ GObj* mnMapsMakeLayer(s32 gkind, MPGroundData *ground_data, MPGroundDesc *ground
 	gobj = gcMakeGObjSPAfter(0, NULL, 5, GOBJ_PRIORITY_DEFAULT);
 	gcAddGObjDisplay(gobj, (ground_data->layer_mask & (1 << id)) ? mnMapsModelSecProcDisplay : mnMapsModelPriProcDisplay, 3, GOBJ_PRIORITY_DEFAULT, ~0);
 #ifdef PORT
-	gcSetupCustomDObjs(gobj, (DObjDesc*)PORT_RESOLVE(ground_desc->dobjdesc), NULL, nGCMatrixKindTraRotRpyRSca, nGCMatrixKindNull, nGCMatrixKindNull);
+	if (!gcSetupCustomDObjs(gobj, (DObjDesc*)PORT_RESOLVE(ground_desc->dobjdesc), NULL,
+		nGCMatrixKindTraRotRpyRSca, nGCMatrixKindNull, nGCMatrixKindNull,
+		(ground_data->layer_mask & (1 << id)) ? nGCModelDisplayKindDLLinks : nGCModelDisplayKindDObj))
+	{
+		gcEjectGObj(gobj);
+		return NULL;
+	}
 #else
-	gcSetupCustomDObjs(gobj, ground_desc->dobjdesc, NULL, nGCMatrixKindTraRotRpyRSca, nGCMatrixKindNull, nGCMatrixKindNull);
+	if (!gcSetupCustomDObjs(gobj, ground_desc->dobjdesc, NULL,
+		nGCMatrixKindTraRotRpyRSca, nGCMatrixKindNull, nGCMatrixKindNull,
+		(ground_data->layer_mask & (1 << id)) ? nGCModelDisplayKindDLLinks : nGCModelDisplayKindDObj))
+	{
+		gcEjectGObj(gobj);
+		return NULL;
+	}
 #endif
 
 	if (ground_desc->p_mobjsubs != NULL)
@@ -1799,7 +1809,7 @@ GObj* mnMapsMakeLayer(s32 gkind, MPGroundData *ground_data, MPGroundDesc *ground
 }
 
 // 0x801331AC
-void mnMapsMakeModel(s32 gkind, MPGroundData *ground_data, s32 heap_id)
+sb32 mnMapsMakeModel(s32 gkind, MPGroundData *ground_data, s32 heap_id)
 {
 	DObj *root_dobj, *next_dobj;
 	GObj **gobjs = (heap_id == 0) ? sMNMapsHeap1LayerGObjs : sMNMapsHeap0LayerGObjs;
@@ -1810,11 +1820,30 @@ void mnMapsMakeModel(s32 gkind, MPGroundData *ground_data, s32 heap_id)
 	gobjs[2] = mnMapsMakeLayer(gkind, ground_data, &ground_data->gr_desc[2], 2);
 	gobjs[3] = mnMapsMakeLayer(gkind, ground_data, &ground_data->gr_desc[3], 3);
 
-	if (gkind == nGRKindYamabuki)
+	/* Publish the preview as one complete unit. A descriptor that exists but
+	 * fails strict setup must not leave the other layers visible as a partial,
+	 * apparently corrupted stage. Optional NULL descriptors remain valid. */
+	for (i = 0; i < ARRAY_COUNT(sMNMapsHeap0LayerGObjs); i++)
+	{
+		if ((ground_data->gr_desc[i].dobjdesc != NULL) && (gobjs[i] == NULL))
+		{
+			for (i = 0; i < ARRAY_COUNT(sMNMapsHeap0LayerGObjs); i++)
+			{
+				if (gobjs[i] != NULL)
+				{
+					gcEjectGObj(gobjs[i]);
+					gobjs[i] = NULL;
+				}
+			}
+			return FALSE;
+		}
+	}
+
+	if ((gkind == nGRKindYamabuki) && (gobjs[3] != NULL))
 	{
 		DObjGetChild(DObjGetChild(DObjGetStruct(gobjs[3])))->flags = DOBJ_FLAG_HIDDEN;
 	}
-	if (gkind == nGRKindYoster)
+	if ((gkind == nGRKindYoster) && (gobjs[0] != NULL))
 	{
 		for
 		(
@@ -1829,6 +1858,7 @@ void mnMapsMakeModel(s32 gkind, MPGroundData *ground_data, s32 heap_id)
 			}
 		}
 	}
+	return TRUE;
 }
 
 // 0x801332DC
@@ -1889,8 +1919,10 @@ void mnMapsMakePreview(s32 gkind)
 
 	if (gkind != nMNMapsRandomGKind)
 	{
-		mnMapsMakeModel(gkind, sMNMapsGroundInfo, sMNMapsHeapID);
-		mnMapsSetPreviewCameraPosition(sMNMapsPreviewCObj, gkind);
+		if (mnMapsMakeModel(gkind, sMNMapsGroundInfo, sMNMapsHeapID) != FALSE)
+		{
+			mnMapsSetPreviewCameraPosition(sMNMapsPreviewCObj, gkind);
+		}
 	}
 	mnMapsDestroyPreview(sMNMapsHeapID);
 

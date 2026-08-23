@@ -213,7 +213,10 @@ void mvOpeningRoomMakeBackground(void)
 	GObj *gobj;
 
 	sMVOpeningRoomGObj = gobj = gcMakeGObjSPAfter(0, NULL, 17, GOBJ_PRIORITY_DEFAULT);
-	gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVOpeningRoomFiles[0], llMVCommonRoomBackgroundDObjDesc), NULL);
+	if (!gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVOpeningRoomFiles[0], llMVCommonRoomBackgroundDObjDesc), NULL, nGCModelDisplayKindDLLinks))
+	{
+		return;
+	}
 	gcAddGObjDisplay(gobj, gcDrawDObjTreeDLLinksForGObj, 6, GOBJ_PRIORITY_DEFAULT, ~0);
 	gcAddMObjAll(gobj, lbRelocGetFileData(MObjSub***, sMVOpeningRoomFiles[0], llMVCommonRoomBackgroundMObjSub));
 	gcAddMatAnimJointAll(gobj, lbRelocGetFileData(AObjEvent32***, sMVOpeningRoomFiles[0], llMVCommonRoomBackgroundMatAnimJoint), 0.0F);
@@ -240,7 +243,10 @@ void mvOpeningRoomMakeDesk(void)
 	GObj *gobj;
 
 	sMVOpeningRoomDeskGObj = gobj = gcMakeGObjSPAfter(0, NULL, 17, GOBJ_PRIORITY_DEFAULT);
-	gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVOpeningRoomFiles[0], llMVCommonRoomDeskDObjDesc), NULL);
+	if (!gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVOpeningRoomFiles[0], llMVCommonRoomDeskDObjDesc), NULL, nGCModelDisplayKindDObj))
+	{
+		return;
+	}
 	gcAddGObjDisplay(gobj, gcDrawDObjTreeForGObj, 6, GOBJ_PRIORITY_DEFAULT, ~0);
 }
 
@@ -279,7 +285,10 @@ void mvOpeningRoomMakeBooks(void)
 	GObj *gobj;
 
 	sMVOpeningRoomBooksGObj = gobj = gcMakeGObjSPAfter(0, NULL, 17, GOBJ_PRIORITY_DEFAULT);
-	gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVOpeningRoomFiles[0], llMVCommonRoomBooksDObjDesc), NULL);
+	if (!gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVOpeningRoomFiles[0], llMVCommonRoomBooksDObjDesc), NULL, nGCModelDisplayKindDObj))
+	{
+		return;
+	}
 	gcAddGObjDisplay(gobj, gcDrawDObjTreeForGObj, 6, GOBJ_PRIORITY_DEFAULT, ~0);
 	gcAddGObjProcess(gobj, mvOpeningRoomCommonProcUpdate, nGCProcessKindFunc, 1);
 	gcAddAnimJointAll(gobj, lbRelocGetFileData(AObjEvent32**, sMVOpeningRoomFiles[0], llMVCommonRoomBooksAnimJoint), 0.0F);
@@ -292,7 +301,10 @@ void mvOpeningRoomMakePencils(void)
 	GObj *gobj;
 
 	sMVOpeningRoomPencilsGObj = gobj = gcMakeGObjSPAfter(0, NULL, 17, GOBJ_PRIORITY_DEFAULT);
-	gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVOpeningRoomFiles[0], llMVCommonRoomPencilsDObjDesc), NULL);
+	if (!gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVOpeningRoomFiles[0], llMVCommonRoomPencilsDObjDesc), NULL, nGCModelDisplayKindDObj))
+	{
+		return;
+	}
 	gcAddGObjDisplay(gobj, gcDrawDObjTreeForGObj, 6, GOBJ_PRIORITY_DEFAULT, ~0);
 	gcAddAnimJointAll(gobj, lbRelocGetFileData(AObjEvent32**, sMVOpeningRoomFiles[0], llMVCommonRoomPencilsAnimJoint), 0.0F);
 	gcAddGObjProcess(gobj, mvOpeningRoomCommonProcUpdate, nGCProcessKindFunc, 1);
@@ -305,7 +317,10 @@ void mvOpeningRoomMakeLamp(void)
 	GObj *gobj;
 
 	sMVOpeningRoomLampGObj = gobj = gcMakeGObjSPAfter(0, NULL, 17, GOBJ_PRIORITY_DEFAULT);
-	gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVOpeningRoomFiles[0], llMVCommonRoomLampDObjDesc), NULL);
+	if (!gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVOpeningRoomFiles[0], llMVCommonRoomLampDObjDesc), NULL, nGCModelDisplayKindDObj))
+	{
+		return;
+	}
 	gcAddGObjDisplay(gobj, gcDrawDObjTreeForGObj, 6, GOBJ_PRIORITY_DEFAULT, ~0);
 	gcAddAnimJointAll(gobj, lbRelocGetFileData(AObjEvent32**, sMVOpeningRoomFiles[0], llMVCommonRoomLampAnimJoint), 0.0F);
 	gcAddGObjProcess(gobj, mvOpeningRoomCommonProcUpdate, nGCProcessKindFunc, 1);
@@ -457,7 +472,10 @@ void mvOpeningRoomMakeLogo(void)
 	GObj *gobj;
 
 	sMVOpeningRoomLogoGObj = gobj = gcMakeGObjSPAfter(0, NULL, 21, GOBJ_PRIORITY_DEFAULT);
-	gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVOpeningRoomFiles[0], llMVCommonRoomLogoDObjDesc), NULL);
+	if (!gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVOpeningRoomFiles[0], llMVCommonRoomLogoDObjDesc), NULL, nGCModelDisplayKindDLLinks))
+	{
+		return;
+	}
 #ifdef PORT
 	gcAddGObjDisplay(gobj, mvOpeningRoomLogoProcDisplay, 29, GOBJ_PRIORITY_DEFAULT, ~0);
 #else
@@ -478,7 +496,11 @@ void mvOpeningRoomMakeSnap(void)
 	GObj *gobj;
 
 	gobj = gcMakeGObjSPAfter(0, NULL, 19, GOBJ_PRIORITY_DEFAULT);
-	gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVOpeningRoomFiles[0], llMVCommonRoomSnapDObjDesc), NULL);
+	if (!gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVOpeningRoomFiles[0], llMVCommonRoomSnapDObjDesc), NULL, nGCModelDisplayKindDLLinks))
+	{
+		gcEjectGObj(gobj);
+		return;
+	}
 	gcAddGObjDisplay(gobj, gcDrawDObjTreeDLLinksForGObj, 27, GOBJ_PRIORITY_DEFAULT, ~0);
 	gcAddAnimJointAll(gobj, lbRelocGetFileData(AObjEvent32**, sMVOpeningRoomFiles[0], llMVCommonRoomSnapAnimJoint), 0.0F);
 	gcAddGObjProcess(gobj, gcPlayAnimAll, nGCProcessKindFunc, 1);
@@ -492,7 +514,11 @@ void mvOpeningRoomMakeCloseUpEffect(void)
 
 	// Close-up effect air
 	gobj = gcMakeGObjSPAfter(0, NULL, 17, GOBJ_PRIORITY_DEFAULT);
-	gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVOpeningRoomFiles[0], llMVCommonRoomCloseUpEffectAirDObjDesc), NULL);
+	if (!gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVOpeningRoomFiles[0], llMVCommonRoomCloseUpEffectAirDObjDesc), NULL, nGCModelDisplayKindDLLinks))
+	{
+		gcEjectGObj(gobj);
+		return;
+	}
 	gcAddGObjDisplay(gobj, gcDrawDObjTreeDLLinksForGObj, 6, GOBJ_PRIORITY_DEFAULT, ~0);
 
 	DObjGetStruct(gobj)->translate.vec.f.x = 0.0F;
@@ -510,7 +536,11 @@ void mvOpeningRoomMakeCloseUpEffect(void)
 
 	// Close-up effect ground
 	gobj = gcMakeGObjSPAfter(0, NULL, 17, GOBJ_PRIORITY_DEFAULT);
-	gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVOpeningRoomFiles[0], llMVCommonRoomCloseUpEffectGroundDObjDesc), 0);
+	if (!gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVOpeningRoomFiles[0], llMVCommonRoomCloseUpEffectGroundDObjDesc), 0, nGCModelDisplayKindDLLinks))
+	{
+		gcEjectGObj(gobj);
+		return;
+	}
 	gcAddGObjDisplay(gobj, gcDrawDObjTreeDLLinksForGObj, 6, GOBJ_PRIORITY_DEFAULT, ~0);
 
 	DObjGetStruct(gobj)->translate.vec.f.x = 0.0F;
@@ -580,7 +610,11 @@ void mvOpeningRoomMakeDeskGround(void)
 	GObj *gobj;
 
 	gobj = gcMakeGObjSPAfter(0, NULL, 17, GOBJ_PRIORITY_DEFAULT);
-	gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVOpeningRoomFiles[0], llMVCommonRoomDeskGroundDObjDesc), NULL);
+	if (!gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMVOpeningRoomFiles[0], llMVCommonRoomDeskGroundDObjDesc), NULL, nGCModelDisplayKindDLLinks))
+	{
+		gcEjectGObj(gobj);
+		return;
+	}
 	gcAddGObjDisplay(gobj, gcDrawDObjTreeDLLinksForGObj, 6, GOBJ_PRIORITY_DEFAULT, ~0);
 	gcAddMObjAll(gobj, lbRelocGetFileData(MObjSub***, sMVOpeningRoomFiles[0], llMVCommonRoomDeskGroundMObjSub));
 	gcAddMatAnimJointAll(gobj, lbRelocGetFileData(AObjEvent32***, sMVOpeningRoomFiles[0], llMVCommonRoomDeskGroundMatAnimJoint), 0.0F);

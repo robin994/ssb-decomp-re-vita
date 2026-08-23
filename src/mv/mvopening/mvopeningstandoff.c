@@ -307,7 +307,7 @@ void mvOpeningStandoffMakeLightning(void)
     GObj* lightning_gobj;
 
     lightning_gobj = gcMakeGObjSPAfter(0, NULL, 17, GOBJ_PRIORITY_DEFAULT);
-    gcSetupCustomDObjs
+    if (!gcSetupCustomDObjs
     (
         lightning_gobj,
         lbRelocGetFileData
@@ -319,8 +319,13 @@ void mvOpeningStandoffMakeLightning(void)
         NULL,
         nGCMatrixKindTraRotRpyRSca,
         nGCMatrixKindNull,
-        nGCMatrixKindNull
-    );
+        nGCMatrixKindNull,
+        nGCModelDisplayKindDLLinks
+    ))
+    {
+        gcEjectGObj(lightning_gobj);
+        return;
+    }
     gcAddMObjAll
     (
         lightning_gobj,

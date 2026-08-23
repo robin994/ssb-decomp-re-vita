@@ -3504,6 +3504,14 @@ void lbCommonDrawSprite(GObj* camera_gobj)
 
 	gcCaptureCameraGObj(camera_gobj, (cobj->flags & COBJ_FLAG_IDENTIFIER) ? 1 : 0);
 	lbCommonFinishSprite(gSYTaskmanDLHeads);
+
+	/* Sprite cameras used for the battle interface carry
+	 * COBJ_FLAG_DLBUFFERS.  Honour the same post-capture contract as the
+	 * model/effect camera callbacks so UI emitted after a secondary stage
+	 * display list remains connected to the final task.  For ordinary
+	 * sprite cameras this is a no-op because none of the synchronisation
+	 * flags are set. */
+	func_80017CC8(cobj);
 }
 
 // 0x800CD440

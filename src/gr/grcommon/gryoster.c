@@ -225,7 +225,7 @@ void grYosterInitAll(void)
         gGRCommonStruct.yoster.clouds[i].gobj = map_gobj;
 
         gcAddGObjDisplay(map_gobj, gcDrawDObjTreeForGObj, 6, GOBJ_PRIORITY_DEFAULT, ~0);
-        gcSetupCustomDObjs
+        if (!gcSetupCustomDObjs
         (
             map_gobj, 
 #ifdef PORT
@@ -236,8 +236,14 @@ void grYosterInitAll(void)
             NULL, 
             nGCMatrixKindTra,    // Make this nGCMatrixKindTraRotRpyRSca to see cloud scale animation
             nGCMatrixKindNull, 
-            nGCMatrixKindNull
-        );
+            nGCMatrixKindNull,
+            nGCModelDisplayKindDObj
+        ))
+        {
+            gcEjectGObj(map_gobj);
+            gGRCommonStruct.yoster.clouds[i].gobj = NULL;
+            continue;
+        }
         gcAddGObjProcess(map_gobj, gcPlayAnimAll, nGCProcessKindFunc, 5);
 
 #ifdef PORT

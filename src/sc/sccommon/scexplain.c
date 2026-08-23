@@ -366,15 +366,20 @@ GObj* scExplainMakeControlStickInterface(void)
         GOBJ_PRIORITY_DEFAULT
     );
     gcAddGObjDisplay(interface_gobj, scExplainControlStickProcDisplay, 27, GOBJ_PRIORITY_DEFAULT, ~0);
-    gcSetupCustomDObjs
+    if (!gcSetupCustomDObjs
     (
         interface_gobj, 
         (DObjDesc *)((uintptr_t)sSCExplainGraphicsFileHead + (intptr_t)llSCExplainGraphicsStickDObjDesc),
         NULL,
         nGCMatrixKindTra,
         nGCMatrixKindNull,
-        nGCMatrixKindNull
-    );
+        nGCMatrixKindNull,
+        nGCModelDisplayKindDLLinks
+    ))
+    {
+        gcEjectGObj(interface_gobj);
+        return NULL;
+    }
     gcAddMObjAll
     (
         interface_gobj,

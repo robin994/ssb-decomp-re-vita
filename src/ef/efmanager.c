@@ -2069,7 +2069,19 @@ GObj* efManagerMakeEffect(EFDesc *effect_desc, sb32 is_force_return)
 
         if (effect_flags & 0x4)
         {
-            gcSetupCustomDObjs(effect_gobj, (void*)(addr + effect_desc->o_dobjsetup), NULL, nGCMatrixKindNull, nGCMatrixKindNull, nGCMatrixKindNull);
+			if (!gcSetupCustomDObjs(effect_gobj, (void*)(addr + effect_desc->o_dobjsetup), NULL,
+				nGCMatrixKindNull, nGCMatrixKindNull, nGCMatrixKindNull,
+				(effect_desc->proc_display == gcDrawDObjTreeDLLinksForGObj) ? nGCModelDisplayKindDLLinks :
+				(effect_desc->proc_display == gcDrawDObjTreeForGObj) ? nGCModelDisplayKindDObj :
+				nGCModelDisplayKindNone))
+			{
+				if (ep != NULL)
+				{
+					efManagerSetPrevStructAlloc(ep);
+				}
+				gcEjectGObj(effect_gobj);
+				return NULL;
+			}
 
             other_dobj = DObjGetStruct(effect_gobj);
 

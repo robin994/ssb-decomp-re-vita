@@ -252,15 +252,21 @@ GObj* lbTransitionMakeTransition(s32 transition_id, u32 id, s32 link, void (*pro
     gobj->user_data.s = transition_desc->unk_lbtransition_0xC;
     
     gcAddGObjDisplay(gobj, proc_display, dl_link_id, GOBJ_PRIORITY_DEFAULT, ~0);
-    gcSetupCustomDObjs
+    if (!gcSetupCustomDObjs
     (
         gobj, 
         (DObjDesc*) (transition_desc->o_dobjdesc + (uintptr_t)sLBTransitionFileHeap),
         NULL,
         nGCMatrixKindTraRotRpyRSca,
         nGCMatrixKindNull,
-        nGCMatrixKindNull
-    );
+        nGCMatrixKindNull,
+        (proc_display == gcDrawDObjTreeDLLinksForGObj) ? nGCModelDisplayKindDLLinks :
+        (proc_display == gcDrawDObjTreeForGObj) ? nGCModelDisplayKindDObj : nGCModelDisplayKindNone
+    ))
+    {
+        gcEjectGObj(gobj);
+        return NULL;
+    }
     if (transition_desc->o_anim_joint != 0)
     {
         gcAddAnimJointAll(gobj, (AObjEvent32**) (transition_desc->o_anim_joint + (uintptr_t)sLBTransitionFileHeap), 0.0F);

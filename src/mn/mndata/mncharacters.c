@@ -1599,7 +1599,12 @@ void mnCharactersMakeEmblem(s32 fkind)
 	};
 
 	sMNCharactersEmblemGObj = gobj = gcMakeGObjSPAfter(0, NULL, 19, GOBJ_PRIORITY_DEFAULT);
-	gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMNCharactersFiles[3], dobjdescs[fkind]), NULL);
+	if (!gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMNCharactersFiles[3], dobjdescs[fkind]), NULL, nGCModelDisplayKindDObj))
+	{
+		gcEjectGObj(gobj);
+		sMNCharactersEmblemGObj = NULL;
+		return;
+	}
 	gcAddGObjDisplay(gobj, gcDrawDObjTreeForGObj, 28, GOBJ_PRIORITY_DEFAULT, ~0);
 	gcAddMObjAll(gobj, lbRelocGetFileData(MObjSub***, sMNCharactersFiles[3], mobjsubs[fkind]));
 	gcAddMatAnimJointAll(gobj, lbRelocGetFileData(AObjEvent32***, sMNCharactersFiles[3], matanim_joints[fkind]), 4.0F);

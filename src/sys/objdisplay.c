@@ -18,6 +18,7 @@
  * modelview, 1 = projection (possibly combined view*persp), 2 = view.
  * See port/interpolation/frame_interpolation.h. */
 extern void portInterpRecordMtx(void *mtx, void *owner, int ordinal, int tag);
+extern int portValidateDisplayListPreflight(const void *dlist);
 #ifdef _MSC_VER
 #include <excpt.h>
 #endif
@@ -2302,11 +2303,88 @@ static bool gcTrackBShouldFingerprint(const void *dobj)
 }
 #endif
 
+#ifdef PORT
+static DObj* gcGetDrawableDObjRoot(GObj *gobj, const char *context)
+{
+    DObj *dobj = (gobj != NULL) ? DObjGetStruct(gobj) : NULL;
+
+    if (dobj == NULL)
+    {
+        static u32 sNullDObjRootRejectBudget = 64;
+
+        if (gobj != NULL)
+        {
+            gobj->flags |= GOBJ_FLAG_HIDDEN;
+        }
+        if (sNullDObjRootRejectBudget != 0)
+        {
+            sNullDObjRootRejectBudget--;
+            port_log("SSB64: MODEL_DRAW_REJECT context=%s gobj=%p reason=null-dobj-root action=hide-gobj\n",
+                context, (void*)gobj);
+        }
+    }
+    return dobj;
+}
+
+static sb32 gcPreflightDrawableDObjTree(GObj *gobj, DObj *root, sb32 use_dl_links, sb32 walk_tree, const char *context)
+{
+    DObj *dobj = root;
+    s32 index = 0;
+
+    while (dobj != NULL)
+    {
+        sb32 valid = TRUE;
+
+        if (use_dl_links)
+        {
+            if (dobj->dl_link != NULL)
+            {
+                valid = gcPortValidateDObjDLLinkArray(dobj->dl_link, context);
+            }
+        }
+        else if (dobj->dl != NULL)
+        {
+            valid = portValidateDisplayListPreflight(dobj->dl) ? TRUE : FALSE;
+        }
+
+        if (!valid)
+        {
+            gobj->flags |= GOBJ_FLAG_HIDDEN;
+            port_log("SSB64: MODEL_DRAW_REJECT context=%s gobj=%p dobj=%p index=%d kind=%s "
+                     "reason=tree-preflight action=hide-whole-gobj\n",
+                context, (void*)gobj, (void*)dobj, index,
+                use_dl_links ? "dl-links" : "direct");
+            return FALSE;
+        }
+        if (!walk_tree)
+        {
+            break;
+        }
+        dobj = gcGetTreeDObjNext(dobj);
+        index++;
+    }
+    return TRUE;
+}
+#endif
+
 // 0x80013D90
 void gcDrawDObjForGObj(GObj *gobj, Gfx **dl_head)
 {
     s32 num;
+#ifdef PORT
+    DObj *dobj = gcGetDrawableDObjRoot(gobj, "single");
+
+    if (dobj == NULL)
+    {
+        return;
+    }
+    if (!gcPreflightDrawableDObjTree(gobj, dobj, FALSE, FALSE, "single"))
+    {
+        return;
+    }
+#else
     DObj *dobj = DObjGetStruct(gobj);
+#endif
 
     gGCScaleX = 1.0F;
 
@@ -2457,8 +2535,24 @@ void gcDrawDObjTree(DObj *this_dobj)
 // 0x80014038
 void gcDrawDObjTreeForGObj(GObj *gobj) 
 {
+#ifdef PORT
+    DObj *dobj = gcGetDrawableDObjRoot(gobj, "tree");
+
+    if (dobj == NULL)
+    {
+        return;
+    }
+    if (!gcPreflightDrawableDObjTree(gobj, dobj, FALSE, TRUE, "tree"))
+    {
+        return;
+    }
+#endif
     gGCScaleX = 1.0F;
+#ifdef PORT
+    gcDrawDObjTree(dobj);
+#else
     gcDrawDObjTree(DObjGetStruct(gobj));
+#endif
 }
 
 // 0x80014068
@@ -2579,7 +2673,19 @@ void gcDrawDObjDLLinksForGObj(GObj *gobj)
     DObj *dobj;
 
     gGCScaleX = 1.0F;
+#ifdef PORT
+    dobj = gcGetDrawableDObjRoot(gobj, "dl-links");
+    if (dobj == NULL)
+    {
+        return;
+    }
+    if (!gcPreflightDrawableDObjTree(gobj, dobj, TRUE, FALSE, "dl-links"))
+    {
+        return;
+    }
+#else
     dobj = DObjGetStruct(gobj);
+#endif
     gcDrawDObjDLLinks(dobj, dobj->dl_link);
 }
 
@@ -2737,8 +2843,24 @@ void gcDrawDObjTreeDLLinks(DObj *dobj)
 // 0x80014768
 void gcDrawDObjTreeDLLinksForGObj(GObj *gobj)
 {
+#ifdef PORT
+    DObj *dobj = gcGetDrawableDObjRoot(gobj, "tree-dl-links");
+
+    if (dobj == NULL)
+    {
+        return;
+    }
+    if (!gcPreflightDrawableDObjTree(gobj, dobj, TRUE, TRUE, "tree-dl-links"))
+    {
+        return;
+    }
+#endif
     gGCScaleX = 1.0F;
+#ifdef PORT
+    gcDrawDObjTreeDLLinks(dobj);
+#else
     gcDrawDObjTreeDLLinks(DObjGetStruct(gobj));
+#endif
 }
 
 // 0x80014798

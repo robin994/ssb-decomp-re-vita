@@ -71,7 +71,7 @@ void mvOpeningYosterFuncLights(Gfx **dls)
 void mvOpeningYosterMakeNest(void)
 {
     GObj *nest_gobj = gcMakeGObjSPAfter(0, NULL, 17, GOBJ_PRIORITY_DEFAULT);
-    gcSetupCommonDObjs
+    if (!gcSetupCommonDObjs
     (
         nest_gobj,
         lbRelocGetFileData
@@ -80,8 +80,13 @@ void mvOpeningYosterMakeNest(void)
             sMVOpeningYosterFiles[0],
             llMVOpeningYosterNestDObjDesc
         ),
-        NULL
-    );
+        NULL,
+        nGCModelDisplayKindDLLinks
+    ))
+    {
+        gcEjectGObj(nest_gobj);
+        return;
+    }
     gcAddGObjDisplay(nest_gobj, gcDrawDObjTreeDLLinksForGObj, 6, GOBJ_PRIORITY_DEFAULT, ~0);
 
     DObjGetStruct(nest_gobj)->translate.vec.f.x = 0.0F;
@@ -151,7 +156,7 @@ void mvOpeningYosterMakeWallpaper(void)
 void mvOpeningYosterMakeGround(void)
 {
     GObj *gobj = gcMakeGObjSPAfter(0, NULL, 17, GOBJ_PRIORITY_DEFAULT);
-    gcSetupCommonDObjs
+    if (!gcSetupCommonDObjs
     (
         gobj,
         lbRelocGetFileData
@@ -160,8 +165,13 @@ void mvOpeningYosterMakeGround(void)
             sMVOpeningYosterFiles[0],
             llMVOpeningYosterGroundDObjDesc
         ),
-        NULL
-    );
+        NULL,
+        nGCModelDisplayKindDLLinks
+    ))
+    {
+        gcEjectGObj(gobj);
+        return;
+    }
     gcAddGObjDisplay(gobj, gcDrawDObjTreeDLLinksForGObj, 6, GOBJ_PRIORITY_DEFAULT, ~0);
 
     DObjGetStruct(gobj)->translate.vec.f.x = 0.0F;

@@ -278,7 +278,14 @@ GObj* wpManagerMakeWeapon(GObj *parent_gobj, WPDesc *wp_desc, Vec3f *spawn_pos, 
 
     if (wp_desc->flags & WEAPON_FLAG_DOBJDESC)
     {
-        gcSetupCustomDObjs(weapon_gobj, PORT_RESOLVE(attr->data), NULL, wp_desc->transform_types.tk1, wp_desc->transform_types.tk2, wp_desc->transform_types.tk3);
+        if (!gcSetupCustomDObjs(weapon_gobj, PORT_RESOLVE(attr->data), NULL,
+            wp_desc->transform_types.tk1, wp_desc->transform_types.tk2, wp_desc->transform_types.tk3,
+            (wp_desc->flags & WEAPON_FLAG_DOBJLINKS) ? nGCModelDisplayKindDLLinks : nGCModelDisplayKindDObj))
+        {
+            wpManagerSetPrevStructAlloc(wp);
+            gcEjectGObj(weapon_gobj);
+            return NULL;
+        }
 
         proc_display = (wp_desc->flags & WEAPON_FLAG_DOBJLINKS) ? wpDisplayDObjTreeDLLinks : func_ovl3_80167618;
     }

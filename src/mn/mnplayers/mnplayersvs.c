@@ -4504,7 +4504,11 @@ void mnPlayersVSMakeSpotlight(void)
 	for (i = 0, x = -1250, y = -850.0F; i < 4; i++, x += 840)
 	{
 		gobj = gcMakeGObjSPAfter(0, NULL, 21, GOBJ_PRIORITY_DEFAULT);
-		gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMNPlayersVSFiles[6], llMNPlayersSpotlightDObjDesc), NULL);
+		if (!gcSetupCommonDObjs(gobj, lbRelocGetFileData(DObjDesc*, sMNPlayersVSFiles[6], llMNPlayersSpotlightDObjDesc), NULL, nGCModelDisplayKindDLLinks))
+		{
+			gcEjectGObj(gobj);
+			return;
+		}
 		gcAddGObjDisplay(gobj, gcDrawDObjTreeDLLinksForGObj, 9, GOBJ_PRIORITY_DEFAULT, ~0);
 
 		gobj->user_data.s = i;

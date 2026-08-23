@@ -265,7 +265,7 @@ void grYamabukiMakeGate(void)
     gGRCommonStruct.yamabuki.gate_gobj = gate_gobj = gcMakeGObjSPAfter(nGCCommonKindGround, NULL, nGCCommonLinkIDGround, GOBJ_PRIORITY_DEFAULT);
 
     gcAddGObjDisplay(gate_gobj, gcDrawDObjTreeDLLinksForGObj, 6, GOBJ_PRIORITY_DEFAULT, ~0);
-    gcSetupCustomDObjs
+    if (!gcSetupCustomDObjs
     (
         gate_gobj, 
         (DObjDesc*) 
@@ -277,8 +277,14 @@ void grYamabukiMakeGate(void)
         NULL, 
         nGCMatrixKindTraRotRpyR, 
         nGCMatrixKindNull, 
-        nGCMatrixKindNull
-    );
+        nGCMatrixKindNull,
+        nGCModelDisplayKindDLLinks
+    ))
+    {
+        gcEjectGObj(gate_gobj);
+        gGRCommonStruct.yamabuki.gate_gobj = NULL;
+        return;
+    }
     gcAddGObjProcess(gate_gobj, gcPlayAnimAll, nGCProcessKindFunc, 5);
     grYamabukiGateAddAnimClose();
 }

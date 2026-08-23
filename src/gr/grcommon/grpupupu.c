@@ -672,7 +672,7 @@ GObj* grPupupuMakeMapGObj(intptr_t o_dobjdesc, intptr_t o_mobjsub, void (*proc_d
 
     gcAddGObjDisplay(ground_gobj, proc_display, dl_link, GOBJ_PRIORITY_DEFAULT, ~0);
 
-    gcSetupCustomDObjs
+    if (!gcSetupCustomDObjs
     (
         ground_gobj,
         (DObjDesc*)
@@ -680,8 +680,13 @@ GObj* grPupupuMakeMapGObj(intptr_t o_dobjdesc, intptr_t o_mobjsub, void (*proc_d
         NULL,
         nGCMatrixKindTraRotRpyRSca,
         nGCMatrixKindNull,
-        nGCMatrixKindNull
-    );
+        nGCMatrixKindNull,
+        nGCModelDisplayKindDObj
+    ))
+    {
+        gcEjectGObj(ground_gobj);
+        return NULL;
+    }
     if (o_mobjsub != 0)
     {
         gcAddMObjAll(ground_gobj, lbRelocGetFileData(MObjSub***, gGRCommonStruct.pupupu.map_head, o_mobjsub));

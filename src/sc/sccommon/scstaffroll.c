@@ -738,7 +738,12 @@ void func_ovl59_8013202C(GObj *arg0)
 	{
 		gobj = gcMakeGObjSPAfter(8, NULL, nGCCommonLinkID02, GOBJ_PRIORITY_DEFAULT);
 		gcAddGObjDisplay(gobj, gcDrawDObjTreeForGObj, 3, GOBJ_PRIORITY_DEFAULT, ~0);
-		gcSetupCustomDObjs(gobj, sSCStaffrollDObjDesc, NULL, nGCMatrixKindTraRotRpyRSca, nGCMatrixKindNull, nGCMatrixKindNull);
+		if (!gcSetupCustomDObjs(gobj, sSCStaffrollDObjDesc, NULL, nGCMatrixKindTraRotRpyRSca,
+			nGCMatrixKindNull, nGCMatrixKindNull, nGCModelDisplayKindDObj))
+		{
+			gcEjectGObj(gobj);
+			return;
+		}
 		gcAddGObjProcess(gobj, func_ovl59_80131F34, nGCProcessKindFunc, 1);
 
 		gobj->user_data.p = arg0;

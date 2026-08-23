@@ -240,7 +240,7 @@ void mvOpeningSectorMakeGreatFox(void)
 
     sMVOpeningSectorGreatFoxGObj = great_fox_gobj = gcMakeGObjSPAfter(0, NULL, 19, GOBJ_PRIORITY_DEFAULT);
 
-    gcSetupCustomDObjs
+    if (!gcSetupCustomDObjs
     (
         great_fox_gobj,
         lbRelocGetFileData
@@ -252,8 +252,14 @@ void mvOpeningSectorMakeGreatFox(void)
         NULL,
         nGCMatrixKindTraRotRpyRSca,
         nGCMatrixKindNull,
-        nGCMatrixKindNull
-    );
+        nGCMatrixKindNull,
+        nGCModelDisplayKindDLLinks
+    ))
+    {
+        gcEjectGObj(great_fox_gobj);
+        sMVOpeningSectorGreatFoxGObj = NULL;
+        return;
+    }
     gcAddGObjDisplay(great_fox_gobj, gcDrawDObjTreeDLLinksForGObj, 27, GOBJ_PRIORITY_DEFAULT, ~0);
 
     DObjGetStruct(great_fox_gobj)->translate.vec.f.x = 0.0F;
@@ -365,7 +371,7 @@ void mvOpeningSectorMakeArwings(void)
     for (i = 0; i < (ARRAY_COUNT(sMVOpeningSectorArwingGObjs) + ARRAY_COUNT(anim_joints)) / 2; i++)
     {
         sMVOpeningSectorArwingGObjs[i] = arwing_gobj = gcMakeGObjSPAfter(0, NULL, 19, GOBJ_PRIORITY_DEFAULT);
-        gcSetupCustomDObjs
+        if (!gcSetupCustomDObjs
         (
             arwing_gobj,
             lbRelocGetFileData
@@ -377,8 +383,14 @@ void mvOpeningSectorMakeArwings(void)
             NULL,
             nGCMatrixKindTraRotRpyRSca,
             nGCMatrixKindNull,
-            nGCMatrixKindNull
-        );
+            nGCMatrixKindNull,
+            nGCModelDisplayKindDLLinks
+        ))
+        {
+            gcEjectGObj(arwing_gobj);
+            sMVOpeningSectorArwingGObjs[i] = NULL;
+            continue;
+        }
         gcAddGObjDisplay(arwing_gobj, gcDrawDObjTreeDLLinksForGObj, 27, GOBJ_PRIORITY_DEFAULT, ~0);
         gcAddAnimJointAll(arwing_gobj, lbRelocGetFileData(AObjEvent32**, sMVOpeningSectorFiles[0], anim_joints[i]), 0.0F);
         gcAddGObjProcess(arwing_gobj, gcPlayAnimAll, nGCProcessKindFunc, 1);

@@ -3,6 +3,8 @@
 #ifdef PORT
 #include <port_log.h>
 extern void portFixupMObjSub(void *mobjsub);
+extern int portValidateDisplayListPreflight(const void *dlist);
+extern int portRelocGetContainingFileBounds(const void *ptr, uintptr_t *out_base, size_t *out_size);
 #endif
 
 extern void syInterpCubic(Vec3f*, void*, f32);
@@ -2618,8 +2620,216 @@ DObj* gcAddChildForDObjTraRotSca(DObj *dobj, void *dvar)
     return child_dobj;
 }
 
-void gcSetupCommonDObjs(GObj *gobj, DObjDesc *dobjdesc, DObj **dobjs)
+#ifdef PORT
+/*
+ * Strict model preflight: validate the entire descriptor tree before creating
+ * the first DObj.  Historically a bad token or malformed packed display list
+ * could make setup stop halfway through, publishing a visually incomplete
+ * fighter/stage while the rest of the game kept running.  v20 makes model
+ * publication atomic: all descriptors and their display-list graphs validate,
+ * or this tree is not constructed at all.
+ */
+sb32 gcPortValidateDObjDLLinkArray(DObjDLLink *dl_links, const char *context)
 {
+    uintptr_t reloc_base = 0;
+    size_t reloc_size = 0;
+    sb32 in_reloc;
+    s32 i;
+
+    if (dl_links == NULL)
+    {
+        port_log("SSB64: MODEL_DLLINK_PREFLIGHT_REJECT context=%s links=%p reason=null-links\n",
+            context, (void*)dl_links);
+        return FALSE;
+    }
+    in_reloc = portRelocGetContainingFileBounds(dl_links, &reloc_base, &reloc_size) ? TRUE : FALSE;
+
+    for (i = 0; i < 64; i++)
+    {
+        DObjDLLink *link = &dl_links[i];
+        void *resolved_dl;
+
+        if (in_reloc)
+        {
+            uintptr_t addr = (uintptr_t)link;
+            if (addr < reloc_base || (addr - reloc_base) > reloc_size ||
+                sizeof(*link) > reloc_size - (size_t)(addr - reloc_base))
+            {
+                port_log("SSB64: MODEL_DLLINK_PREFLIGHT_REJECT context=%s links=%p index=%d "
+                         "reason=links-oob action=reject-tree\n",
+                    context, (void*)dl_links, i);
+                return FALSE;
+            }
+        }
+
+        if (link->list_id == ARRAY_COUNT(gSYTaskmanDLHeads))
+        {
+            if (!PORT_REF_IS_NULL(link->dl))
+            {
+                port_log("SSB64: MODEL_DLLINK_PREFLIGHT_REJECT context=%s links=%p index=%d "
+                         "reason=sentinel-has-dl action=reject-tree\n",
+                    context, (void*)dl_links, i);
+                return FALSE;
+            }
+            return TRUE;
+        }
+        if (link->list_id < 0 || link->list_id >= ARRAY_COUNT(gSYTaskmanDLHeads))
+        {
+            port_log("SSB64: MODEL_DLLINK_PREFLIGHT_REJECT context=%s links=%p index=%d list_id=%d "
+                     "reason=list-id-oob action=reject-tree\n",
+                context, (void*)dl_links, i, link->list_id);
+            return FALSE;
+        }
+
+        resolved_dl = PORT_RESOLVE_GFX(link->dl);
+        if (resolved_dl == NULL && !PORT_REF_IS_NULL(link->dl))
+        {
+            port_log("SSB64: MODEL_DLLINK_PREFLIGHT_REJECT context=%s links=%p index=%d token=0x%08x "
+                     "reason=dl-token-unresolved action=reject-tree\n",
+                context, (void*)dl_links, i, (unsigned int)PORT_REF_TOKEN(link->dl));
+            return FALSE;
+        }
+        if (resolved_dl != NULL && !portValidateDisplayListPreflight(resolved_dl))
+        {
+            port_log("SSB64: MODEL_DLLINK_PREFLIGHT_REJECT context=%s links=%p index=%d dl=%p "
+                     "reason=dl-preflight action=reject-tree\n",
+                context, (void*)dl_links, i, resolved_dl);
+            return FALSE;
+        }
+    }
+
+    port_log("SSB64: MODEL_DLLINK_PREFLIGHT_REJECT context=%s links=%p reason=missing-sentinel "
+             "max_links=64 action=reject-tree\n", context, (void*)dl_links);
+    return FALSE;
+}
+
+static sb32 gcPortPreflightDObjDescArray(DObjDesc *dobjdesc, const char *context, GCModelDisplayKind display_kind)
+{
+    uintptr_t reloc_base = 0;
+    size_t reloc_size = 0;
+    sb32 in_reloc = FALSE;
+    sb32 seen_depth[DOBJ_ARRAY_MAX];
+    s32 i;
+
+    if (dobjdesc == NULL)
+    {
+        port_log("SSB64: MODEL_PREFLIGHT_REJECT context=%s desc=%p reason=null-desc action=reject-tree\n",
+            context, (void*)dobjdesc);
+        return FALSE;
+    }
+
+    in_reloc = portRelocGetContainingFileBounds(dobjdesc, &reloc_base, &reloc_size) ? TRUE : FALSE;
+    for (i = 0; i < DOBJ_ARRAY_MAX; i++)
+    {
+        seen_depth[i] = FALSE;
+    }
+
+    for (i = 0; i < 1024; i++)
+    {
+        DObjDesc *cur = &dobjdesc[i];
+        s32 id;
+        void *resolved_dl;
+
+        if (in_reloc)
+        {
+            uintptr_t addr = (uintptr_t)cur;
+            if (addr < reloc_base || (addr - reloc_base) > reloc_size ||
+                sizeof(*cur) > reloc_size - (size_t)(addr - reloc_base))
+            {
+                port_log("SSB64: MODEL_PREFLIGHT_REJECT context=%s desc=%p index=%d reason=desc-oob "
+                         "base=%p size=0x%x action=reject-tree\n",
+                    context, (void*)dobjdesc, i, (void*)reloc_base, (unsigned int)reloc_size);
+                return FALSE;
+            }
+        }
+
+        if (cur->id == DOBJ_ARRAY_MAX)
+        {
+            static u32 s_model_preflight_pass_budget = 128;
+            if (s_model_preflight_pass_budget != 0)
+            {
+                s_model_preflight_pass_budget--;
+                port_log("SSB64: MODEL_PREFLIGHT_PASS context=%s desc=%p nodes=%d source=%s\n",
+                    context, (void*)dobjdesc, i, in_reloc ? "reloc" : "runtime");
+            }
+            return TRUE;
+        }
+
+        id = cur->id & 0xFFF;
+        if (id < 0 || id >= DOBJ_ARRAY_MAX)
+        {
+            port_log("SSB64: MODEL_PREFLIGHT_REJECT context=%s desc=%p index=%d raw_id=0x%x id=%d "
+                     "reason=id-oob action=reject-tree\n",
+                context, (void*)dobjdesc, i, (unsigned int)cur->id, id);
+            return FALSE;
+        }
+
+        if (id != 0 && !seen_depth[id - 1])
+        {
+            port_log("SSB64: MODEL_PREFLIGHT_REJECT context=%s desc=%p index=%d raw_id=0x%x id=%d "
+                     "reason=parent-missing action=reject-tree\n",
+                context, (void*)dobjdesc, i, (unsigned int)cur->id, id);
+            return FALSE;
+        }
+
+        resolved_dl = PORT_RESOLVE_GFX(cur->dl);
+        if (resolved_dl == NULL && !PORT_REF_IS_NULL(cur->dl))
+        {
+            port_log("SSB64: MODEL_PREFLIGHT_REJECT context=%s desc=%p index=%d id=%d token=0x%08x "
+                     "reason=dl-token-unresolved action=reject-tree\n",
+                context, (void*)dobjdesc, i, id, (unsigned int)PORT_REF_TOKEN(cur->dl));
+            return FALSE;
+        }
+
+        if (resolved_dl != NULL && display_kind == nGCModelDisplayKindDObj &&
+            !portValidateDisplayListPreflight(resolved_dl))
+        {
+            port_log("SSB64: MODEL_PREFLIGHT_REJECT context=%s desc=%p index=%d id=%d token=0x%08x dl=%p "
+                     "reason=dl-preflight action=reject-tree\n",
+                context, (void*)dobjdesc, i, id, (unsigned int)PORT_REF_TOKEN(cur->dl), resolved_dl);
+            return FALSE;
+        }
+        if (resolved_dl != NULL && display_kind == nGCModelDisplayKindDLLinks &&
+            !gcPortValidateDObjDLLinkArray((DObjDLLink*)resolved_dl, context))
+        {
+            port_log("SSB64: MODEL_PREFLIGHT_REJECT context=%s desc=%p index=%d id=%d links=%p "
+                     "reason=dl-links-preflight action=reject-tree\n",
+                context, (void*)dobjdesc, i, id, resolved_dl);
+            return FALSE;
+        }
+
+        seen_depth[id] = TRUE;
+    }
+
+    port_log("SSB64: MODEL_PREFLIGHT_REJECT context=%s desc=%p reason=missing-sentinel max_nodes=1024 "
+             "action=reject-tree\n", context, (void*)dobjdesc);
+    return FALSE;
+}
+
+static sb32 gcPortQuarantineRejectedModel(GObj *gobj, const char *context)
+{
+    if (gobj != NULL)
+    {
+        gobj->flags |= GOBJ_FLAG_HIDDEN;
+    }
+    port_log("SSB64: MODEL_QUARANTINE context=%s gobj=%p action=hide-unpublished-tree\n",
+        context, (void*)gobj);
+    return FALSE;
+}
+#endif
+
+sb32 gcSetupCommonDObjs(GObj *gobj, DObjDesc *dobjdesc, DObj **dobjs, GCModelDisplayKind display_kind)
+{
+#ifdef PORT
+    if (!gcPortPreflightDObjDescArray(dobjdesc, "common", display_kind))
+    {
+        return gcPortQuarantineRejectedModel(gobj, "common");
+    }
+#endif
+#ifndef PORT
+    (void)display_kind;
+#endif
+
     s32 i;
     DObj* dobj;
     s32 id;
@@ -2671,6 +2881,7 @@ void gcSetupCommonDObjs(GObj *gobj, DObjDesc *dobjdesc, DObj **dobjs)
         }
         dobjdesc++;
     }
+    return TRUE;
 }
 
 void gcAddDObj3TransformsKind(DObj *dobj, u8 tk1, u8 tk2, u8 tk3)
@@ -2797,8 +3008,18 @@ void gcDecideDObj3TransformsKind(DObj *dobj, u8 tk1, u8 tk2, u8 tk3, s32 flags)
 }
 
 // 0x8000F590
-void gcSetupCustomDObjs(GObj *gobj, DObjDesc *dobjdesc, DObj **dobjs, u8 tk1, u8 tk2, u8 tk3)
+sb32 gcSetupCustomDObjs(GObj *gobj, DObjDesc *dobjdesc, DObj **dobjs, u8 tk1, u8 tk2, u8 tk3, GCModelDisplayKind display_kind)
 {
+#ifdef PORT
+    if (!gcPortPreflightDObjDescArray(dobjdesc, "custom", display_kind))
+    {
+        return gcPortQuarantineRejectedModel(gobj, "custom");
+    }
+#endif
+#ifndef PORT
+    (void)display_kind;
+#endif
+
     s32 i;
     DObj *dobj;
     s32 id;
@@ -2827,7 +3048,7 @@ void gcSetupCustomDObjs(GObj *gobj, DObjDesc *dobjdesc, DObj **dobjs, u8 tk1, u8
         {
             void *resolved_dl = PORT_RESOLVE_GFX(dobjdesc->dl);
             if (resolved_dl == NULL && !PORT_REF_IS_NULL(dobjdesc->dl)) {
-                return;
+                return gcPortQuarantineRejectedModel(gobj, "custom-runtime-token");
             }
             if (id != 0) {
                 /* SR-extracted character effect DObjDesc arrays sometimes have
@@ -2878,11 +3099,22 @@ void gcSetupCustomDObjs(GObj *gobj, DObjDesc *dobjdesc, DObj **dobjs, u8 tk1, u8
         }
         dobjdesc++;
     }
+    return TRUE;
 }
 
 // 0x8000F720
-void gcSetupCustomDObjsWithMObj(GObj *gobj, DObjDesc *dobjdesc, MObjSub ***p_mobjsubs, DObj **dobjs, u8 tk1, u8 tk2, u8 tk3)
+sb32 gcSetupCustomDObjsWithMObj(GObj *gobj, DObjDesc *dobjdesc, MObjSub ***p_mobjsubs, DObj **dobjs, u8 tk1, u8 tk2, u8 tk3, GCModelDisplayKind display_kind)
 {
+#ifdef PORT
+    if (!gcPortPreflightDObjDescArray(dobjdesc, "custom-mobj", display_kind))
+    {
+        return gcPortQuarantineRejectedModel(gobj, "custom-mobj");
+    }
+#endif
+#ifndef PORT
+    (void)display_kind;
+#endif
+
     s32 i;
     DObj *dobj;
     s32 id;
@@ -2968,6 +3200,7 @@ void gcSetupCustomDObjsWithMObj(GObj *gobj, DObjDesc *dobjdesc, MObjSub ***p_mob
         }
         dobjdesc++;
     }
+    return TRUE;
 }
 
 void gcAddMObjAll(GObj *gobj, MObjSub ***p_mobjsubs)

@@ -198,9 +198,21 @@ GObj* grDisplayMakeGeometryLayer(MPGroundDesc *gr_desc, s32 gr_desc_id, DObj **d
 
     gcAddGObjDisplay(ground_gobj, proc_display, dGRDisplayDescs[gr_desc_id].dl_link, GOBJ_PRIORITY_DEFAULT, ~0);
 #ifdef PORT
-    gcSetupCustomDObjs(ground_gobj, (DObjDesc*)PORT_RESOLVE(gr_desc->dobjdesc), dobjs, nGCMatrixKindTraRotRpyRSca, nGCMatrixKindNull, nGCMatrixKindNull);
+    if (!gcSetupCustomDObjs(ground_gobj, (DObjDesc*)PORT_RESOLVE(gr_desc->dobjdesc), dobjs,
+        nGCMatrixKindTraRotRpyRSca, nGCMatrixKindNull, nGCMatrixKindNull,
+        (gMPCollisionGroundData->layer_mask & (1 << gr_desc_id)) ? nGCModelDisplayKindDLLinks : nGCModelDisplayKindDObj))
+    {
+        gcEjectGObj(ground_gobj);
+        return NULL;
+    }
 #else
-    gcSetupCustomDObjs(ground_gobj, gr_desc->dobjdesc, dobjs, nGCMatrixKindTraRotRpyRSca, nGCMatrixKindNull, nGCMatrixKindNull);
+    if (!gcSetupCustomDObjs(ground_gobj, gr_desc->dobjdesc, dobjs,
+        nGCMatrixKindTraRotRpyRSca, nGCMatrixKindNull, nGCMatrixKindNull,
+        (gMPCollisionGroundData->layer_mask & (1 << gr_desc_id)) ? nGCModelDisplayKindDLLinks : nGCModelDisplayKindDObj))
+    {
+        gcEjectGObj(ground_gobj);
+        return NULL;
+    }
 #endif
 
     if (gr_desc->p_mobjsubs != NULL)

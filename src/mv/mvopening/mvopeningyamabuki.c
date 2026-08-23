@@ -173,7 +173,7 @@ void mvOpeningYamabukiMakeFighter(void)
 void mvOpeningYamabukiMakeLegs(void)
 {
     GObj* gobj = gcMakeGObjSPAfter(0, NULL, 17, GOBJ_PRIORITY_DEFAULT);
-    gcSetupCustomDObjs
+    if (!gcSetupCustomDObjs
     (
         gobj,
         lbRelocGetFileData
@@ -185,8 +185,13 @@ void mvOpeningYamabukiMakeLegs(void)
         NULL,
         nGCMatrixKindTraRotRpyRSca,
         nGCMatrixKindNull,
-        nGCMatrixKindNull
-    );
+        nGCMatrixKindNull,
+        nGCModelDisplayKindDObj
+    ))
+    {
+        gcEjectGObj(gobj);
+        return;
+    }
     gcAddGObjDisplay(gobj, gcDrawDObjTreeForGObj, 27, GOBJ_PRIORITY_DEFAULT, ~0);
 
     DObjGetStruct(gobj)->translate.vec.f.x = 0.0F;
@@ -211,7 +216,7 @@ void mvOpeningYamabukiMakeLegs(void)
 void mvOpeningYamabukiMakeLegsShadow(void)
 {
     GObj* gobj = gcMakeGObjSPAfter(0, NULL, 17, GOBJ_PRIORITY_DEFAULT);
-    gcSetupCustomDObjs
+    if (!gcSetupCustomDObjs
     (
         gobj,
         lbRelocGetFileData
@@ -223,8 +228,13 @@ void mvOpeningYamabukiMakeLegsShadow(void)
         NULL,
         nGCMatrixKindTraRotRpyRSca,
         nGCMatrixKindNull,
-        nGCMatrixKindNull
-    );
+        nGCMatrixKindNull,
+        nGCModelDisplayKindDLLinks
+    ))
+    {
+        gcEjectGObj(gobj);
+        return;
+    }
     gcAddGObjDisplay(gobj, gcDrawDObjTreeDLLinksForGObj, 27, GOBJ_PRIORITY_DEFAULT, ~0);
 
     DObjGetStruct(gobj)->translate.vec.f.x = 0.0F;
@@ -249,7 +259,7 @@ void mvOpeningYamabukiMakeLegsShadow(void)
 void mvOpeningYamabukiMakeMBall(void)
 {
     GObj* gobj = gcMakeGObjSPAfter(0, NULL, 17, GOBJ_PRIORITY_DEFAULT);
-    gcSetupCustomDObjs
+    if (!gcSetupCustomDObjs
     (
         gobj,
         lbRelocGetFileData
@@ -261,8 +271,13 @@ void mvOpeningYamabukiMakeMBall(void)
         NULL,
         nGCMatrixKindTraRotRpyRSca,
         nGCMatrixKindNull,
-        nGCMatrixKindNull
-    );
+        nGCMatrixKindNull,
+        nGCModelDisplayKindDLLinks
+    ))
+    {
+        gcEjectGObj(gobj);
+        return;
+    }
     gcAddGObjDisplay(gobj, gcDrawDObjTreeDLLinksForGObj, 27, GOBJ_PRIORITY_DEFAULT, ~0);
 
     DObjGetStruct(gobj)->translate.vec.f.x = 0.0F;

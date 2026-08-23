@@ -1872,15 +1872,20 @@ GObj* ifCommonPlayerArrowsMakeInterface(void (*proc_display)(GObj*), void (*proc
     GObj *interface_gobj = gcMakeGObjSPAfter(nGCCommonKindInterface, NULL, nGCCommonLinkIDInterface, GOBJ_PRIORITY_DEFAULT);
 
     gcAddGObjDisplay(interface_gobj, proc_display, 8, GOBJ_PRIORITY_DEFAULT, ~0);
-    gcSetupCustomDObjs
+    if (!gcSetupCustomDObjs
     (
         interface_gobj,
         lbRelocGetFileData(DObjDesc*, gGMCommonFiles[0], llIFCommonPlayerArrowsDObjDesc),
         NULL,
         nGCMatrixKindTraRotRpyR,
         nGCMatrixKindNull,
-        nGCMatrixKindNull
-    );
+        nGCMatrixKindNull,
+        nGCModelDisplayKindDObj
+    ))
+    {
+        gcEjectGObj(interface_gobj);
+        return NULL;
+    }
     gcAddGObjProcess(interface_gobj, proc_update, nGCProcessKindFunc, 5);
 
     return interface_gobj;

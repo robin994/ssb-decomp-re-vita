@@ -400,7 +400,7 @@ GObj* itManagerMakeItem(GObj *parent_gobj, ITDesc *item_desc, Vec3f *pos, Vec3f 
     {
         if (!(attr->is_item_dobjs))
         {
-            gcSetupCustomDObjsWithMObj
+            if (!gcSetupCustomDObjsWithMObj
             (
                 item_gobj,
                 PORT_RESOLVE(attr->data),
@@ -408,8 +408,14 @@ GObj* itManagerMakeItem(GObj *parent_gobj, ITDesc *item_desc, Vec3f *pos, Vec3f 
                 NULL,
                 item_desc->transform_types.tk1,
                 item_desc->transform_types.tk2,
-                item_desc->transform_types.tk3
-            );
+                item_desc->transform_types.tk3,
+                attr->is_display_xlu ? nGCModelDisplayKindDLLinks : nGCModelDisplayKindDObj
+            ))
+            {
+                itManagerSetPrevStructAlloc(ip);
+                gcEjectGObj(item_gobj);
+                return NULL;
+            }
         }
         else
         {
