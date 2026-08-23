@@ -10,20 +10,42 @@
 extern void port_log(const char *fmt, ...);
 extern bool portRelocDescribePointer(const void *ptr, uintptr_t *out_base, size_t *out_size, u32 *out_file_id, const char **out_path);
 
-/* Fighter-model audit used while bringing the N64 display-list/material path up on Vita.
- * It is deliberately read-only and bounded: one Mario and one Fox creation dump per
- * scene.  Mario is the control sample; Fox is the currently reproducible partial model. */
-static u8 sPortFighterAuditScene = 0xFF;
-static u8 sPortFighterAuditCreateMask = 0;
+/* Compact fighter-model audit for the intermittent partial-model bug.
+ * Earlier revisions emitted one very long line per joint.  On Vita that
+ * could overflow port_log's asynchronous queue exactly while several
+ * fighters were created in the player-select screen, so an incomplete log
+ * was indistinguishable from an incomplete model.  Keep the audit bounded:
+ * one summary per target fighter creation, plus anomaly-only detail lines. */
+static u32 sPortFighterAuditCreateSerialMario = 0;
+static u32 sPortFighterAuditCreateSerialFox = 0;
 
 static bool portFighterAuditIsTargetKind(s32 fkind)
 {
     return (fkind == nFTKindMario) || (fkind == nFTKindFox);
 }
 
-static u8 portFighterAuditKindBit(s32 fkind)
+u32 portFighterAuditGetCreateSerial(s32 fkind)
 {
-    return (fkind == nFTKindFox) ? 2 : 1;
+    if (fkind == nFTKindMario) return sPortFighterAuditCreateSerialMario;
+    if (fkind == nFTKindFox) return sPortFighterAuditCreateSerialFox;
+    return 0;
+}
+
+static u32 portFighterAuditNextCreateSerial(s32 fkind)
+{
+    if (fkind == nFTKindFox) return ++sPortFighterAuditCreateSerialFox;
+    return ++sPortFighterAuditCreateSerialMario;
+}
+
+static u64 portFighterAuditHashMix(u64 hash, u64 value)
+{
+    s32 byte;
+    for (byte = 0; byte < 8; byte++)
+    {
+        hash ^= (value >> (byte * 8)) & 0xFFu;
+        hash *= 1099511628211ULL;
+    }
+    return hash;
 }
 
 static void portFighterAuditDescribeDL(const void *dl, u32 *file_id, uintptr_t *file_off, const char **path)
@@ -58,66 +80,116 @@ static s32 portFighterAuditCountMObjs(DObj *dobj)
     return count;
 }
 
+extern unsigned int port_log_get_dropped_lines(void);
+extern unsigned int port_log_get_queue_high_water(void);
+extern unsigned int port_log_get_queued_lines(void);
+
 static void portFighterAuditCreation(FTStruct *fp)
 {
     FTCommonPartContainer *commonparts;
     DObjDesc *high_desc;
+    u64 present_mask = 0;
+    u64 dl_mask = 0;
+    u64 expected_mask = 0;
+    u64 mismatch_mask = 0;
+    u64 parts_bad_mask = 0;
+    u64 modelpart_bad_mask = 0;
+    u64 unregistered_mask = 0;
+    u64 mobj_mask = 0;
+    u64 hash = 1469598103934665603ULL;
+    u32 serial;
     s32 i;
-    u8 bit;
 
     if ((fp == NULL) || !portFighterAuditIsTargetKind(fp->fkind)) return;
 
-    if (sPortFighterAuditScene != gSCManagerSceneData.scene_curr)
-    {
-        sPortFighterAuditScene = gSCManagerSceneData.scene_curr;
-        sPortFighterAuditCreateMask = 0;
-    }
-    bit = portFighterAuditKindBit(fp->fkind);
-    if (sPortFighterAuditCreateMask & bit) return;
-    sPortFighterAuditCreateMask |= bit;
-
+    serial = portFighterAuditNextCreateSerial(fp->fkind);
     commonparts = (FTCommonPartContainer*)PORT_RESOLVE(fp->attr->commonparts_container);
     high_desc = (commonparts != NULL) ? FTPARTS_GET_DOBJDESC(&commonparts->commonparts[nFTPartsDetailHigh - nFTPartsDetailStart]) : NULL;
-
-    port_log("SSB64: FIGHTER_PART_AUDIT_CREATE scene=%u fkind=%d gobj=%p detail=%d costume=%d shade=%d commonparts=%p high_desc=%p setup_parts=%p common_flags=0x%02x\n",
-        (unsigned)gSCManagerSceneData.scene_curr, fp->fkind, fp->fighter_gobj, fp->detail_curr, fp->costume, fp->shade,
-        commonparts, high_desc, PORT_RESOLVE(fp->attr->setup_parts),
-        (commonparts != NULL) ? FTPARTS_GET_FLAGS(&commonparts->commonparts[fp->detail_curr - nFTPartsDetailStart]) : 0xFF);
 
     for (i = nFTPartsJointCommonStart; i < ARRAY_COUNT(fp->joints); i++)
     {
         DObj *dobj = fp->joints[i];
-        FTParts *parts;
+        FTParts *parts = NULL;
         const void *expected_dl = NULL;
         u32 dl_file = 0xFFFFFFFFu, expected_file = 0xFFFFFFFFu;
         uintptr_t dl_off = 0, expected_off = 0;
         const char *dl_path = "(none)", *expected_path = "(none)";
-        s32 mobj_count;
-        MObj *mobj;
-
-        if (dobj == NULL) continue;
-        parts = ftGetParts(dobj);
-        mobj_count = portFighterAuditCountMObjs(dobj);
-        mobj = dobj->mobj;
+        s32 mobj_count = 0;
+        u64 bit = (i < 64) ? (((u64)1) << i) : 0;
 
         if (high_desc != NULL)
         {
             expected_dl = PORT_RESOLVE_GFX(high_desc[i - nFTPartsJointCommonStart].dl);
         }
-        portFighterAuditDescribeDL(dobj->dl, &dl_file, &dl_off, &dl_path);
-        portFighterAuditDescribeDL(expected_dl, &expected_file, &expected_off, &expected_path);
+        if (expected_dl != NULL) expected_mask |= bit;
 
-        port_log("SSB64: FIGHTER_PART_AUDIT_CREATE_JOINT scene=%u fkind=%d joint=%d dobj=%p flags=0x%02x parts_flags=0x%02x model_base=%d model_curr=%d dl=%p dl_file=%u dl_off=0x%lx expected_dl=%p expected_file=%u expected_off=0x%lx match=%s mobjs=%d first_mobj=%p mfmt=%d msiz=%d mflags=0x%04x sprites_tok=0x%08x palettes_tok=0x%08x\n",
-            (unsigned)gSCManagerSceneData.scene_curr, fp->fkind, i, dobj, dobj->flags,
-            (parts != NULL) ? parts->flags : 0xFF,
-            fp->modelpart_status[i - nFTPartsJointCommonStart].modelpart_id_base,
-            fp->modelpart_status[i - nFTPartsJointCommonStart].modelpart_id_curr,
-            dobj->dl, dl_file, (unsigned long)dl_off, expected_dl, expected_file, (unsigned long)expected_off,
-            (dobj->dl == expected_dl) ? "yes" : "no", mobj_count, mobj,
-            (mobj != NULL) ? mobj->sub.fmt : -1, (mobj != NULL) ? mobj->sub.siz : -1,
-            (mobj != NULL) ? mobj->sub.flags : 0, (mobj != NULL) ? mobj->sub.sprites : 0,
-            (mobj != NULL) ? mobj->sub.palettes : 0);
+        if (dobj != NULL)
+        {
+            present_mask |= bit;
+            parts = ftGetParts(dobj);
+            if (dobj->dl != NULL) dl_mask |= bit;
+            if (dobj->mobj != NULL) mobj_mask |= bit;
+            mobj_count = portFighterAuditCountMObjs(dobj);
+
+            portFighterAuditDescribeDL(dobj->dl, &dl_file, &dl_off, &dl_path);
+            if ((dobj->dl != NULL) && (dl_file == 0xFFFFFFFFu)) unregistered_mask |= bit;
+
+            if ((parts == NULL) || (parts->joint_id != i)) parts_bad_mask |= bit;
+
+            if (fp->modelpart_status[i - nFTPartsJointCommonStart].modelpart_id_base !=
+                fp->modelpart_status[i - nFTPartsJointCommonStart].modelpart_id_curr)
+            {
+                modelpart_bad_mask |= bit;
+            }
+        }
+
+        portFighterAuditDescribeDL(expected_dl, &expected_file, &expected_off, &expected_path);
+        if ((dobj == NULL) || (dobj->dl != expected_dl))
+        {
+            /* A missing DObj is only an error when the high-detail descriptor
+             * says that joint should exist. */
+            if ((dobj != NULL) || (expected_dl != NULL)) mismatch_mask |= bit;
+        }
+
+        hash = portFighterAuditHashMix(hash, (u64)(u32)i);
+        hash = portFighterAuditHashMix(hash, (u64)dl_file);
+        hash = portFighterAuditHashMix(hash, (u64)dl_off);
+        hash = portFighterAuditHashMix(hash, (u64)expected_file);
+        hash = portFighterAuditHashMix(hash, (u64)expected_off);
+        hash = portFighterAuditHashMix(hash, (u64)((dobj != NULL) ? dobj->flags : 0xFF));
+        hash = portFighterAuditHashMix(hash, (u64)((parts != NULL) ? parts->flags : 0xFF));
+        hash = portFighterAuditHashMix(hash, (u64)((dobj != NULL) ? mobj_count : 0));
+        if (dobj != NULL)
+        {
+            hash = portFighterAuditHashMix(hash,
+                (u64)(u32)fp->modelpart_status[i - nFTPartsJointCommonStart].modelpart_id_base);
+            hash = portFighterAuditHashMix(hash,
+                (u64)(u32)fp->modelpart_status[i - nFTPartsJointCommonStart].modelpart_id_curr);
+        }
+
+        if ((bit != 0) && ((mismatch_mask | parts_bad_mask | unregistered_mask) & bit))
+        {
+            port_log("SSB64: FIGHTER_MODEL_CREATE_ANOMALY scene=%u fkind=%d serial=%u joint=%d "
+                     "present=%d parts_joint=%d dl_file=%u dl_off=0x%lx expected_file=%u "
+                     "expected_off=0x%lx dl_path=%s expected_path=%s\n",
+                (unsigned)gSCManagerSceneData.scene_curr, fp->fkind, serial, i,
+                (dobj != NULL) ? 1 : 0, (parts != NULL) ? parts->joint_id : -1,
+                dl_file, (unsigned long)dl_off, expected_file, (unsigned long)expected_off,
+                dl_path, expected_path);
+        }
     }
+
+    port_log("SSB64: FIGHTER_MODEL_CREATE_SUMMARY scene=%u fkind=%d serial=%u detail=%d "
+             "present=%016llx dl=%016llx expected=%016llx mismatch=%016llx "
+             "parts_bad=%016llx modelpart_bad=%016llx unregistered=%016llx mobj=%016llx "
+             "hash=%016llx log_drops=%u log_high=%u log_queued=%u\n",
+        (unsigned)gSCManagerSceneData.scene_curr, fp->fkind, serial, fp->detail_curr,
+        (unsigned long long)present_mask, (unsigned long long)dl_mask,
+        (unsigned long long)expected_mask, (unsigned long long)mismatch_mask,
+        (unsigned long long)parts_bad_mask, (unsigned long long)modelpart_bad_mask,
+        (unsigned long long)unregistered_mask, (unsigned long long)mobj_mask,
+        (unsigned long long)hash, port_log_get_dropped_lines(),
+        port_log_get_queue_high_water(), port_log_get_queued_lines());
 }
 #endif
 #ifdef PORT

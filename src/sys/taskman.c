@@ -24,6 +24,23 @@ extern char *getenv(const char *name); /* decomp include/stdlib.h shadows the ho
 #include <PR/ucode.h>
 #include <PR/ultratypes.h>
 
+#ifdef __vita__
+/* v12: display-list writers are macro-heavy and increment raw Gfx* heads all
+ * over objdisplay.c. syTaskmanCheckBufferLengths() detects an overflow only
+ * after the draw/update pass, i.e. after an overrun may already have damaged
+ * the next scene allocation. Keep the original logical length for diagnostics
+ * but reserve a Vita-only redzone behind every DL/RDP buffer so modest
+ * overruns are contained rather than corrupting adjacent state. */
+#define PORT_VITA_DL_REDZONE_BYTES (8u * 1024u)
+static void *syTaskmanAllocGuardedBuffer(size_t logical_size, u32 align)
+{
+    size_t physical_size = logical_size;
+    if (logical_size != 0 && physical_size <= ((size_t)-1 - PORT_VITA_DL_REDZONE_BYTES))
+        physical_size += PORT_VITA_DL_REDZONE_BYTES;
+    return syTaskmanMalloc(physical_size, align);
+}
+#endif
+
 #ifdef PORT
 #include "port_log.h"
 /* The token-pointer table (port/resource/RelocPointerTable) and Fast3D's
@@ -379,6 +396,21 @@ void syTaskmanCheckBufferLengths(void)
 
 	for (i = 0; i < (ARRAY_COUNT(gSYTaskmanDLHeads) + ARRAY_COUNT(sSYTaskmanDLBranches) + ARRAY_COUNT(sSYTaskmanDLBuffers[0])) / 3; i++)
 	{
+#ifdef __vita__
+        {
+            const uintptr_t start = (uintptr_t)sSYTaskmanDLBuffers[gSYTaskmanTaskID][i].start;
+            const uintptr_t head = (uintptr_t)gSYTaskmanDLHeads[i];
+            const size_t alloc = sSYTaskmanDLBuffers[gSYTaskmanTaskID][i].length;
+            const size_t used = (head >= start) ? (size_t)(head - start) : 0;
+            static unsigned int sDLHighWaterBudget = 64;
+            if (alloc != 0 && used <= alloc && used >= (alloc - alloc / 10u) && sDLHighWaterBudget > 0) {
+                --sDLHighWaterBudget;
+                port_log("SSB64: DLBuffer HIGH_WATER kind=%d used=%u alloc=%u pct=%u\n",
+                         i, (unsigned)used, (unsigned)alloc,
+                         (unsigned)((used * 100u) / alloc));
+            }
+        }
+#endif
 		if (sSYTaskmanDLBuffers[gSYTaskmanTaskID][i].length + (uintptr_t)sSYTaskmanDLBuffers[gSYTaskmanTaskID][i].start < (uintptr_t)gSYTaskmanDLHeads[i])
 		{
 #ifdef PORT
@@ -1268,13 +1300,29 @@ void syTaskmanLoadScene(SYTaskmanSceneSetup *tscene, void (*func_start)(void))
 	);
 	for (i = 0; i < gSYTaskmanTaskCount; i++)
 	{
-		dl_buffers[i][0].start = syTaskmanMalloc(tscene->dl_buffer0_size, 0x8);
+		#ifdef __vita__
+        dl_buffers[i][0].start = syTaskmanAllocGuardedBuffer(tscene->dl_buffer0_size, 0x8);
+#else
+        dl_buffers[i][0].start = syTaskmanMalloc(tscene->dl_buffer0_size, 0x8);
+#endif
 		dl_buffers[i][0].length = tscene->dl_buffer0_size;
-		dl_buffers[i][1].start = syTaskmanMalloc(tscene->dl_buffer1_size, 0x8);
+		#ifdef __vita__
+        dl_buffers[i][1].start = syTaskmanAllocGuardedBuffer(tscene->dl_buffer1_size, 0x8);
+#else
+        dl_buffers[i][1].start = syTaskmanMalloc(tscene->dl_buffer1_size, 0x8);
+#endif
 		dl_buffers[i][1].length = tscene->dl_buffer1_size;
-		dl_buffers[i][2].start = syTaskmanMalloc(tscene->dl_buffer2_size, 0x8);
+		#ifdef __vita__
+        dl_buffers[i][2].start = syTaskmanAllocGuardedBuffer(tscene->dl_buffer2_size, 0x8);
+#else
+        dl_buffers[i][2].start = syTaskmanMalloc(tscene->dl_buffer2_size, 0x8);
+#endif
 		dl_buffers[i][2].length = tscene->dl_buffer2_size;
-		dl_buffers[i][3].start = syTaskmanMalloc(tscene->dl_buffer3_size, 0x8);
+		#ifdef __vita__
+        dl_buffers[i][3].start = syTaskmanAllocGuardedBuffer(tscene->dl_buffer3_size, 0x8);
+#else
+        dl_buffers[i][3].start = syTaskmanMalloc(tscene->dl_buffer3_size, 0x8);
+#endif
 		dl_buffers[i][3].length = tscene->dl_buffer3_size;
 	}
 	syTaskmanSetDLBuffer(dl_buffers);
@@ -1293,7 +1341,15 @@ void syTaskmanLoadScene(SYTaskmanSceneSetup *tscene, void (*func_start)(void))
 	{
 		tscene->rdp_output_buffer_size = 0x1000;
 	}
-	syTaskmanSetRdpOutputBuffer(tscene->rdp_output_buffer_kind, syTaskmanMalloc(tscene->rdp_output_buffer_size, 0x10), tscene->rdp_output_buffer_size);
+	#ifdef __vita__
+    syTaskmanSetRdpOutputBuffer(tscene->rdp_output_buffer_kind,
+                               syTaskmanAllocGuardedBuffer(tscene->rdp_output_buffer_size, 0x10),
+                               tscene->rdp_output_buffer_size);
+#else
+    syTaskmanSetRdpOutputBuffer(tscene->rdp_output_buffer_kind,
+                               syTaskmanMalloc(tscene->rdp_output_buffer_size, 0x10),
+                               tscene->rdp_output_buffer_size);
+#endif
 	syRdpSetFuncLights(tscene->func_lights);
 	sSYTaskmanFuncController = tscene->func_controller;
 	syControllerSetAutoRead((syControllerScheduleRead != sSYTaskmanFuncController) ? TRUE : FALSE);
@@ -1301,6 +1357,16 @@ void syTaskmanLoadScene(SYTaskmanSceneSetup *tscene, void (*func_start)(void))
 	dSYTaskmanUpdateCount = dSYTaskmanFrameCount = 0;
 
 #ifdef PORT
+#ifdef __vita__
+    {
+        static sb32 sLoggedBoundsHardening = FALSE;
+        if (!sLoggedBoundsHardening) {
+            sLoggedBoundsHardening = TRUE;
+            port_log("SSB64: VITA_BOUNDS_HARDENING matrix-stack vertex-index segment-index light-count movemem-null dl-redzone=%u\n",
+                     (unsigned)PORT_VITA_DL_REDZONE_BYTES);
+        }
+    }
+#endif
 	port_log("SSB64: syTaskmanLoadScene — about to call func_start=%p\n", (void *)func_start);
 #endif
 	if (func_start != NULL)

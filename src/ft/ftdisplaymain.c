@@ -13,27 +13,50 @@ extern float port_widescreen_clip_x_scale(void);
 extern void port_log(const char *fmt, ...);
 extern bool portRelocDescribePointer(const void *ptr, uintptr_t *out_base, size_t *out_size, u32 *out_file_id, const char **out_path);
 
-/* Draw-side half of FIGHTER_PART_AUDIT.  Log each Mario/Fox joint at most once
- * per scene so we can distinguish CPU-side missing/hidden parts from display
- * lists that are submitted correctly and disappear later in Fast3D. */
-static u8 sPortFighterDrawAuditScene = 0xFF;
-static u64 sPortFighterDrawAuditSeenMario = 0;
-static u64 sPortFighterDrawAuditSeenFox = 0;
+/* Compact draw-side audit.  The old per-joint diagnostics could enqueue
+ * hundreds of lines in one player-select frame and silently overflow
+ * port_log.  v8 collects bitmasks while the recursive draw walks the fighter
+ * and emits one TREE_SUMMARY and one DRAW_SUMMARY per newly created Mario/Fox
+ * instance.  Detailed lines are anomaly-only. */
+extern u32 portFighterAuditGetCreateSerial(s32 fkind);
+extern unsigned int port_log_get_dropped_lines(void);
+extern unsigned int port_log_get_queue_high_water(void);
+extern unsigned int port_log_get_queued_lines(void);
 
-/* v12: dump the actual runtime joint graph independently of recursive draw
- * traversal. This decides whether a visually missing limb is absent/unlinked
- * on the CPU side or reaches Fast3D and disappears later. */
-static u8 sPortFighterTreeAuditScene = 0xFF;
-static u32 sPortFighterTreeAuditKinds = 0;
+static u32 sPortFighterLastTreeSerialMario = 0;
+static u32 sPortFighterLastTreeSerialFox = 0;
+static u32 sPortFighterLastDrawSerialMario = 0;
+static u32 sPortFighterLastDrawSerialFox = 0;
 
-/* v16: traversal audit independent of FTParts.  The v11 draw audit returns
- * immediately when dobj->user_data/FTParts is NULL or has an invalid joint id,
- * which made a corrupted FTParts pointer indistinguishable from a recursion
- * chain that actually stopped.  Resolve the joint index from fp->joints[] so
- * every DObj entry is observable even if its metadata is damaged. */
-static u8 sPortFighterTraverseAuditScene = 0xFF;
-static u64 sPortFighterTraverseSeenMario = 0;
-static u64 sPortFighterTraverseSeenFox = 0;
+static bool sPortFighterAuditCollectActive = false;
+static s32 sPortFighterAuditCollectFKind = -1;
+static u32 sPortFighterAuditCollectSerial = 0;
+static u64 sPortFighterAuditTraverseMask = 0;
+static u64 sPortFighterAuditDrawSeenMask = 0;
+static u64 sPortFighterAuditSubmitMask = 0;
+static u64 sPortFighterAuditHiddenMask = 0;
+static u64 sPortFighterAuditNoTextureMask = 0;
+static u64 sPortFighterAuditNullDLMask = 0;
+static u64 sPortFighterAuditModeBadMask = 0;
+static u64 sPortFighterAuditUnregisteredMask = 0;
+static u64 sPortFighterAuditPartsBadMask = 0;
+static u64 sPortFighterAuditNoDVMask = 0;
+
+static bool portFighterAuditIsTargetKind(s32 fkind)
+{
+    return (fkind == nFTKindMario) || (fkind == nFTKindFox);
+}
+
+static u64 portFighterAuditHashMix(u64 hash, u64 value)
+{
+    s32 byte;
+    for (byte = 0; byte < 8; byte++)
+    {
+        hash ^= (value >> (byte * 8)) & 0xFFu;
+        hash *= 1099511628211ULL;
+    }
+    return hash;
+}
 
 static s32 portFighterFindJointIndex(FTStruct *fp, DObj *dobj)
 {
@@ -48,40 +71,64 @@ static s32 portFighterFindJointIndex(FTStruct *fp, DObj *dobj)
     return -1;
 }
 
+static void portFighterAuditBeginDraw(FTStruct *fp)
+{
+    u32 serial;
+    u32 *last_serial;
+
+    sPortFighterAuditCollectActive = false;
+    if ((fp == NULL) || !portFighterAuditIsTargetKind(fp->fkind)) return;
+
+    serial = portFighterAuditGetCreateSerial(fp->fkind);
+    if (serial == 0) return;
+
+    last_serial = (fp->fkind == nFTKindFox) ?
+        &sPortFighterLastDrawSerialFox : &sPortFighterLastDrawSerialMario;
+    if (*last_serial == serial) return;
+
+    sPortFighterAuditCollectActive = true;
+    sPortFighterAuditCollectFKind = fp->fkind;
+    sPortFighterAuditCollectSerial = serial;
+    sPortFighterAuditTraverseMask = 0;
+    sPortFighterAuditDrawSeenMask = 0;
+    sPortFighterAuditSubmitMask = 0;
+    sPortFighterAuditHiddenMask = 0;
+    sPortFighterAuditNoTextureMask = 0;
+    sPortFighterAuditNullDLMask = 0;
+    sPortFighterAuditModeBadMask = 0;
+    sPortFighterAuditUnregisteredMask = 0;
+    sPortFighterAuditPartsBadMask = 0;
+    sPortFighterAuditNoDVMask = 0;
+}
+
 static s32 portFighterAuditTraverseEntry(FTStruct *fp, DObj *dobj)
 {
-    u64 *seen;
-    u64 bit;
     s32 joint;
     FTParts *parts;
+    u64 bit;
 
     if ((fp == NULL) || (dobj == NULL)) return -1;
-    if ((fp->fkind != nFTKindMario) && (fp->fkind != nFTKindFox)) return -1;
+    if (!portFighterAuditIsTargetKind(fp->fkind)) return -1;
 
     joint = portFighterFindJointIndex(fp, dobj);
     if ((joint < 0) || (joint >= 64)) return joint;
 
-    if (sPortFighterTraverseAuditScene != gSCManagerSceneData.scene_curr)
-    {
-        sPortFighterTraverseAuditScene = gSCManagerSceneData.scene_curr;
-        sPortFighterTraverseSeenMario = 0;
-        sPortFighterTraverseSeenFox = 0;
-    }
+    if (!sPortFighterAuditCollectActive ||
+        (sPortFighterAuditCollectFKind != fp->fkind)) return joint;
 
-    seen = (fp->fkind == nFTKindFox) ? &sPortFighterTraverseSeenFox : &sPortFighterTraverseSeenMario;
     bit = ((u64)1) << joint;
-    if ((*seen & bit) != 0) return joint;
-    *seen |= bit;
+    sPortFighterAuditTraverseMask |= bit;
 
     parts = ftGetParts(dobj);
-    port_log("SSB64: FIGHTER_TRAVERSE_ENTRY scene=%u fkind=%d joint=%d dobj=%p "
-             "child=%p sib_prev=%p sib_next=%p flags=0x%02x user_data=%p "
-             "parts_joint=%d parts_flags=0x%02x dl=%p mobj=%p\n",
-        (unsigned)gSCManagerSceneData.scene_curr, fp->fkind, joint, dobj,
-        dobj->child, dobj->sib_prev, dobj->sib_next, dobj->flags, dobj->user_data.p,
-        (parts != NULL) ? parts->joint_id : -999, (parts != NULL) ? parts->flags : 0,
-        dobj->dl, dobj->mobj);
-
+    if ((parts == NULL) || (parts->joint_id != joint))
+    {
+        sPortFighterAuditPartsBadMask |= bit;
+        port_log("SSB64: FIGHTER_TRAVERSE_ANOMALY scene=%u fkind=%d serial=%u joint=%d "
+                 "dobj=%p parts=%p parts_joint=%d user_data=%p\n",
+            (unsigned)gSCManagerSceneData.scene_curr, fp->fkind,
+            sPortFighterAuditCollectSerial, joint, dobj, parts,
+            (parts != NULL) ? parts->joint_id : -1, dobj->user_data.p);
+    }
     return joint;
 }
 
@@ -90,16 +137,17 @@ static void portFighterAuditTraverseMutation(FTStruct *fp, DObj *dobj, s32 joint
                                              void *user_before, u8 flags_before)
 {
     if ((fp == NULL) || (dobj == NULL) || (joint < 0)) return;
-    if ((fp->fkind != nFTKindMario) && (fp->fkind != nFTKindFox)) return;
+    if (!portFighterAuditIsTargetKind(fp->fkind)) return;
 
     if ((dobj->child != child_before) || (dobj->sib_next != sib_before) ||
         (dobj->user_data.p != user_before) || (dobj->flags != flags_before))
     {
         FTParts *parts = ftGetParts(dobj);
-        port_log("SSB64: FIGHTER_TRAVERSE_MUTATION scene=%u fkind=%d joint=%d dobj=%p "
+        port_log("SSB64: FIGHTER_TRAVERSE_MUTATION scene=%u fkind=%d serial=%u joint=%d dobj=%p "
                  "child=%p->%p sib_next=%p->%p user_data=%p->%p flags=0x%02x->0x%02x "
                  "parts_joint_now=%d\n",
-            (unsigned)gSCManagerSceneData.scene_curr, fp->fkind, joint, dobj,
+            (unsigned)gSCManagerSceneData.scene_curr, fp->fkind,
+            portFighterAuditGetCreateSerial(fp->fkind), joint, dobj,
             child_before, dobj->child, sib_before, dobj->sib_next,
             user_before, dobj->user_data.p, flags_before, dobj->flags,
             (parts != NULL) ? parts->joint_id : -999);
@@ -121,26 +169,28 @@ static bool portFighterTreeAuditReachable(DObj *root, DObj *node)
 
 static void portFighterAuditTree(FTStruct *fp, DObj *root)
 {
+    u64 present_mask = 0;
+    u64 reachable_mask = 0;
+    u64 dl_mask = 0;
+    u64 registered_mask = 0;
+    u64 unregistered_mask = 0;
+    u64 parts_bad_mask = 0;
+    u64 hidden_mask = 0;
+    u64 mobj_mask = 0;
+    u64 hash = 1469598103934665603ULL;
+    u32 serial;
+    u32 *last_serial;
     s32 joint;
-    u32 kind_bit;
 
-    if ((fp == NULL) || (root == NULL)) return;
-    if ((fp->fkind != nFTKindMario) && (fp->fkind != nFTKindFox)) return;
+    if ((fp == NULL) || (root == NULL) || !portFighterAuditIsTargetKind(fp->fkind)) return;
 
-    if (sPortFighterTreeAuditScene != gSCManagerSceneData.scene_curr)
-    {
-        sPortFighterTreeAuditScene = gSCManagerSceneData.scene_curr;
-        sPortFighterTreeAuditKinds = 0;
-    }
+    serial = portFighterAuditGetCreateSerial(fp->fkind);
+    last_serial = (fp->fkind == nFTKindFox) ?
+        &sPortFighterLastTreeSerialFox : &sPortFighterLastTreeSerialMario;
+    if ((serial == 0) || (*last_serial == serial)) return;
+    *last_serial = serial;
 
-    kind_bit = (1u << (u32)fp->fkind);
-    if ((sPortFighterTreeAuditKinds & kind_bit) != 0) return;
-    sPortFighterTreeAuditKinds |= kind_bit;
-
-    port_log("SSB64: FIGHTER_TREE_AUDIT_BEGIN scene=%u fkind=%d root=%p\n",
-        (unsigned)gSCManagerSceneData.scene_curr, fp->fkind, root);
-
-    for (joint = 0; joint < ARRAY_COUNT(fp->joints); joint++)
+    for (joint = 0; (joint < ARRAY_COUNT(fp->joints)) && (joint < 64); joint++)
     {
         DObj *dobj = fp->joints[joint];
         FTParts *parts = NULL;
@@ -148,133 +198,175 @@ static void portFighterAuditTree(FTStruct *fp, DObj *root)
         size_t resource_size = 0;
         u32 dl_file = 0xFFFFFFFFu;
         const char *dl_path = "(none)";
+        u64 bit = ((u64)1) << joint;
         bool reachable = false;
 
         if (dobj != NULL)
         {
+            present_mask |= bit;
             parts = ftGetParts(dobj);
             reachable = portFighterTreeAuditReachable(root, dobj);
+            if (reachable) reachable_mask |= bit;
+            if (dobj->flags & DOBJ_FLAG_HIDDEN) hidden_mask |= bit;
+            if (dobj->mobj != NULL) mobj_mask |= bit;
+            if ((parts == NULL) || (parts->joint_id != joint)) parts_bad_mask |= bit;
 
-            if ((dobj->dl != NULL) &&
-                portRelocDescribePointer(dobj->dl, &base, &resource_size, &dl_file, &dl_path))
+            if (dobj->dl != NULL)
             {
-                dl_off = (uintptr_t)dobj->dl - base;
-            }
-            else if (dobj->dl == NULL)
-            {
-                dl_path = "(none)";
-            }
-            else
-            {
-                dl_path = "(unregistered)";
+                dl_mask |= bit;
+                if (portRelocDescribePointer(dobj->dl, &base, &resource_size, &dl_file, &dl_path))
+                {
+                    registered_mask |= bit;
+                    dl_off = (uintptr_t)dobj->dl - base;
+                }
+                else
+                {
+                    unregistered_mask |= bit;
+                    dl_path = "(unregistered)";
+                }
             }
 
-            port_log("SSB64: FIGHTER_TREE_AUDIT scene=%u fkind=%d joint=%d dobj=%p reachable=%s "
-                     "parent=%p child=%p sib_prev=%p sib_next=%p flags=0x%02x parts=%p parts_joint=%d "
-                     "parts_flags=0x%02x dl=%p dl_file=%u dl_off=0x%lx dl_path=%s\n",
-                (unsigned)gSCManagerSceneData.scene_curr, fp->fkind, joint, dobj,
-                reachable ? "yes" : "no", dobj->parent, dobj->child, dobj->sib_prev, dobj->sib_next,
-                dobj->flags, parts, (parts != NULL) ? parts->joint_id : -1,
-                (parts != NULL) ? parts->flags : 0, dobj->dl, dl_file,
-                (unsigned long)dl_off, (dl_path != NULL) ? dl_path : "(none)");
+            hash = portFighterAuditHashMix(hash, (u64)(u32)joint);
+            hash = portFighterAuditHashMix(hash, (u64)dl_file);
+            hash = portFighterAuditHashMix(hash, (u64)dl_off);
+            hash = portFighterAuditHashMix(hash, (u64)dobj->flags);
+            hash = portFighterAuditHashMix(hash, (u64)((parts != NULL) ? parts->flags : 0xFF));
+            hash = portFighterAuditHashMix(hash, (u64)((parts != NULL) ? parts->joint_id : 0xFFFFFFFFu));
+
+            if (!reachable || ((parts == NULL) || (parts->joint_id != joint)) ||
+                ((dobj->dl != NULL) && (dl_file == 0xFFFFFFFFu)))
+            {
+                port_log("SSB64: FIGHTER_TREE_ANOMALY scene=%u fkind=%d serial=%u joint=%d "
+                         "reachable=%d parts_joint=%d dl=%p dl_file=%u dl_off=0x%lx dl_path=%s\n",
+                    (unsigned)gSCManagerSceneData.scene_curr, fp->fkind, serial, joint,
+                    reachable ? 1 : 0, (parts != NULL) ? parts->joint_id : -1,
+                    dobj->dl, dl_file, (unsigned long)dl_off, dl_path);
+            }
         }
         else
         {
-            port_log("SSB64: FIGHTER_TREE_AUDIT scene=%u fkind=%d joint=%d dobj=(nil) reachable=no\n",
-                (unsigned)gSCManagerSceneData.scene_curr, fp->fkind, joint);
+            hash = portFighterAuditHashMix(hash, (u64)(u32)joint);
+            hash = portFighterAuditHashMix(hash, 0xFFFFFFFFFFFFFFFFULL);
         }
     }
 
-    port_log("SSB64: FIGHTER_TREE_AUDIT_END scene=%u fkind=%d\n",
-        (unsigned)gSCManagerSceneData.scene_curr, fp->fkind);
+    port_log("SSB64: FIGHTER_TREE_SUMMARY scene=%u fkind=%d serial=%u "
+             "present=%016llx reachable=%016llx dl=%016llx registered=%016llx "
+             "unregistered=%016llx parts_bad=%016llx hidden=%016llx mobj=%016llx "
+             "hash=%016llx log_drops=%u log_high=%u log_queued=%u\n",
+        (unsigned)gSCManagerSceneData.scene_curr, fp->fkind, serial,
+        (unsigned long long)present_mask, (unsigned long long)reachable_mask,
+        (unsigned long long)dl_mask, (unsigned long long)registered_mask,
+        (unsigned long long)unregistered_mask, (unsigned long long)parts_bad_mask,
+        (unsigned long long)hidden_mask, (unsigned long long)mobj_mask,
+        (unsigned long long)hash, port_log_get_dropped_lines(),
+        port_log_get_queue_high_water(), port_log_get_queued_lines());
 }
 
 static void portFighterAuditDraw(FTStruct *fp, DObj *dobj, FTParts *parts, const char *draw_path, u8 effective_flags,
                                  Gfx *effective_dl0, Gfx *effective_dl1)
 {
-    u64 *seen;
     u64 bit;
     s32 joint;
     const void *describe_dl;
     u32 dl_file = 0xFFFFFFFFu;
-    uintptr_t base = 0, dl_off = 0;
+    uintptr_t base = 0;
     size_t resource_size = 0;
     const char *path = "(none)";
-    s32 mobj_count = 0;
-    MObj *mobj;
-    const char *reason;
-    bool will_submit;
-    u8 mode = effective_flags & 0xF;
+    bool will_submit = false;
+    u8 mode;
 
-    if ((fp == NULL) || (dobj == NULL) || (parts == NULL)) return;
-    if ((fp->fkind != nFTKindMario) && (fp->fkind != nFTKindFox)) return;
+    if ((fp == NULL) || (dobj == NULL) || !portFighterAuditIsTargetKind(fp->fkind)) return;
+    if (!sPortFighterAuditCollectActive || (sPortFighterAuditCollectFKind != fp->fkind)) return;
 
-    joint = parts->joint_id;
+    joint = (parts != NULL) ? parts->joint_id : portFighterFindJointIndex(fp, dobj);
     if ((joint < 0) || (joint >= 64)) return;
-
-    if (sPortFighterDrawAuditScene != gSCManagerSceneData.scene_curr)
-    {
-        sPortFighterDrawAuditScene = gSCManagerSceneData.scene_curr;
-        sPortFighterDrawAuditSeenMario = 0;
-        sPortFighterDrawAuditSeenFox = 0;
-    }
-    seen = (fp->fkind == nFTKindFox) ? &sPortFighterDrawAuditSeenFox : &sPortFighterDrawAuditSeenMario;
     bit = ((u64)1) << joint;
-    if ((*seen & bit) != 0) return;
-    *seen |= bit;
+    sPortFighterAuditDrawSeenMask |= bit;
 
-    if ((dobj->flags & DOBJ_FLAG_HIDDEN) != 0)
+    if ((parts == NULL) || (parts->joint_id != joint))
     {
-        reason = "hidden";
-        will_submit = false;
+        sPortFighterAuditPartsBadMask |= bit;
+        return;
     }
-    else if ((dobj->flags & DOBJ_FLAG_NOTEXTURE) != 0)
+
+    mode = effective_flags & 0xF;
+    if (dobj->flags & DOBJ_FLAG_HIDDEN)
     {
-        reason = "notexture-flag";
-        will_submit = false;
+        sPortFighterAuditHiddenMask |= bit;
+    }
+    else if (dobj->flags & DOBJ_FLAG_NOTEXTURE)
+    {
+        sPortFighterAuditNoTextureMask |= bit;
     }
     else if (mode == 0)
     {
-        will_submit = (effective_dl0 != NULL);
-        reason = will_submit ? "submit-dl" : "null-dl";
+        if ((draw_path != NULL) && (draw_path[0] == 'd') && (dobj->dv == NULL))
+        {
+            sPortFighterAuditNoDVMask |= bit;
+        }
+        else
+        {
+            will_submit = (effective_dl0 != NULL);
+        }
+        if (effective_dl0 == NULL) sPortFighterAuditNullDLMask |= bit;
     }
     else if (mode == 1)
     {
         will_submit = (effective_dl0 != NULL) || (effective_dl1 != NULL);
-        reason = will_submit ? "submit-dls" : "null-dls";
+        if (!will_submit) sPortFighterAuditNullDLMask |= bit;
     }
     else
     {
-        will_submit = false;
-        reason = "unsupported-parts-mode";
+        sPortFighterAuditModeBadMask |= bit;
     }
+
+    if (will_submit) sPortFighterAuditSubmitMask |= bit;
 
     describe_dl = (effective_dl0 != NULL) ? effective_dl0 : effective_dl1;
-    if ((describe_dl != NULL) && portRelocDescribePointer(describe_dl, &base, &resource_size, &dl_file, &path))
+    if (describe_dl != NULL)
     {
-        dl_off = (uintptr_t)describe_dl - base;
+        if (!portRelocDescribePointer(describe_dl, &base, &resource_size, &dl_file, &path))
+        {
+            sPortFighterAuditUnregisteredMask |= bit;
+            port_log("SSB64: FIGHTER_DRAW_ANOMALY scene=%u fkind=%d serial=%u joint=%d "
+                     "path=%s reason=unregistered-dl dl=%p\n",
+                (unsigned)gSCManagerSceneData.scene_curr, fp->fkind,
+                sPortFighterAuditCollectSerial, joint,
+                (draw_path != NULL) ? draw_path : "?", describe_dl);
+        }
     }
-    else
-    {
-        path = "(none)";
-    }
+}
 
-    mobj = dobj->mobj;
-    while ((mobj != NULL) && (mobj_count < 32))
-    {
-        mobj_count++;
-        mobj = mobj->next;
-    }
-    mobj = dobj->mobj;
+static void portFighterAuditEndDraw(FTStruct *fp)
+{
+    u32 *last_serial;
 
-    port_log("SSB64: FIGHTER_PART_AUDIT_DRAW scene=%u fkind=%d joint=%d path=%s dobj=%p dobj_flags=0x%02x parts_flags=0x%02x effective_flags=0x%02x mode=%u model_curr=%d dobj_dl=%p dl0=%p dl1=%p dl_file=%u dl_off=0x%lx dl_path=%s mobjs=%d first_mobj=%p mfmt=%d msiz=%d mflags=0x%04x tex_curr=%d tex_next=%d will_submit=%s reason=%s\n",
-        (unsigned)gSCManagerSceneData.scene_curr, fp->fkind, joint, (draw_path != NULL) ? draw_path : "?", dobj,
-        dobj->flags, parts->flags, effective_flags, mode,
-        (joint >= nFTPartsJointCommonStart) ? fp->modelpart_status[joint - nFTPartsJointCommonStart].modelpart_id_curr : -127,
-        dobj->dl, effective_dl0, effective_dl1, dl_file, (unsigned long)dl_off, (path != NULL) ? path : "(none)",
-        mobj_count, mobj, (mobj != NULL) ? mobj->sub.fmt : -1, (mobj != NULL) ? mobj->sub.siz : -1,
-        (mobj != NULL) ? mobj->sub.flags : 0, (mobj != NULL) ? mobj->texture_id_curr : -1,
-        (mobj != NULL) ? mobj->texture_id_next : -1, will_submit ? "yes" : "no", reason);
+    if ((fp == NULL) || !sPortFighterAuditCollectActive ||
+        (sPortFighterAuditCollectFKind != fp->fkind)) return;
+
+    port_log("SSB64: FIGHTER_DRAW_SUMMARY scene=%u fkind=%d serial=%u "
+             "traverse=%016llx seen=%016llx submit=%016llx hidden=%016llx "
+             "notexture=%016llx nodv=%016llx null_dl=%016llx mode_bad=%016llx "
+             "unregistered=%016llx parts_bad=%016llx log_drops=%u log_high=%u log_queued=%u\n",
+        (unsigned)gSCManagerSceneData.scene_curr, fp->fkind, sPortFighterAuditCollectSerial,
+        (unsigned long long)sPortFighterAuditTraverseMask,
+        (unsigned long long)sPortFighterAuditDrawSeenMask,
+        (unsigned long long)sPortFighterAuditSubmitMask,
+        (unsigned long long)sPortFighterAuditHiddenMask,
+        (unsigned long long)sPortFighterAuditNoTextureMask,
+        (unsigned long long)sPortFighterAuditNoDVMask,
+        (unsigned long long)sPortFighterAuditNullDLMask,
+        (unsigned long long)sPortFighterAuditModeBadMask,
+        (unsigned long long)sPortFighterAuditUnregisteredMask,
+        (unsigned long long)sPortFighterAuditPartsBadMask,
+        port_log_get_dropped_lines(), port_log_get_queue_high_water(),
+        port_log_get_queued_lines());
+
+    last_serial = (fp->fkind == nFTKindFox) ?
+        &sPortFighterLastDrawSerialFox : &sPortFighterLastDrawSerialMario;
+    *last_serial = sPortFighterAuditCollectSerial;
+    sPortFighterAuditCollectActive = false;
 }
 #endif
 
@@ -1128,13 +1220,17 @@ void ftDisplayMainDrawDefault(DObj *dobj)
 #ifdef PORT
         portFighterAuditTraverseMutation(fp, dobj, audit_joint, audit_child_before, audit_sib_before,
                                          audit_user_before, audit_flags_before);
-        if ((fp->fkind == nFTKindFox) && (audit_joint == 8))
+        if (sPortFighterAuditCollectActive && (fp->fkind == nFTKindFox) && (audit_joint == 8))
         {
             FTParts *audit_parts_now = ftGetParts(dobj);
-            port_log("SSB64: FIGHTER_TRAVERSE_PRECHILD scene=%u fkind=%d joint=8 dobj=%p child=%p "
-                     "user_data=%p parts_joint=%d flags=0x%02x\n",
-                (unsigned)gSCManagerSceneData.scene_curr, fp->fkind, dobj, dobj->child,
-                dobj->user_data.p, (audit_parts_now != NULL) ? audit_parts_now->joint_id : -999, dobj->flags);
+            if ((audit_parts_now == NULL) || (audit_parts_now->joint_id != 8))
+            {
+                port_log("SSB64: FIGHTER_TRAVERSE_ANOMALY scene=%u fkind=%d serial=%u joint=8 "
+                         "reason=prechild-parts dobj=%p child=%p user_data=%p parts_joint=%d flags=0x%02x\n",
+                    (unsigned)gSCManagerSceneData.scene_curr, fp->fkind,
+                    sPortFighterAuditCollectSerial, dobj, dobj->child,
+                    dobj->user_data.p, (audit_parts_now != NULL) ? audit_parts_now->joint_id : -999, dobj->flags);
+            }
         }
 #endif
         if (dobj->child != NULL)
@@ -1277,6 +1373,7 @@ void ftDisplayMainDrawAll(GObj *fighter_gobj)
     u32 *skeletons = PORT_RESOLVE(attr->skeleton);
 
 #ifdef PORT
+    portFighterAuditBeginDraw(fp);
     portFighterAuditTree(fp, DObjGetStruct(fighter_gobj));
 #endif
 
@@ -1293,6 +1390,10 @@ void ftDisplayMainDrawAll(GObj *fighter_gobj)
         ftDisplayMainDrawSkeleton(DObjGetStruct(fighter_gobj));
     }
     else ftDisplayMainDrawDefault(DObjGetStruct(fighter_gobj));
+
+#ifdef PORT
+    portFighterAuditEndDraw(fp);
+#endif
 
     if (fp->afterimage.drawstatus >= 2)
     {
