@@ -1362,7 +1362,7 @@ void syTaskmanLoadScene(SYTaskmanSceneSetup *tscene, void (*func_start)(void))
         static sb32 sLoggedBoundsHardening = FALSE;
         if (!sLoggedBoundsHardening) {
             sLoggedBoundsHardening = TRUE;
-            port_log("SSB64: VITA_BOUNDS_HARDENING matrix-stack vertex-index segment-index light-count movemem-null dl-redzone=%u\n",
+            port_log("SSB64: VITA_BOUNDS_HARDENING matrix-stack=safe-empty vertex-index segment-index light-count movemem-null dl-redzone=%u\n",
                      (unsigned)PORT_VITA_DL_REDZONE_BYTES);
         }
     }
