@@ -332,6 +332,9 @@ static void syTaskmanVitaRecordStitch(s32 diffs)
 {
 	s32 i;
 
+#if defined(SSB64_VITA_SCENE_DIAG) && !SSB64_VITA_SCENE_DIAG
+	return;
+#endif
 	if (dSYTaskmanFrameCount >= 8)
 	{
 		return;
@@ -350,6 +353,9 @@ static void syTaskmanVitaRecordStitch(s32 diffs)
 
 static void syTaskmanVitaLogSeal(s32 diffs, s32 dl_id, const Gfx *root)
 {
+#if defined(SSB64_VITA_SCENE_DIAG) && !SSB64_VITA_SCENE_DIAG
+	return;
+#endif
 	if (dSYTaskmanFrameCount >= 8)
 	{
 		return;

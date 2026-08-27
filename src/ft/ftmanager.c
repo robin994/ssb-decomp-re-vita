@@ -9,6 +9,11 @@
 #include <sys/debug.h>
 extern void port_log(const char *fmt, ...);
 extern bool portRelocDescribePointer(const void *ptr, uintptr_t *out_base, size_t *out_size, u32 *out_file_id, const char **out_path);
+#if defined(__vita__) && defined(SSB64_VITA_SCENE_DIAG) && !SSB64_VITA_SCENE_DIAG
+#define FT_DIAG_LOG(...) ((void)0)
+#else
+#define FT_DIAG_LOG(...) port_log(__VA_ARGS__)
+#endif
 
 /* Compact fighter-model audit for the intermittent partial-model bug.
  * Earlier revisions emitted one very long line per joint.  On Vita that
@@ -169,7 +174,7 @@ static void portFighterAuditCreation(FTStruct *fp)
 
         if ((bit != 0) && ((mismatch_mask | parts_bad_mask | unregistered_mask) & bit))
         {
-            port_log("SSB64: FIGHTER_MODEL_CREATE_ANOMALY scene=%u fkind=%d serial=%u joint=%d "
+            FT_DIAG_LOG("SSB64: FIGHTER_MODEL_CREATE_ANOMALY scene=%u fkind=%d serial=%u joint=%d "
                      "present=%d parts_joint=%d dl_file=%u dl_off=0x%lx expected_file=%u "
                      "expected_off=0x%lx dl_path=%s expected_path=%s\n",
                 (unsigned)gSCManagerSceneData.scene_curr, fp->fkind, serial, i,
@@ -179,7 +184,7 @@ static void portFighterAuditCreation(FTStruct *fp)
         }
     }
 
-    port_log("SSB64: FIGHTER_MODEL_CREATE_SUMMARY scene=%u fkind=%d serial=%u detail=%d "
+    FT_DIAG_LOG("SSB64: FIGHTER_MODEL_CREATE_SUMMARY scene=%u fkind=%d serial=%u detail=%d "
              "present=%016llx dl=%016llx expected=%016llx mismatch=%016llx "
              "parts_bad=%016llx modelpart_bad=%016llx unregistered=%016llx mobj=%016llx "
              "hash=%016llx log_drops=%u log_high=%u log_queued=%u\n",
@@ -562,6 +567,24 @@ void ftManagerSetupFilesAllKind(s32 fkind)
 {
 #ifdef PORT
     FTData *data = port_fighter_data(fkind);
+    /* The FTData pointer slots are process-lifetime globals while their
+     * reloc-backed contents live in the recyclable scene arena. A non-NULL
+     * p_file_main can therefore survive after the current scene's status
+     * buffer no longer publishes that file. Reconcile the slot with the
+     * current reloc table before deciding whether a reload is necessary. */
+    void *published_main = lbRelocGetStatusBufferFile(data->file_main_id);
+
+    if (published_main == NULL)
+    {
+        *data->p_file_main = NULL;
+        ftManagerSetupFilesMainKind(fkind);
+    }
+    else
+    {
+        *data->p_file_main = published_main;
+    }
+    ftManagerSetupFilesKind(fkind);
+    return;
 #else
     FTData *data = dFTManagerDataFiles[fkind];
 #endif
@@ -1036,13 +1059,13 @@ GObj* ftManagerMakeFighter(FTDesc *desc) // Create fighter
     {
         // Dump raw memory around expected bitfield offset to find it
         u32 *raw = (u32 *)attr;
-        port_log("SSB64: ATTR fkind=%d sizeof=%d fog_off=0x%X\n",
+        FT_DIAG_LOG("SSB64: ATTR fkind=%d sizeof=%d fog_off=0x%X\n",
             (int)fp->fkind, (int)sizeof(FTAttributes),
             (int)offsetof(FTAttributes, fog_color));
         port_log("  raw[0x3E..0x43]: %08X %08X %08X %08X %08X %08X\n",
             raw[0x3E], raw[0x3F], raw[0x40], raw[0x41], raw[0x42], raw[0x43]);
     }
-    port_log("SSB64: ftManagerMakeFighter - begin fkind=%d\n", (int)fp->fkind);
+    FT_DIAG_LOG("SSB64: ftManagerMakeFighter - begin fkind=%d\n", (int)fp->fkind);
 #endif
     fp->figatree_heap = desc->figatree_heap;
     fp->team = desc->team;
@@ -1116,7 +1139,7 @@ GObj* ftManagerMakeFighter(FTDesc *desc) // Create fighter
     fp->joints[nFTPartsJointTopN]->xobjs[0]->unk05 = desc->unk_rebirth_0x1D;
 
 #ifdef PORT
-    port_log("SSB64: ftManagerMakeFighter - before parts setup fkind=%d commonparts=%p setup_parts=%p\n",
+    FT_DIAG_LOG("SSB64: ftManagerMakeFighter - before parts setup fkind=%d commonparts=%p setup_parts=%p\n",
         fp->fkind, PORT_RESOLVE(attr->commonparts_container), PORT_RESOLVE(attr->setup_parts));
 #endif
     lbCommonSetupFighterPartsDObjs
@@ -1133,7 +1156,7 @@ GObj* ftManagerMakeFighter(FTDesc *desc) // Create fighter
         fp->unk_ft_0x149
     );
 #ifdef PORT
-    port_log("SSB64: ftManagerMakeFighter - after parts setup fkind=%d\n", fp->fkind);
+    FT_DIAG_LOG("SSB64: ftManagerMakeFighter - after parts setup fkind=%d\n", fp->fkind);
 #endif
     for (i = 0; i < ARRAY_COUNT(fp->joints); i++)
     {
@@ -1160,7 +1183,7 @@ GObj* ftManagerMakeFighter(FTDesc *desc) // Create fighter
         }
     }
 #ifdef PORT
-    port_log("SSB64: ftManagerMakeFighter - parts metadata initialized fkind=%d\n", fp->fkind);
+    FT_DIAG_LOG("SSB64: ftManagerMakeFighter - parts metadata initialized fkind=%d\n", fp->fkind);
 #endif
     for (i = nFTPartsJointCommonStart; i < ARRAY_COUNT(fp->joints); i++)
     {
@@ -1170,7 +1193,7 @@ GObj* ftManagerMakeFighter(FTDesc *desc) // Create fighter
             fp->modelpart_status[i - nFTPartsJointCommonStart].modelpart_id_curr = (fp->joints[i]->dl != NULL) ? 0 : -1;
         }
     }
-#ifdef PORT
+#if defined(PORT) && (!defined(__vita__) || !defined(SSB64_VITA_SCENE_DIAG) || SSB64_VITA_SCENE_DIAG)
     portFighterAuditCreation(fp);
 #endif
     for (i = 0; i < ARRAY_COUNT(fp->texturepart_status); i++)
@@ -1199,7 +1222,7 @@ GObj* ftManagerMakeFighter(FTDesc *desc) // Create fighter
             fp->damage_colls[i].joint_id = attr->damage_coll_descs[i].joint_id;
             fp->damage_colls[i].joint = fp->joints[fp->damage_colls[i].joint_id];
 #ifdef PORT
-            port_log("SSB64: damage_coll[%d] fkind=%d joint_id=%d joint=%p user_data=%p\n",
+            FT_DIAG_LOG("SSB64: damage_coll[%d] fkind=%d joint_id=%d joint=%p user_data=%p\n",
                 i, (int)fp->fkind,
                 attr->damage_coll_descs[i].joint_id,
                 (void*)fp->damage_colls[i].joint,
@@ -1238,7 +1261,7 @@ GObj* ftManagerMakeFighter(FTDesc *desc) // Create fighter
 
     ftManagerInitFighter(fighter_gobj, desc);
 #ifdef PORT
-    port_log("SSB64: ftManagerMakeFighter - fighter init complete fkind=%d pkind=%d\n", fp->fkind, fp->pkind);
+    FT_DIAG_LOG("SSB64: ftManagerMakeFighter - fighter init complete fkind=%d pkind=%d\n", fp->fkind, fp->pkind);
 #endif
 
     if (fp->pkind == nFTPlayerKindCom)
@@ -1282,7 +1305,7 @@ GObj* ftManagerMakeFighter(FTDesc *desc) // Create fighter
         ftShadowMakeShadow(fighter_gobj);
     }
 #ifdef PORT
-    port_log("SSB64: ftManagerMakeFighter - return fkind=%d\n", fp->fkind);
+    FT_DIAG_LOG("SSB64: ftManagerMakeFighter - return fkind=%d\n", fp->fkind);
 #endif
     return fighter_gobj;
 }

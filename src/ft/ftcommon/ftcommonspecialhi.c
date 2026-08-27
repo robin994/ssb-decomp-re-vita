@@ -54,7 +54,7 @@ sb32 ftCommonSpecialHiCheckInterruptCommon(GObj *fighter_gobj)
     FTStruct *fp = ftGetStruct(fighter_gobj);
     FTAttributes *attr = fp->attr;
 
-#ifdef PORT
+#if defined(PORT) && (!defined(__vita__) || !defined(SSB64_VITA_RUNTIME_DIAG) || SSB64_VITA_RUNTIME_DIAG)
     if (fp->input.pl.button_tap & fp->input.button_mask_b)
     {
         port_log("SSB64: SpecialHiCheck fkind=%d B_tap=0x%04X have_hi=%d stick_y=%d (need>=%d)\n",

@@ -523,7 +523,7 @@ ub8 sIFCommonIsAnnouncedSecond[5];
 void ifCommonPlayerDamageSetShowInterface(void)
 {
     s32 i;
-#ifdef PORT
+#if defined(PORT) && (!defined(__vita__) || !defined(SSB64_VITA_SCENE_DIAG) || SSB64_VITA_SCENE_DIAG)
     s32 active_count = 0;
 #endif
 
@@ -532,12 +532,12 @@ void ifCommonPlayerDamageSetShowInterface(void)
         if (sIFCommonPlayerDamageInterface[i].interface_gobj != NULL)
         {
             sIFCommonPlayerDamageInterface[i].is_show_interface = TRUE;
-#ifdef PORT
+#if defined(PORT) && (!defined(__vita__) || !defined(SSB64_VITA_SCENE_DIAG) || SSB64_VITA_SCENE_DIAG)
             active_count++;
 #endif
         }
     }
-#ifdef PORT
+#if defined(PORT) && (!defined(__vita__) || !defined(SSB64_VITA_SCENE_DIAG) || SSB64_VITA_SCENE_DIAG)
     port_log("SSB64: HUD_SHOW scene=%d frame=%u active_players=%d action=show-interface\n",
         gSCManagerSceneData.scene_curr, (unsigned)dSYTaskmanFrameCount, active_count);
 #endif
@@ -927,7 +927,7 @@ void ifCommonPlayerDamageProcDisplay(GObj *interface_gobj)
         }
         lbCommonClearExternSpriteParams();
     }
-#ifdef PORT
+#if defined(PORT) && (!defined(__vita__) || !defined(SSB64_VITA_SCENE_DIAG) || SSB64_VITA_SCENE_DIAG)
     {
         static s32 sHUDDiagScene = -1;
         static s8 sHUDDiagShow[GMCOMMON_PLAYERS_MAX] = { -1, -1, -1, -1 };
@@ -1082,7 +1082,7 @@ void ifCommonPlayerDamageInitInterface(void)
             sIFCommonPlayerDamageInterface[player].dead_stopupdate_wait = 180;
             sIFCommonPlayerDamageInterface[player].is_show_interface = FALSE;
 
-#ifdef PORT
+#if defined(PORT) && (!defined(__vita__) || !defined(SSB64_VITA_SCENE_DIAG) || SSB64_VITA_SCENE_DIAG)
             port_log("SSB64: HUD_PLAYER_INIT scene=%d frame=%u player=%d gobj=%p pos=(%d,%d) "
                      "stock=%d emblem_attr=0x%x emblem_size=%ux%u emblem_nbitmaps=%u emblem_bitmap=%p\n",
                 gSCManagerSceneData.scene_curr, (unsigned)dSYTaskmanFrameCount, player,

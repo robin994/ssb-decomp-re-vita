@@ -1138,7 +1138,7 @@ void syAudioThreadMain(void *arg)
 
         while (TRUE)
         {
-#ifdef PORT
+#if defined(PORT) && (!defined(__vita__) || !defined(SSB64_VITA_RUNTIME_DIAG) || SSB64_VITA_RUNTIME_DIAG)
             OSTime port_mix_start;
 #endif
             osRecvMesg(&sSYAudioTicMesgQueue, NULL, OS_MESG_BLOCK);
@@ -1162,11 +1162,15 @@ void syAudioThreadMain(void *arg)
                 }
             }
 
+#if !defined(__vita__) || !defined(SSB64_VITA_RUNTIME_DIAG) || SSB64_VITA_RUNTIME_DIAG
             port_mix_start = osGetTime();
+#endif
             n_alAudioFrame(sSYAudioCurrentAcmdListBuffer, &port_cmdLen,
                            sSYAudioDataBuffers[port_id_mod3],
                            dSYAudioSampleCounts[port_id_mod3]);
+#if !defined(__vita__) || !defined(SSB64_VITA_RUNTIME_DIAG) || SSB64_VITA_RUNTIME_DIAG
             portAudioRecordMixTime((unsigned int)OS_CYCLES_TO_USEC(osGetTime() - port_mix_start));
+#endif
 
             acmd_trace_end_task();
 

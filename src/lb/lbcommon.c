@@ -2621,8 +2621,10 @@ void lbCommonDrawSObjBitmap(Gfx** dls, SObj* sobj, Sprite* sprite, Bitmap* bitma
 	void* buf;
 
 #ifdef PORT
+#if !defined(__vita__) || !defined(SSB64_VITA_RUNTIME_DIAG) || SSB64_VITA_RUNTIME_DIAG
 	sGCSObjSceneCounters[3]++; /* bitmap_draw_calls — unconditional, not gated by trace budget */
 	sGCSObjFrameCounters[0]++;
+#endif
 #endif
 	if (PORT_RESOLVE(bitmap->buf) == NULL)
 	{
@@ -2719,9 +2721,9 @@ void lbCommonDrawSObjBitmap(Gfx** dls, SObj* sobj, Sprite* sprite, Bitmap* bitma
 				gDPSetTextureImage(dl++, sprite->bmfmt, G_IM_SIZ_16b, 1, PORT_RESOLVE(bitmap->buf));
 				gDPSetTile(dl++, sprite->bmfmt, G_IM_SIZ_16b, 0, 0, G_TX_LOADTILE, NULL, sobj->cmt, sobj->maskt,
 						   G_TX_NOLOD, sobj->cms, sobj->masks, G_TX_NOLOD);
-				gDPLoadSync(dl++);
-				gDPLoadBlock(dl++, G_TX_LOADTILE, 0, 0, (((bitmap->width_img * tex_height) + 3) >> 2) - 1, 0);
-				gDPPipeSync(dl++);
+					gDPLoadSync(dl++);
+					gDPLoadBlock(dl++, G_TX_LOADTILE, 0, 0, (((bitmap->width_img * tex_height) + 3) >> 2) - 1, 0);
+					gDPPipeSync(dl++);
 				gDPSetTile(dl++, sprite->bmfmt, G_IM_SIZ_4b, (((tex_width) >> 1) + 7) >> 3, 0, G_TX_RENDERTILE, NULL,
 						   sobj->cmt, sobj->maskt, G_TX_NOLOD, sobj->cms, sobj->masks, G_TX_NOLOD);
 				gDPSetTileSize(dl++, G_TX_RENDERTILE, 0, 0, ((tex_width)-1) << G_TEXTURE_IMAGE_FRAC,
@@ -2732,10 +2734,10 @@ void lbCommonDrawSObjBitmap(Gfx** dls, SObj* sobj, Sprite* sprite, Bitmap* bitma
 				gDPSetTextureImage(dl++, sprite->bmfmt, G_IM_SIZ_8b_LOAD_BLOCK, 1, PORT_RESOLVE(bitmap->buf));
 				gDPSetTile(dl++, sprite->bmfmt, G_IM_SIZ_8b_LOAD_BLOCK, 0, 0, G_TX_LOADTILE, NULL, sobj->cmt,
 						   sobj->maskt, G_TX_NOLOD, sobj->cms, sobj->masks, G_TX_NOLOD);
-				gDPLoadSync(dl++);
-				gDPLoadBlock(dl++, G_TX_LOADTILE, 0, 0,
-							 (((bitmap->width_img * tex_height) + 1) >> G_IM_SIZ_8b_SHIFT) - 1, 0);
-				gDPPipeSync(dl++);
+					gDPLoadSync(dl++);
+					gDPLoadBlock(dl++, G_TX_LOADTILE, 0, 0,
+								 (((bitmap->width_img * tex_height) + 1) >> G_IM_SIZ_8b_SHIFT) - 1, 0);
+					gDPPipeSync(dl++);
 				gDPSetTile(dl++, sprite->bmfmt, G_IM_SIZ_8b, ((tex_width * G_IM_SIZ_8b_LINE_BYTES) + 7) >> 3, 0,
 						   G_TX_RENDERTILE, NULL, sobj->cmt, sobj->maskt, G_TX_NOLOD, sobj->cms, sobj->masks,
 						   G_TX_NOLOD);
@@ -2747,10 +2749,10 @@ void lbCommonDrawSObjBitmap(Gfx** dls, SObj* sobj, Sprite* sprite, Bitmap* bitma
 				gDPSetTextureImage(dl++, sprite->bmfmt, G_IM_SIZ_16b_LOAD_BLOCK, 1, PORT_RESOLVE(bitmap->buf));
 				gDPSetTile(dl++, sprite->bmfmt, G_IM_SIZ_16b_LOAD_BLOCK, 0, 0, G_TX_LOADTILE, NULL, sobj->cmt,
 						   sobj->maskt, G_TX_NOLOD, sobj->cms, sobj->masks, G_TX_NOLOD);
-				gDPLoadSync(dl++);
-				gDPLoadBlock(dl++, G_TX_LOADTILE, 0, 0,
-							 (((bitmap->width_img * tex_height) + 1) >> G_IM_SIZ_16b_SHIFT) - 2, 0);
-				gDPPipeSync(dl++);
+					gDPLoadSync(dl++);
+					gDPLoadBlock(dl++, G_TX_LOADTILE, 0, 0,
+								 (((bitmap->width_img * tex_height) + 1) >> G_IM_SIZ_16b_SHIFT) - 2, 0);
+					gDPPipeSync(dl++);
 				gDPSetTile(dl++, sprite->bmfmt, G_IM_SIZ_16b, ((tex_width * G_IM_SIZ_16b_LINE_BYTES) + 7) >> 3, 0,
 						   G_TX_RENDERTILE, NULL, sobj->cmt, sobj->maskt, G_TX_NOLOD, sobj->cms, sobj->masks,
 						   G_TX_NOLOD);
@@ -2762,10 +2764,10 @@ void lbCommonDrawSObjBitmap(Gfx** dls, SObj* sobj, Sprite* sprite, Bitmap* bitma
 				gDPSetTextureImage(dl++, G_IM_FMT_RGBA, G_IM_SIZ_32b_LOAD_BLOCK, 1, PORT_RESOLVE(bitmap->buf));
 				gDPSetTile(dl++, G_IM_FMT_RGBA, G_IM_SIZ_32b_LOAD_BLOCK, 0, 0, G_TX_LOADTILE, NULL, sobj->cmt,
 						   sobj->maskt, G_TX_NOLOD, sobj->cms, sobj->masks, G_TX_NOLOD);
-				gDPLoadSync(dl++);
-				gDPLoadBlock(dl++, G_TX_LOADTILE, 0, 0,
-							 (((bitmap->width_img * tex_height) + 1) >> G_IM_SIZ_32b_SHIFT) - 2, 0);
-				gDPPipeSync(dl++);
+					gDPLoadSync(dl++);
+					gDPLoadBlock(dl++, G_TX_LOADTILE, 0, 0,
+								 (((bitmap->width_img * tex_height) + 1) >> G_IM_SIZ_32b_SHIFT) - 2, 0);
+					gDPPipeSync(dl++);
 				gDPSetTile(dl++, G_IM_FMT_RGBA, G_IM_SIZ_32b, ((tex_width * G_IM_SIZ_32b_LINE_BYTES) + 7) >> 3, 0,
 						   G_TX_RENDERTILE, NULL, sobj->cmt, sobj->maskt, G_TX_NOLOD, sobj->cms, sobj->masks,
 						   G_TX_NOLOD);
@@ -2819,6 +2821,7 @@ void lbCommonDrawSObjBitmap(Gfx** dls, SObj* sobj, Sprite* sprite, Bitmap* bitma
 		}
 #endif
 #ifdef PORT
+#if !defined(__vita__) || !defined(SSB64_VITA_RUNTIME_DIAG) || SSB64_VITA_RUNTIME_DIAG
 		sGCSObjSceneCounters[4]++; /* texrects_generated — unconditional */
 		sGCSObjFrameCounters[1]++;
 		if ((s32)gSCManagerSceneData.scene_curr == GC_SOBJ_TRACE_TARGET_SCENE_A)
@@ -2830,8 +2833,9 @@ void lbCommonDrawSObjBitmap(Gfx** dls, SObj* sobj, Sprite* sprite, Bitmap* bitma
 			portRecordUiDrawSource(sobj->parent_gobj, sobj);
 		}
 #endif
-		gSPTextureRectangle(dl++, rxh, ryh, rxl, ryl, 0, rs, rt, sx, sy);
-		gDPPipeSync(dl++);
+#endif
+			gSPTextureRectangle(dl++, rxh, ryh, rxl, ryl, 0, rs, rt, sx, sy);
+			gDPPipeSync(dl++);
 
 		dls[0] = dl;
 	}
@@ -2852,9 +2856,9 @@ void lbCommonPrepSObjAttr(Gfx** dls, SObj* sobj)
 	Gfx* dl = dls[0];
 	Sprite* sprite = &sobj->sprite;
 
-	if (sLBCommonExternSpriteAttr & SP_ARGUMENT)
-	{
-		gDPPipeSync(dl++);
+		if (sLBCommonExternSpriteAttr & SP_ARGUMENT)
+		{
+			gDPPipeSync(dl++);
 
 		if (sprite->attr & SP_FASTCOPY)
 		{
@@ -3218,9 +3222,11 @@ void lbCommonDrawSObjAttr(GObj* gobj)
 #ifdef PORT
 	s32 sobj_index = 0;
 
+#if !defined(__vita__) || !defined(SSB64_VITA_RUNTIME_DIAG) || SSB64_VITA_RUNTIME_DIAG
 	gcSObjSceneTick();
 	sGCSObjSceneCounters[0]++; /* lbCommonDrawSObjAttr_calls — unconditional */
 	sGCSObjSceneCounters[1]++; /* gobjs_seen — one per call, unconditional */
+#endif
 
 	if (gcSObjTraceTake())
 	{
@@ -3256,7 +3262,9 @@ void lbCommonDrawSObjAttr(GObj* gobj)
 	while (sobj != NULL)
 	{
 #ifdef PORT
+#if !defined(__vita__) || !defined(SSB64_VITA_RUNTIME_DIAG) || SSB64_VITA_RUNTIME_DIAG
 		sGCSObjSceneCounters[2]++; /* sobjs_seen — unconditional, before the SP_HIDDEN gate */
+#endif
 #endif
 		if (!(sobj->sprite.attr & SP_HIDDEN))
 		{
@@ -3268,7 +3276,10 @@ void lbCommonDrawSObjAttr(GObj* gobj)
 			 * used by SOBJ_SUBMIT below regardless of the sobj_trace sampling
 			 * gate, which is armed on its own schedule with no reason to line
 			 * up with the one frame the wallpaper's gobj is walked. */
-			bool is_wallpaper = (gobj == sGRWallpaperGObj);
+			bool is_wallpaper = false;
+#if !defined(__vita__) || !defined(SSB64_VITA_RUNTIME_DIAG) || SSB64_VITA_RUNTIME_DIAG
+			is_wallpaper = (gobj == sGRWallpaperGObj);
+#endif
 			Gfx *dl_before_attr = NULL, *dl_after_attr = NULL, *dl_after_draw = NULL;
 			if (sobj_trace || is_wallpaper)
 			{

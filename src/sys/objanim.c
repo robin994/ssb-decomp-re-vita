@@ -959,7 +959,7 @@ void gcPlayDObjAnimJoint(DObj *dobj)
     f32 temp_f20;
     f32 temp_f22;
     f32 temp_f24;
-#ifdef PORT
+#if defined(PORT) && (!defined(__vita__) || !defined(SSB64_VITA_RUNTIME_DIAG) || SSB64_VITA_RUNTIME_DIAG)
     static s32 sGCPlayDObjTraILogCount = 0;
 #endif
 
@@ -1029,13 +1029,15 @@ void gcPlayDObjAnimJoint(DObj *dobj)
                         {
                             value = 1.0F;
                         }
-#ifdef PORT
+#if defined(PORT) && (!defined(__vita__) || !defined(SSB64_VITA_RUNTIME_DIAG) || SSB64_VITA_RUNTIME_DIAG)
                         if (sGCPlayDObjTraILogCount < 16)
                         {
                             sGCPlayDObjTraILogCount++;
                             port_log("SSB64: gcPlayDObjAnimJoint - TraI dobj=%p aobj=%p interp=%p value=%f kind=%u len=%f wait=%f speed=%f\n",
                                 dobj, aobj, aobj->interpolate, value, aobj->kind, aobj->length, dobj->anim_wait, dobj->anim_speed);
                         }
+#endif
+#ifdef PORT
                         /* Skip cubic interpolation when interpolate is NULL.
                          * In vanilla N64 the figatree parser always sets
                          * aobj->interpolate before emitting a TraI track,
@@ -2745,6 +2747,7 @@ static sb32 gcPortPreflightDObjDescArray(DObjDesc *dobjdesc, const char *context
 
         if (cur->id == DOBJ_ARRAY_MAX)
         {
+#if !defined(__vita__) || !defined(SSB64_VITA_RUNTIME_DIAG) || SSB64_VITA_RUNTIME_DIAG
             static u32 s_model_preflight_pass_budget = 128;
             if (s_model_preflight_pass_budget != 0)
             {
@@ -2752,6 +2755,7 @@ static sb32 gcPortPreflightDObjDescArray(DObjDesc *dobjdesc, const char *context
                 port_log("SSB64: MODEL_PREFLIGHT_PASS context=%s desc=%p nodes=%d source=%s\n",
                     context, (void*)dobjdesc, i, in_reloc ? "reloc" : "runtime");
             }
+#endif
             return TRUE;
         }
 

@@ -122,7 +122,7 @@ sb32 ftCommonSpecialNCheckInterruptCommon(GObj *fighter_gobj)
     FTStruct *fp = ftGetStruct(fighter_gobj);
     FTAttributes *attr = fp->attr;
 
-#ifdef PORT
+#if defined(PORT) && (!defined(__vita__) || !defined(SSB64_VITA_RUNTIME_DIAG) || SSB64_VITA_RUNTIME_DIAG)
     if (fp->input.pl.button_tap & fp->input.button_mask_b)
     {
         port_log("SSB64: SpecialNCheck fkind=%d B_tap=0x%04X have_n=%d stick_y=%d (need %d..%d)\n",
@@ -135,7 +135,7 @@ sb32 ftCommonSpecialNCheckInterruptCommon(GObj *fighter_gobj)
     {
         if ((fp->input.pl.stick_range.y < FTCOMMON_SPECIALHI_STICK_RANGE_MIN) && (fp->input.pl.stick_range.y > FTCOMMON_SPECIALLW_STICK_RANGE_MIN))
         {
-#ifdef PORT
+#if defined(PORT) && (!defined(__vita__) || !defined(SSB64_VITA_RUNTIME_DIAG) || SSB64_VITA_RUNTIME_DIAG)
             port_log("SSB64: SpecialNCheck -> PASS, calling neutral-B for fkind=%d\n", fp->fkind);
 #endif
             if ((fp->input.pl.stick_range.x * fp->lr) < FTCOMMON_SPECIALN_TURN_STICK_RANGE_MIN)

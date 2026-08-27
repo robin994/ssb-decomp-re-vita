@@ -654,6 +654,10 @@ static void gcLogVisDraw(s32 reason, DObj *dobj, void *raw_dl, void *resolved_dl
 
 static void gcVisDrawCount(s32 reason)
 {
+#if defined(__vita__) && defined(SSB64_VITA_RUNTIME_DIAG) && !SSB64_VITA_RUNTIME_DIAG
+    (void)reason;
+    return;
+#else
     s32 bucket;
     switch (reason)
     {
@@ -674,10 +678,14 @@ static void gcVisDrawCount(s32 reason)
     }
     sGCVisDrawCounters[bucket]++;
     sGCVisDrawSceneCounters[bucket]++;
+#endif
 }
 
 static void gcVisDrawReportCountersIfDue(void)
 {
+#if defined(__vita__) && defined(SSB64_VITA_RUNTIME_DIAG) && !SSB64_VITA_RUNTIME_DIAG
+    return;
+#else
     static u32 sTick = 0;
     if ((++sTick % 300) == 0)
     {
@@ -686,6 +694,7 @@ static void gcVisDrawReportCountersIfDue(void)
                  sGCVisDrawCounters[2], sGCVisDrawCounters[3]);
     }
     gcVisDrawSceneTickIfChanged();
+#endif
 }
 #endif
 

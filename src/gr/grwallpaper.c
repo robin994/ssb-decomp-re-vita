@@ -20,6 +20,11 @@ extern int atoi(const char *nptr);
  * field, so `grep WALLPAPER_GOBJ` still catches all three call sites. */
 static void portLogWallpaperDiag(const char *path_tag, GObj *wallpaper_gobj, SObj *wallpaper_sobj)
 {
+#if defined(__vita__) && defined(SSB64_VITA_SCENE_DIAG) && !SSB64_VITA_SCENE_DIAG
+    (void)path_tag;
+    (void)wallpaper_gobj;
+    (void)wallpaper_sobj;
+#else
     Sprite *sp = (Sprite*)PORT_RESOLVE(gMPCollisionGroundData->wallpaper);
     void *bm = (sp != NULL) ? PORT_RESOLVE(sp->bitmap) : NULL;
     Bitmap *b0 = (Bitmap*)bm;
@@ -41,6 +46,7 @@ static void portLogWallpaperDiag(const char *path_tag, GObj *wallpaper_gobj, SOb
              wallpaper_gobj ? (void*)wallpaper_gobj->proc_display : NULL,
              (void*)lbCommonDrawSObjAttr,
              (wallpaper_gobj != NULL && wallpaper_gobj->proc_display == lbCommonDrawSObjAttr) ? "yes" : "NO");
+#endif
 }
 #endif
 
@@ -186,7 +192,7 @@ void grWallpaperMakeCommon(void)
 {
     GObj *wallpaper_gobj;
     SObj *wallpaper_sobj;
-#ifdef PORT
+#if defined(PORT) && (!defined(__vita__) || !defined(SSB64_VITA_SCENE_DIAG) || SSB64_VITA_SCENE_DIAG)
     {
         Sprite *sp = (Sprite*)PORT_RESOLVE(gMPCollisionGroundData->wallpaper);
         port_log("[wallpaper] MakeCommon scene=%d gkind=%d gd=%p wp_tok=0x%x wp_resolved=%p",
@@ -275,7 +281,7 @@ void grWallpaperMakeCommon(void)
         3
     );
     wallpaper_sobj = SObjGetStruct(wallpaper_gobj);
-#ifdef PORT
+#if defined(PORT) && (!defined(__vita__) || !defined(SSB64_VITA_SCENE_DIAG) || SSB64_VITA_SCENE_DIAG)
     port_log("SSB64: WALLPAPER_GOBJ scene=%d gobj=%p obj_kind=%d sobj=%p link_id=%u link_priority=%u "
              "dl_link_id=%u dl_link_priority=%u camera_tag=0x%x camera_mask=0x%llx proc_display=%p "
              "(lbCommonDrawSObjAttr=%p match=%s) gobj_flags=0x%x\n",

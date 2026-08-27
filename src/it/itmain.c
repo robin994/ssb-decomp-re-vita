@@ -329,7 +329,7 @@ void itMainDestroyItem(GObj *item_gobj)
 #endif
     ITStruct *ip = itGetStruct(item_gobj);
 
-#ifdef PORT
+#if defined(PORT) && (!defined(__vita__) || !defined(SSB64_VITA_RUNTIME_DIAG) || SSB64_VITA_RUNTIME_DIAG)
     port_log("SSB64: itMainDestroyItem ENTER gobj=%p id=%u kind=%u ip=%p "
              "ip->kind=%u is_hold=%u owner=%p arrow=%p\n",
              (void*)item_gobj, item_gobj->id, (unsigned)item_gobj->obj_kind,
@@ -383,7 +383,7 @@ void itMainDestroyItem(GObj *item_gobj)
     itManagerSetPrevStructAlloc(ip);
     gcEjectGObj(item_gobj);
 
-#ifdef PORT
+#if defined(PORT) && (!defined(__vita__) || !defined(SSB64_VITA_RUNTIME_DIAG) || SSB64_VITA_RUNTIME_DIAG)
     port_log("SSB64: itMainDestroyItem EXIT gobj=%p\n", (void*)item_gobj);
 #endif
 }

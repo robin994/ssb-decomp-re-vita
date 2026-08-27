@@ -1504,6 +1504,9 @@ void gmCameraMakePlayerArrowsCamera(void)
 #ifdef PORT
 static void gmCameraInterfaceProcDisplay(GObj *camera_gobj)
 {
+#if defined(__vita__) && defined(SSB64_VITA_SCENE_DIAG) && !SSB64_VITA_SCENE_DIAG
+    lbCommonDrawSprite(camera_gobj);
+#else
     Gfx *dl_before[ARRAY_COUNT(gSYTaskmanDLHeads)];
     GObj *interface_gobj;
     s32 link23_count = 0;
@@ -1559,6 +1562,7 @@ static void gmCameraInterfaceProcDisplay(GObj *camera_gobj)
             (int)(gSYTaskmanDLHeads[2] - dl_before[2]),
             (int)(gSYTaskmanDLHeads[3] - dl_before[3]));
     }
+#endif
 }
 #endif
 

@@ -13,7 +13,7 @@ extern void port_log(const char *fmt, ...);
 void ftCommonCatchProcUpdate(GObj *fighter_gobj)
 {
     FTStruct *fp = ftGetStruct(fighter_gobj);
-#ifdef PORT
+#if defined(PORT) && (!defined(__vita__) || !defined(SSB64_VITA_RUNTIME_DIAG) || SSB64_VITA_RUNTIME_DIAG)
     DObj *_d = DObjGetStruct(fighter_gobj);
     port_log("SSB64: ftCommonCatchProcUpdate fkind=%d anim_frame=%f dobj_speed=%f dobj_wait=%f dobj_anim_frame=%f pull_begin=%f pull_frames=%f flag1=%u flag2=%u\n",
         (int)fp->fkind,

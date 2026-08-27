@@ -1129,7 +1129,7 @@ void ftDisplayMainDrawDefault(DObj *dobj)
     void *dls;
     Gfx *dl0;
     Gfx *dl1;
-#ifdef PORT
+#if defined(PORT) && (!defined(__vita__) || !defined(SSB64_VITA_SCENE_DIAG) || SSB64_VITA_SCENE_DIAG)
     DObj *audit_child_before = dobj->child;
     DObj *audit_sib_before = dobj->sib_next;
     void *audit_user_before = dobj->user_data.p;
@@ -1139,7 +1139,7 @@ void ftDisplayMainDrawDefault(DObj *dobj)
 
     parts = ftGetParts(dobj);
 
-#ifdef PORT
+#if defined(PORT) && (!defined(__vita__) || !defined(SSB64_VITA_SCENE_DIAG) || SSB64_VITA_SCENE_DIAG)
     if (parts != NULL)
     {
         Gfx *audit_dl0 = NULL;
@@ -1217,7 +1217,7 @@ void ftDisplayMainDrawDefault(DObj *dobj)
         {
             ftDisplayMainDrawAccessory(fp, dobj, parts);
         }
-#ifdef PORT
+#if defined(PORT) && (!defined(__vita__) || !defined(SSB64_VITA_SCENE_DIAG) || SSB64_VITA_SCENE_DIAG)
         portFighterAuditTraverseMutation(fp, dobj, audit_joint, audit_child_before, audit_sib_before,
                                          audit_user_before, audit_flags_before);
         if (sPortFighterAuditCollectActive && (fp->fkind == nFTKindFox) && (audit_joint == 8))
@@ -1283,7 +1283,7 @@ void ftDisplayMainDrawSkeleton(DObj *dobj)
             skeletons = PORT_RESOLVE(fp->attr->skeleton);
             skeleton = &((FTSkeleton*)PORT_RESOLVE(skeletons[fp->colanim.skeleton_id]))[parts->joint_id - nFTPartsJointCommonStart];
 
-#ifdef PORT
+#if defined(PORT) && (!defined(__vita__) || !defined(SSB64_VITA_SCENE_DIAG) || SSB64_VITA_SCENE_DIAG)
             {
                 Gfx *audit_dl0 = NULL;
                 Gfx *audit_dl1 = NULL;
@@ -1372,7 +1372,7 @@ void ftDisplayMainDrawAll(GObj *fighter_gobj)
     FTAttributes *attr = fp->attr;
     u32 *skeletons = PORT_RESOLVE(attr->skeleton);
 
-#ifdef PORT
+#if defined(PORT) && (!defined(__vita__) || !defined(SSB64_VITA_SCENE_DIAG) || SSB64_VITA_SCENE_DIAG)
     portFighterAuditBeginDraw(fp);
     portFighterAuditTree(fp, DObjGetStruct(fighter_gobj));
 #endif
@@ -1391,7 +1391,7 @@ void ftDisplayMainDrawAll(GObj *fighter_gobj)
     }
     else ftDisplayMainDrawDefault(DObjGetStruct(fighter_gobj));
 
-#ifdef PORT
+#if defined(PORT) && (!defined(__vita__) || !defined(SSB64_VITA_SCENE_DIAG) || SSB64_VITA_SCENE_DIAG)
     portFighterAuditEndDraw(fp);
 #endif
 

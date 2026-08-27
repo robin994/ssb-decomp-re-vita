@@ -15,6 +15,7 @@ extern void *portFixupFTTexturePartContainer(void *container);
 #include <port_log.h>
 #include "fighter_registry.h"
 
+#if !defined(__vita__) || !defined(SSB64_VITA_RUNTIME_DIAG) || SSB64_VITA_RUNTIME_DIAG
 static u8 sPortFighterModelChangeScene = 0xFF;
 static u32 sPortFighterModelChangeCount = 0;
 
@@ -51,6 +52,7 @@ static void portFighterModelChangeAudit(FTStruct *fp, s32 joint_id, s32 old_id, 
         mobj_count, mobj, (mobj != NULL) ? mobj->sub.fmt : -1, (mobj != NULL) ? mobj->sub.siz : -1,
         (mobj != NULL) ? mobj->sub.flags : 0);
 }
+#endif
 #endif
 
 /* Resolve `attr->textureparts_container` (a reloc token under PORT, a real
@@ -893,7 +895,7 @@ void ftParamSetModelPartID(GObj *fighter_gobj, s32 joint_id, s32 modelpart_id)
     {
         if (modelpart_status->modelpart_id_curr != modelpart_id)
         {
-#ifdef PORT
+#if defined(PORT) && (!defined(__vita__) || !defined(SSB64_VITA_RUNTIME_DIAG) || SSB64_VITA_RUNTIME_DIAG)
             s32 port_old_modelpart_id = modelpart_status->modelpart_id_curr;
             portFighterModelChangeAudit(fp, joint_id, port_old_modelpart_id, modelpart_id, joint, parts, "before-set");
 #endif
@@ -958,7 +960,7 @@ void ftParamSetModelPartID(GObj *fighter_gobj, s32 joint_id, s32 modelpart_id)
             }
             else joint->dl = NULL;
 
-#ifdef PORT
+#if defined(PORT) && (!defined(__vita__) || !defined(SSB64_VITA_RUNTIME_DIAG) || SSB64_VITA_RUNTIME_DIAG)
             portFighterModelChangeAudit(fp, joint_id, port_old_modelpart_id, modelpart_id, joint, parts, "after-set");
 #endif
             fp->is_modelpart_modify = TRUE;

@@ -54,7 +54,7 @@ sb32 ftCommonSpecialLwCheckInterruptCommon(GObj *fighter_gobj)
     FTStruct *fp = ftGetStruct(fighter_gobj);
     FTAttributes *attr = fp->attr;
 
-#ifdef PORT
+#if defined(PORT) && (!defined(__vita__) || !defined(SSB64_VITA_RUNTIME_DIAG) || SSB64_VITA_RUNTIME_DIAG)
     if (fp->input.pl.button_tap & fp->input.button_mask_b)
     {
         port_log("SSB64: SpecialLwCheck fkind=%d B_tap=0x%04X have_lw=%d stick_y=%d (need<=%d)\n",
@@ -65,7 +65,7 @@ sb32 ftCommonSpecialLwCheckInterruptCommon(GObj *fighter_gobj)
 #endif
     if ((fp->input.pl.button_tap & fp->input.button_mask_b) && (attr->is_have_speciallw) && (fp->input.pl.stick_range.y <= FTCOMMON_SPECIALLW_STICK_RANGE_MIN))
     {
-#ifdef PORT
+#if defined(PORT) && (!defined(__vita__) || !defined(SSB64_VITA_RUNTIME_DIAG) || SSB64_VITA_RUNTIME_DIAG)
         port_log("SSB64: SpecialLwCheck -> PASS, calling down-B for fkind=%d\n", fp->fkind);
 #endif
 #ifdef PORT
