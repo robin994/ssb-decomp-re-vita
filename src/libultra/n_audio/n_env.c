@@ -5321,6 +5321,10 @@ ALWhatever8009EE0C* func_80026A6C_2766C(void *arg0)
 
 ALWhatever8009EDD0_siz34* func_80026A10_27610(u16 id)
 {
+#ifdef PORT
+  extern int portModAudioPlayFGM(u16 id);
+  if (portModAudioPlayFGM(id)) return NULL;
+#endif
   g_port_current_is_voice = (id >= 0x135) ? 1 : 0; // LUS: Tag the thread!
 
   if (id >= D_8009EDD0_406D0.fgm_ucode_count)
@@ -5332,6 +5336,10 @@ ALWhatever8009EDD0_siz34* func_80026A10_27610(u16 id)
 
 ALWhatever8009EDD0_siz34* func_800269C0_275C0(u16 id)
 {
+#ifdef PORT
+  extern int portModAudioPlayFGM(u16 id);
+  if (portModAudioPlayFGM(id)) return NULL;
+#endif
   g_port_current_is_voice = (id >= 0x135) ? 1 : 0; // LUS: Tag the thread!
 
   if (id >= D_8009EDD0_406D0.fgm_ucode_count)

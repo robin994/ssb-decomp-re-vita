@@ -10,7 +10,23 @@
 extern char *getenv(const char *name);
 extern int atoi(const char *str);
 extern float port_widescreen_clip_x_scale(void);
+extern void port_log(const char *fmt, ...);
 #include "fighter_registry.h"
+
+#define MNPLAYERS_1PGAME_MOD_FIGHTERS_MAX 64
+#define MNPLAYERS_1PGAME_EXPANDED_COLUMNS 12
+#define MNPLAYERS_1PGAME_EXPANDED_ROWS 5
+#define MNPLAYERS_1PGAME_EXPANDED_SLOTS (MNPLAYERS_1PGAME_EXPANDED_COLUMNS * MNPLAYERS_1PGAME_EXPANDED_ROWS)
+#define MNPLAYERS_1PGAME_VANILLA_SLOTS 12
+#define MNPLAYERS_1PGAME_MOD_VISIBLE_MAX (MNPLAYERS_1PGAME_EXPANDED_SLOTS - MNPLAYERS_1PGAME_VANILLA_SLOTS)
+#define MNPLAYERS_1PGAME_EXPANDED_X 20.0F
+#define MNPLAYERS_1PGAME_EXPANDED_Y 28.0F
+#define MNPLAYERS_1PGAME_EXPANDED_CELL_W 23.0F
+#define MNPLAYERS_1PGAME_EXPANDED_CELL_H 23.0F
+#define MNPLAYERS_1PGAME_EXPANDED_PORTRAIT_SCALE 0.51F
+
+static s32 sMNPlayers1PGameModFighters[MNPLAYERS_1PGAME_MOD_FIGHTERS_MAX];
+static s32 sMNPlayers1PGameModFighterCount;
 #endif
 extern void *func_800269C0_275C0(u16 id);
 extern void func_80026738_27338(void *arg0);
@@ -156,6 +172,164 @@ void *sMNPlayers1PGameFiles[ARRAY_COUNT(dMNPlayers1PGameFileIDs)];
 //           FUNCTIONS           //
 //                               //
 // // // // // // // // // // // //
+
+#ifdef PORT
+static void mnPlayers1PGameCollectModFighter(s32 fkind, const FighterDescriptor *desc, void *user)
+{
+	(void)desc;
+	(void)user;
+
+	if ((fkind >= nFTKindEnumCount) &&
+	    (sMNPlayers1PGameModFighterCount < MNPLAYERS_1PGAME_MOD_FIGHTERS_MAX))
+	{
+		sMNPlayers1PGameModFighters[sMNPlayers1PGameModFighterCount++] = fkind;
+	}
+}
+
+static s32 mnPlayers1PGameGetVisibleModFighterCount(void)
+{
+	return (sMNPlayers1PGameModFighterCount < MNPLAYERS_1PGAME_MOD_VISIBLE_MAX)
+		? sMNPlayers1PGameModFighterCount : MNPLAYERS_1PGAME_MOD_VISIBLE_MAX;
+}
+
+static sb32 mnPlayers1PGameUseExpandedRoster(void)
+{
+	return (sMNPlayers1PGameModFighterCount != 0) ? TRUE : FALSE;
+}
+
+static s32 mnPlayers1PGameGetExpandedRosterCount(void)
+{
+	return MNPLAYERS_1PGAME_VANILLA_SLOTS + mnPlayers1PGameGetVisibleModFighterCount();
+}
+
+static void mnPlayers1PGameInitExpandedRoster(void)
+{
+	sMNPlayers1PGameModFighterCount = 0;
+	port_fighter_for_each(mnPlayers1PGameCollectModFighter, NULL);
+
+	port_log("SSB64: CSS_1P_EXPANDED_ROSTER vanilla=%d mods=%d visible=%d slots=%d\n",
+	         MNPLAYERS_1PGAME_VANILLA_SLOTS,
+	         sMNPlayers1PGameModFighterCount,
+	         mnPlayers1PGameGetVisibleModFighterCount(),
+	         mnPlayers1PGameGetExpandedRosterCount());
+
+	if (sMNPlayers1PGameModFighterCount > MNPLAYERS_1PGAME_MOD_VISIBLE_MAX)
+	{
+		port_log("SSB64: CSS_1P_EXPANDED_ROSTER_TRUNCATED mods=%d visible_max=%d\n",
+		         sMNPlayers1PGameModFighterCount, MNPLAYERS_1PGAME_MOD_VISIBLE_MAX);
+	}
+}
+
+static s32 mnPlayers1PGameGetExpandedSlotFighterKind(s32 slot)
+{
+	if ((slot < 0) || (slot >= mnPlayers1PGameGetExpandedRosterCount()))
+	{
+		return nFTKindNull;
+	}
+	if (slot < MNPLAYERS_1PGAME_VANILLA_SLOTS)
+	{
+		return mnPlayers1PGameGetFighterKind(slot);
+	}
+	return sMNPlayers1PGameModFighters[slot - MNPLAYERS_1PGAME_VANILLA_SLOTS];
+}
+
+static s32 mnPlayers1PGameGetModFighterPortrait(s32 fkind)
+{
+	s32 i;
+
+	for (i = 0; i < mnPlayers1PGameGetVisibleModFighterCount(); i++)
+	{
+		if (sMNPlayers1PGameModFighters[i] == fkind)
+		{
+			return MNPLAYERS_1PGAME_VANILLA_SLOTS + i;
+		}
+	}
+	return 0;
+}
+
+static void mnPlayers1PGameGetExpandedSlotGeometry(s32 slot, f32 *x, f32 *y)
+{
+	if (x != NULL)
+	{
+		*x = MNPLAYERS_1PGAME_EXPANDED_X +
+		     ((slot % MNPLAYERS_1PGAME_EXPANDED_COLUMNS) * MNPLAYERS_1PGAME_EXPANDED_CELL_W);
+	}
+	if (y != NULL)
+	{
+		*y = MNPLAYERS_1PGAME_EXPANDED_Y +
+		     ((slot / MNPLAYERS_1PGAME_EXPANDED_COLUMNS) * MNPLAYERS_1PGAME_EXPANDED_CELL_H);
+	}
+}
+
+static void mnPlayers1PGameFitModPortraitToExpandedCell(SObj *sobj)
+{
+	if ((sobj == NULL) || (sobj->sprite.width == 0) || (sobj->sprite.height == 0))
+	{
+		return;
+	}
+
+	sobj->sprite.scalex = MNPLAYERS_1PGAME_EXPANDED_CELL_W / (f32)sobj->sprite.width;
+	sobj->sprite.scaley = MNPLAYERS_1PGAME_EXPANDED_CELL_H / (f32)sobj->sprite.height;
+}
+
+enum {
+	MNPLAYERS_1PGAME_MOD_CSS_PORTRAIT = 0,
+	MNPLAYERS_1PGAME_MOD_CSS_NAME = 1,
+	MNPLAYERS_1PGAME_MOD_CSS_EMBLEM = 2,
+	MNPLAYERS_1PGAME_MOD_CSS_PORTRAIT_FLASH = 3,
+};
+
+static Sprite *mnPlayers1PGameGetModPresentationSprite(s32 fkind, s32 kind)
+{
+	unsigned int file_id = 0;
+	unsigned int offset = 0;
+	void *file;
+	size_t file_size;
+	sb32 found = FALSE;
+
+	switch (kind)
+	{
+	case MNPLAYERS_1PGAME_MOD_CSS_PORTRAIT:
+		found = port_fighter_css_portrait(fkind, &file_id, &offset);
+		break;
+	case MNPLAYERS_1PGAME_MOD_CSS_NAME:
+		found = port_fighter_css_name(fkind, &file_id, &offset);
+		break;
+	case MNPLAYERS_1PGAME_MOD_CSS_EMBLEM:
+		found = port_fighter_css_emblem(fkind, &file_id, &offset);
+		break;
+	case MNPLAYERS_1PGAME_MOD_CSS_PORTRAIT_FLASH:
+		found = port_fighter_css_portrait_flash(fkind, &file_id, &offset);
+		break;
+	}
+	if (found == FALSE)
+	{
+		return NULL;
+	}
+
+	file = lbRelocGetStatusBufferFile(file_id);
+	if (file == NULL)
+	{
+		file_size = lbRelocGetFileSize(file_id);
+		if ((file_size < sizeof(Sprite)) || (offset > (file_size - sizeof(Sprite))))
+		{
+			port_log("SSB64: CSS_1P_MOD_ASSET_FAIL fkind=%d kind=%d file_id=%u offset=0x%x size=%u reason=oob\n",
+			         (int)fkind, (int)kind, file_id, offset, (unsigned)file_size);
+			return NULL;
+		}
+		file = lbRelocGetExternHeapFile(file_id, syTaskmanMalloc(file_size, 0x10));
+		if (file == NULL)
+		{
+			port_log("SSB64: CSS_1P_MOD_ASSET_FAIL fkind=%d kind=%d file_id=%u offset=0x%x reason=load\n",
+			         (int)fkind, (int)kind, file_id, offset);
+			return NULL;
+		}
+		port_log("SSB64: CSS_1P_MOD_ASSET_LOAD fkind=%d kind=%d file_id=%u size=%u\n",
+		         (int)fkind, (int)kind, file_id, (unsigned)file_size);
+	}
+	return lbRelocGetFileData(Sprite*, file, offset);
+}
+#endif
 
 // 0x80131B00
 void mnPlayers1PGameFuncLights(Gfx **dls)
@@ -461,6 +635,15 @@ f32 mnPlayers1PGameGetNextPortraitX(s32 portrait, f32 current_pos_x)
 		1.8F, 3.8F, 7.8F, -7.8F, -3.8F, -1.8F
 	};
 
+#ifdef PORT
+	if (mnPlayers1PGameUseExpandedRoster() != FALSE)
+	{
+		f32 target_x;
+		mnPlayers1PGameGetExpandedSlotGeometry(portrait, &target_x, NULL);
+		return (current_pos_x == target_x) ? -1.0F : target_x;
+	}
+#endif
+
 	if (current_pos_x == portrait_pos_x[portrait])
 	{
 		return -1.0F;
@@ -510,6 +693,16 @@ void mnPlayers1PGameSetPortraitWallpaperPosition(SObj *sobj, s32 portrait)
 		{ -35.0F, 79.0F }, { 310.0F, 79.0F },
 		{ 310.0F, 79.0F }, { 310.0F, 79.0F }
 	};
+
+#ifdef PORT
+	if (mnPlayers1PGameUseExpandedRoster() != FALSE)
+	{
+		mnPlayers1PGameGetExpandedSlotGeometry(portrait, &sobj->pos.x, &sobj->pos.y);
+		sobj->sprite.scalex = MNPLAYERS_1PGAME_EXPANDED_PORTRAIT_SCALE;
+		sobj->sprite.scaley = MNPLAYERS_1PGAME_EXPANDED_PORTRAIT_SCALE;
+		return;
+	}
+#endif
 
 	sobj->pos.x = pos[portrait].x;
 	sobj->pos.y = pos[portrait].y;
@@ -597,6 +790,11 @@ s32 mnPlayers1PGameGetPortrait(s32 fkind)
 	};
 
 #ifdef PORT
+	if ((fkind >= nFTKindEnumCount) && (port_fighter_descriptor(fkind) != NULL))
+	{
+		return mnPlayers1PGameGetModFighterPortrait(fkind);
+	}
+
 	/* Same OOB guard as mnPlayersVSGetPortrait: an unselected/transitioning slot can
 	   hand us a non-playable fkind past the 12-entry portraits[]. Clamp to slot 0. */
 	if ((u32)fkind >= ARRAY_COUNT(portraits))
@@ -732,6 +930,53 @@ void mnPlayers1PGameMakePortraitAll(void)
 	}
 }
 
+#ifdef PORT
+static void mnPlayers1PGameMakeModPortraitAll(void)
+{
+	s32 mod_index;
+
+	for (mod_index = 0; mod_index < mnPlayers1PGameGetVisibleModFighterCount(); mod_index++)
+	{
+		GObj *wallpaper_gobj;
+		GObj *portrait_gobj;
+		SObj *sobj;
+		s32 slot = MNPLAYERS_1PGAME_VANILLA_SLOTS + mod_index;
+		s32 fkind = sMNPlayers1PGameModFighters[mod_index];
+		Sprite *portrait_sprite = mnPlayers1PGameGetModPresentationSprite(
+			fkind, MNPLAYERS_1PGAME_MOD_CSS_PORTRAIT);
+
+		wallpaper_gobj = gcMakeGObjSPAfter(0, NULL, 25, GOBJ_PRIORITY_DEFAULT);
+		gcAddGObjDisplay(wallpaper_gobj, lbCommonDrawSObjAttr, 32, GOBJ_PRIORITY_DEFAULT, ~0);
+		wallpaper_gobj->user_data.s = slot;
+		gcAddGObjProcess(wallpaper_gobj, mnPlayers1PGamePortraitProcUpdate, nGCProcessKindFunc, 1);
+		sobj = lbCommonMakeSObjForGObj(
+			wallpaper_gobj,
+			lbRelocGetFileData(Sprite*, sMNPlayers1PGameFiles[4], llMNPlayersPortraitsPortraitFireBgSprite));
+		mnPlayers1PGameSetPortraitWallpaperPosition(sobj, slot);
+
+		portrait_gobj = gcMakeGObjSPAfter(0, NULL, 18, GOBJ_PRIORITY_DEFAULT);
+		gcAddGObjDisplay(portrait_gobj, lbCommonDrawSObjAttr, 27, GOBJ_PRIORITY_DEFAULT, ~0);
+		portrait_gobj->user_data.s = slot;
+		gcAddGObjProcess(portrait_gobj, mnPlayers1PGamePortraitProcUpdate, nGCProcessKindFunc, 1);
+		sobj = lbCommonMakeSObjForGObj(
+			portrait_gobj,
+			(portrait_sprite != NULL)
+				? portrait_sprite
+				: lbRelocGetFileData(Sprite*, sMNPlayers1PGameFiles[4], llMNPlayersPortraitsPortraitQuestionMarkSprite));
+			sobj->sprite.attr &= ~SP_FASTCOPY;
+			sobj->sprite.attr |= SP_TRANSPARENT;
+			mnPlayers1PGameSetPortraitWallpaperPosition(sobj, slot);
+			if (portrait_sprite != NULL)
+			{
+				mnPlayers1PGameFitModPortraitToExpandedCell(sobj);
+			}
+
+			port_log("SSB64: CSS_1P_MOD_SLOT slot=%d fkind=%d portrait=%s\n",
+		         slot, fkind, (portrait_sprite != NULL) ? "mod" : "fallback");
+	}
+}
+#endif
+
 // 0x80132DA0
 void mnPlayers1PGameMakeNameAndEmblem(GObj *gobj, s32 player, s32 fkind)
 {
@@ -767,6 +1012,37 @@ void mnPlayers1PGameMakeNameAndEmblem(GObj *gobj, s32 player, s32 fkind)
 	if (fkind != nFTKindNull)
 	{
 		gcRemoveSObjAll(gobj);
+
+#ifdef PORT
+		if ((fkind >= nFTKindEnumCount) && (port_fighter_descriptor(fkind) != NULL))
+		{
+			Sprite *emblem_sprite = mnPlayers1PGameGetModPresentationSprite(
+				fkind, MNPLAYERS_1PGAME_MOD_CSS_EMBLEM);
+			Sprite *name_sprite = mnPlayers1PGameGetModPresentationSprite(
+				fkind, MNPLAYERS_1PGAME_MOD_CSS_NAME);
+
+			if (emblem_sprite != NULL)
+			{
+				sobj = lbCommonMakeSObjForGObj(gobj, emblem_sprite);
+				sobj->sprite.attr &= ~SP_FASTCOPY;
+				sobj->sprite.attr |= SP_TRANSPARENT;
+				sobj->sprite.red = 0x00;
+				sobj->sprite.green = 0x00;
+				sobj->sprite.blue = 0x00;
+				sobj->pos.x = 35.0F;
+				sobj->pos.y = 144.0F;
+			}
+			if (name_sprite != NULL)
+			{
+				sobj = lbCommonMakeSObjForGObj(gobj, name_sprite);
+				sobj->sprite.attr &= ~SP_FASTCOPY;
+				sobj->sprite.attr |= SP_TRANSPARENT;
+				sobj->pos.x = 33.0F;
+				sobj->pos.y = 202.0F;
+			}
+			return;
+		}
+#endif
 
 		sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNPlayers1PGameFiles[1], emblem_offsets[fkind]));
 		sobj->sprite.attr &= ~SP_FASTCOPY;
@@ -1786,6 +2062,7 @@ void mnPlayers1PGameMakeFighter(GObj *fighter_gobj, s32 player, s32 fkind, s32 c
 		{
 			rot_y = DObjGetStruct(fighter_gobj)->rotate.vec.f.y;
 			ftManagerDestroyFighter(fighter_gobj);
+			sMNPlayers1PGameSlot.player = NULL;
 		}
 		else rot_y = F_CST_DTOR32(0.0F);
 
@@ -1798,6 +2075,14 @@ void mnPlayers1PGameMakeFighter(GObj *fighter_gobj, s32 player, s32 fkind, s32 c
 		desc.is_skip_shadow_setup = TRUE;
 #endif
 		sMNPlayers1PGameSlot.player = fighter_gobj = ftManagerMakeFighter(&desc);
+		if (fighter_gobj == NULL)
+		{
+#ifdef PORT
+			port_log("SSB64: CSS_1P_PREVIEW_SKIP player=%d fkind=%d reason=fighter-create-failed\n",
+			         (int)player, (int)fkind);
+#endif
+			return;
+		}
 
 		gcAddGObjProcess(fighter_gobj, mnPlayers1PGameFighterProcUpdate, nGCProcessKindFunc, 1);
 
@@ -2174,6 +2459,15 @@ void mnPlayers1PGameMakePortraitFlash(s32 player)
 	GObj *gobj;
 	SObj *sobj;
 	s32 portrait = mnPlayers1PGameGetPortrait(sMNPlayers1PGameSlot.fkind);
+#ifdef PORT
+	Sprite *mod_flash_sprite = NULL;
+	if ((sMNPlayers1PGameSlot.fkind >= nFTKindEnumCount) &&
+	    (port_fighter_descriptor(sMNPlayers1PGameSlot.fkind) != NULL))
+	{
+		mod_flash_sprite = mnPlayers1PGameGetModPresentationSprite(
+			sMNPlayers1PGameSlot.fkind, MNPLAYERS_1PGAME_MOD_CSS_PORTRAIT_FLASH);
+	}
+#endif
 
 	mnPlayers1PGameDestroyPortraitFlash(player);
 
@@ -2182,7 +2476,31 @@ void mnPlayers1PGameMakePortraitFlash(s32 player)
 	gobj->user_data.s = player;
 	gcAddGObjProcess(gobj, mnPlayers1PGamePortraitFlashThreadUpdate, nGCProcessKindThread, 1);
 
-	sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNPlayers1PGameFiles[4], llMNPlayersPortraitsWhiteSquareSprite));
+	sobj = lbCommonMakeSObjForGObj(gobj,
+#ifdef PORT
+		(mod_flash_sprite != NULL) ? mod_flash_sprite :
+#endif
+		lbRelocGetFileData(Sprite*, sMNPlayers1PGameFiles[4], llMNPlayersPortraitsWhiteSquareSprite));
+
+#ifdef PORT
+		if (mnPlayers1PGameUseExpandedRoster() != FALSE)
+		{
+			mnPlayers1PGameGetExpandedSlotGeometry(portrait, &sobj->pos.x, &sobj->pos.y);
+			if (mod_flash_sprite != NULL)
+			{
+				mnPlayers1PGameFitModPortraitToExpandedCell(sobj);
+			}
+			else
+			{
+				sobj->pos.x += 1.0F;
+				sobj->pos.y += 1.0F;
+				sobj->sprite.scalex = MNPLAYERS_1PGAME_EXPANDED_PORTRAIT_SCALE;
+				sobj->sprite.scaley = MNPLAYERS_1PGAME_EXPANDED_PORTRAIT_SCALE;
+			}
+			return;
+		}
+#endif
+
 	sobj->pos.x = (((portrait >= 6) ? portrait - 6 : portrait) * 45) + 26;
 	sobj->pos.y = (((portrait >= 6) ? 1 : 0) * 43) + 37;
 }
@@ -2220,6 +2538,8 @@ void mnPlayers1PGameAnnounceFighter(s32 player, s32 slot)
 	 * plays the synth announcer; this is the backstop when it isn't installed. */
 	if ((u32)sMNPlayers1PGameSlot.fkind >= ARRAY_COUNT(announce_names))
 	{
+		int announce_fgm = port_fighter_announce_fgm(sMNPlayers1PGameSlot.fkind);
+		if (announce_fgm > 0) func_800269C0_275C0((u16)announce_fgm);
 		sMNPlayers1PGameSlot.p_sfx = NULL;
 		return;
 	}
@@ -2348,6 +2668,30 @@ s32 mnPlayers1PGameGetForcePuckFighterKind(void)
 	s32 pos_x = (s32) sobj->pos.x + 13;
 	s32 pos_y = (s32) sobj->pos.y + 12;
 	s32 fkind;
+
+#ifdef PORT
+	if (mnPlayers1PGameUseExpandedRoster() != FALSE)
+	{
+		s32 column;
+		s32 row;
+		s32 slot;
+		f32 grid_right = MNPLAYERS_1PGAME_EXPANDED_X +
+			(MNPLAYERS_1PGAME_EXPANDED_COLUMNS * MNPLAYERS_1PGAME_EXPANDED_CELL_W);
+		f32 grid_bottom = MNPLAYERS_1PGAME_EXPANDED_Y +
+			(MNPLAYERS_1PGAME_EXPANDED_ROWS * MNPLAYERS_1PGAME_EXPANDED_CELL_H);
+
+		if ((pos_x < MNPLAYERS_1PGAME_EXPANDED_X) || (pos_x >= grid_right) ||
+		    (pos_y < MNPLAYERS_1PGAME_EXPANDED_Y) || (pos_y >= grid_bottom))
+		{
+			return nFTKindNull;
+		}
+		column = (s32)((pos_x - MNPLAYERS_1PGAME_EXPANDED_X) / MNPLAYERS_1PGAME_EXPANDED_CELL_W);
+		row = (s32)((pos_y - MNPLAYERS_1PGAME_EXPANDED_Y) / MNPLAYERS_1PGAME_EXPANDED_CELL_H);
+		slot = (row * MNPLAYERS_1PGAME_EXPANDED_COLUMNS) + column;
+		return mnPlayers1PGameGetExpandedSlotFighterKind(slot);
+	}
+#endif
+
 	sb32 is_in_range = ((pos_y > 35) && (pos_y < 79)) ? TRUE : FALSE;
 
 	if (is_in_range != FALSE)
@@ -2380,6 +2724,38 @@ s32 mnPlayers1PGameGetPuckFighterKind(s32 player)
 	s32 pos_x = (s32) sobj->pos.x + 13;
 	s32 pos_y = (s32) sobj->pos.y + 12;
 	s32 fkind;
+
+#ifdef PORT
+	if (mnPlayers1PGameUseExpandedRoster() != FALSE)
+	{
+		s32 column;
+		s32 row;
+		s32 slot;
+		f32 grid_right = MNPLAYERS_1PGAME_EXPANDED_X +
+			(MNPLAYERS_1PGAME_EXPANDED_COLUMNS * MNPLAYERS_1PGAME_EXPANDED_CELL_W);
+		f32 grid_bottom = MNPLAYERS_1PGAME_EXPANDED_Y +
+			(MNPLAYERS_1PGAME_EXPANDED_ROWS * MNPLAYERS_1PGAME_EXPANDED_CELL_H);
+
+		if ((pos_x < MNPLAYERS_1PGAME_EXPANDED_X) || (pos_x >= grid_right) ||
+		    (pos_y < MNPLAYERS_1PGAME_EXPANDED_Y) || (pos_y >= grid_bottom))
+		{
+			return nFTKindNull;
+		}
+		column = (s32)((pos_x - MNPLAYERS_1PGAME_EXPANDED_X) / MNPLAYERS_1PGAME_EXPANDED_CELL_W);
+		row = (s32)((pos_y - MNPLAYERS_1PGAME_EXPANDED_Y) / MNPLAYERS_1PGAME_EXPANDED_CELL_H);
+		slot = (row * MNPLAYERS_1PGAME_EXPANDED_COLUMNS) + column;
+		fkind = mnPlayers1PGameGetExpandedSlotFighterKind(slot);
+
+		if ((fkind == nFTKindNull) ||
+		    (mnPlayers1PGameCheckFighterCrossed(fkind) != FALSE) ||
+		    (mnPlayers1PGameCheckFighterLocked(fkind) != FALSE))
+		{
+			return nFTKindNull;
+		}
+		return fkind;
+	}
+#endif
+
 	sb32 is_in_range = ((pos_y > 35) && (pos_y < 79)) ? TRUE : FALSE;
 
 	if (is_in_range != FALSE)
@@ -2875,6 +3251,18 @@ void mnPlayers1PGameCenterPuckInPortrait(GObj *gobj, s32 fkind)
 {
 	s32 portrait = mnPlayers1PGameGetPortrait(fkind);
 
+#ifdef PORT
+	if (mnPlayers1PGameUseExpandedRoster() != FALSE)
+	{
+		f32 x;
+		f32 y;
+		mnPlayers1PGameGetExpandedSlotGeometry(portrait, &x, &y);
+		SObjGetStruct(gobj)->pos.x = x + (MNPLAYERS_1PGAME_EXPANDED_CELL_W * 0.5F) - 13.0F;
+		SObjGetStruct(gobj)->pos.y = y + (MNPLAYERS_1PGAME_EXPANDED_CELL_H * 0.5F) - 12.0F;
+		return;
+	}
+#endif
+
 	if (portrait >= 6)
 	{
 		SObjGetStruct(gobj)->pos.x = (portrait * 45) - (6 * 45) + 36;
@@ -3137,24 +3525,35 @@ void mnPlayers1PGamePuckAdjustPortraitEdge(s32 player)
 	s32 portrait = mnPlayers1PGameGetPortrait(sMNPlayers1PGameSlot.fkind);
 	f32 portrait_edge_x = ((portrait >= 6) ? portrait - 6 : portrait) * 45 + 25;
 	f32 portrait_edge_y = ((portrait >= 6) ? 1 : 0) * 43 + 36;
+	f32 portrait_width = 45.0F;
+	f32 portrait_height = 43.0F;
 	f32 new_pos_x = SObjGetStruct(sMNPlayers1PGameSlot.puck)->pos.x + sMNPlayers1PGameSlot.puck_vel_x + 13.0F;
 	f32 new_pos_y = SObjGetStruct(sMNPlayers1PGameSlot.puck)->pos.y + sMNPlayers1PGameSlot.puck_vel_y + 12.0F;
+
+#ifdef PORT
+	if (mnPlayers1PGameUseExpandedRoster() != FALSE)
+	{
+		mnPlayers1PGameGetExpandedSlotGeometry(portrait, &portrait_edge_x, &portrait_edge_y);
+		portrait_width = MNPLAYERS_1PGAME_EXPANDED_CELL_W;
+		portrait_height = MNPLAYERS_1PGAME_EXPANDED_CELL_H;
+	}
+#endif
 
 	if (new_pos_x < (portrait_edge_x + 5.0F))
 	{
 		sMNPlayers1PGameSlot.puck_vel_x = ((portrait_edge_x + 5.0F) - new_pos_x) / 10.0F;
 	}
-	if (((portrait_edge_x + 45.0F) - 5.0F) < new_pos_x)
+	if (((portrait_edge_x + portrait_width) - 5.0F) < new_pos_x)
 	{
-		sMNPlayers1PGameSlot.puck_vel_x = ((new_pos_x - ((portrait_edge_x + 45.0F) - 5.0F)) * -1.0F) / 10.0F;
+		sMNPlayers1PGameSlot.puck_vel_x = ((new_pos_x - ((portrait_edge_x + portrait_width) - 5.0F)) * -1.0F) / 10.0F;
 	}
 	if (new_pos_y < (portrait_edge_y + 5.0F))
 	{
 		sMNPlayers1PGameSlot.puck_vel_y = ((portrait_edge_y + 5.0F) - new_pos_y) / 10.0F;
 	}
-	if (((portrait_edge_y + 43.0F) - 5.0F) < new_pos_y)
+	if (((portrait_edge_y + portrait_height) - 5.0F) < new_pos_y)
 	{
-		sMNPlayers1PGameSlot.puck_vel_y = ((new_pos_y - ((portrait_edge_y + 43.0F) - 5.0F)) * -1.0F) / 10.0F;
+		sMNPlayers1PGameSlot.puck_vel_y = ((new_pos_y - ((portrait_edge_y + portrait_height) - 5.0F)) * -1.0F) / 10.0F;
 	}
 }
 
@@ -3641,6 +4040,11 @@ void mnPlayers1PGameFuncStart(void)
 	{
 		ftManagerSetupFilesAllKind(i);
 	}
+#ifdef PORT
+	/* Do not preload every registered mod fighter. CSS presentation resources
+	 * are independent; the selected preview fighter is loaded lazily. */
+	mnPlayers1PGameInitExpandedRoster();
+#endif
 	sMNPlayers1PGameFigatreeHeap = syTaskmanMalloc(gFTManagerFigatreeHeapSize, 0x10);
 
 	mnPlayers1PGameInitVars();
@@ -3656,6 +4060,9 @@ void mnPlayers1PGameFuncStart(void)
 	mnPlayers1PGameMakeReadyCamera();
 	mnPlayers1PGameMakeWallpaper();
 	mnPlayers1PGameMakePortraitAll();
+#ifdef PORT
+	mnPlayers1PGameMakeModPortraitAll();
+#endif
 	mnPlayers1PGameInitSlot(sMNPlayers1PGameManPlayer);
 	mnPlayers1PGameMakeLabels();
 	mnPlayers1PGameMakeTotalRecord();

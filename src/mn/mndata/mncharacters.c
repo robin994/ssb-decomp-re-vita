@@ -2796,6 +2796,9 @@ void mnCharactersFuncStart(void)
 	{
 		ftManagerSetupFilesAllKind(i);
 	}
+#ifdef PORT
+	/* Character-data pages should not preload every external fighter. */
+#endif
 	sMNCharactersFigatreeHeap = syTaskmanMalloc(gFTManagerFigatreeHeapSize, 0x10);
 
 	mnCharactersMakeStoryCamera();

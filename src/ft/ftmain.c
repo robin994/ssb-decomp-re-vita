@@ -1591,6 +1591,15 @@ void ftMainProcUpdateInterrupt(GObj *fighter_gobj)
     }
     if (this_fp->hitlag_tics == 0)
     {
+        #ifdef PORT
+        {
+            PortFTProcFrameFn proc_frame = port_fighter_proc_frame(this_fp->fkind);
+            if (proc_frame != NULL)
+            {
+                proc_frame(fighter_gobj);
+            }
+        }
+        #endif
         if ((this_fp->playertag_wait > 1) && !(this_fp->is_control_disable))
         {
             this_fp->playertag_wait--;

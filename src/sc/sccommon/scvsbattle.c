@@ -1,6 +1,7 @@
 #include <ft/fighter.h>
 #ifdef PORT
 extern void port_coroutine_yield(void);
+#include <netplay/netplay_bridge.h>
 #endif
 #include <if/interface.h>
 #include <gr/ground.h>
@@ -106,6 +107,12 @@ SYTaskmanSetup dSCVSBattleTaskmanSetup =
 // 0x8018D0C0
 void scVSBattleFuncUpdate(void)
 {
+#ifdef PORT
+	if (port_netplay_match_gate_tick() == FALSE)
+	{
+		return;
+	}
+#endif
 	syNetPeerUpdateBattleGate();
 
 	if (syNetPeerCheckBattleExecutionReady() == FALSE)
@@ -359,6 +366,9 @@ void scVSBattleStartBattle(void)
 	color = dSCVSBattleCommonFadeColor;
 
 	lbFadeMakeActor(nGCCommonKindTransition, nGCCommonLinkIDTransition, 10, &color, 12, TRUE, NULL);
+#ifdef PORT
+	port_netplay_loading_ready();
+#endif
 }
 
 // 0x8018D5E0 - Sort time battle winners and check for sudden death

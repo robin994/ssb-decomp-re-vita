@@ -14,7 +14,28 @@ extern void func_800266A0_272A0(void);
 extern char *getenv(const char *name);
 extern int atoi(const char *str);
 extern float port_widescreen_clip_x_scale(void);
+extern void port_log(const char *fmt, ...);
 #include "fighter_registry.h"
+#include <netplay/netplay_bridge.h>
+#include <sys/netinput.h>
+#include <sys/netreplay.h>
+#include <sys/utils.h>
+
+#define MNPLAYERS_VS_MOD_FIGHTERS_MAX 64
+#define MNPLAYERS_VS_EXPANDED_COLUMNS 12
+#define MNPLAYERS_VS_EXPANDED_ROWS 5
+#define MNPLAYERS_VS_EXPANDED_SLOTS (MNPLAYERS_VS_EXPANDED_COLUMNS * MNPLAYERS_VS_EXPANDED_ROWS)
+#define MNPLAYERS_VS_VANILLA_SLOTS 12
+#define MNPLAYERS_VS_MOD_VISIBLE_MAX (MNPLAYERS_VS_EXPANDED_SLOTS - MNPLAYERS_VS_VANILLA_SLOTS)
+#define MNPLAYERS_VS_EXPANDED_X 20.0F
+#define MNPLAYERS_VS_EXPANDED_Y 28.0F
+#define MNPLAYERS_VS_EXPANDED_CELL_W 23.0F
+#define MNPLAYERS_VS_EXPANDED_CELL_H 23.0F
+#define MNPLAYERS_VS_EXPANDED_PORTRAIT_SCALE 0.51F
+
+static s32 sMNPlayersVSModFighters[MNPLAYERS_VS_MOD_FIGHTERS_MAX];
+static s32 sMNPlayersVSModFighterCount;
+static SYController sMNPlayersVSNetplayInputs[GMCOMMON_PLAYERS_MAX];
 #endif
 
 
@@ -38,6 +59,8 @@ u32 dMNPlayersVSFileIDs[/* */] =
 	/* [7] Classic Co-op: difficulty text sprites for the classic-context
 	 * selector (same file the 1P CSS loads as its slot 6). */
 	, llMNPlayersDifficultyFileID
+	/* [8] Netplay player-name labels. */
+	, llMNCommonFontsFileID
 #endif
 };
 
@@ -139,6 +162,160 @@ void *sMNPlayersVSFiles[ARRAY_COUNT(dMNPlayersVSFileIDs)];
 //                               //
 // // // // // // // // // // // //
 
+#ifdef PORT
+static void mnPlayersVSCollectModFighter(s32 fkind, const FighterDescriptor *desc, void *user)
+{
+	(void)desc;
+	(void)user;
+
+	if ((fkind >= nFTKindEnumCount) && (sMNPlayersVSModFighterCount < MNPLAYERS_VS_MOD_FIGHTERS_MAX))
+	{
+		sMNPlayersVSModFighters[sMNPlayersVSModFighterCount++] = fkind;
+	}
+}
+
+static s32 mnPlayersVSGetVisibleModFighterCount(void)
+{
+	return (sMNPlayersVSModFighterCount < MNPLAYERS_VS_MOD_VISIBLE_MAX)
+		? sMNPlayersVSModFighterCount : MNPLAYERS_VS_MOD_VISIBLE_MAX;
+}
+
+static sb32 mnPlayersVSUseExpandedRoster(void)
+{
+	return (sMNPlayersVSModFighterCount != 0) ? TRUE : FALSE;
+}
+
+static s32 mnPlayersVSGetExpandedRosterCount(void)
+{
+	return MNPLAYERS_VS_VANILLA_SLOTS + mnPlayersVSGetVisibleModFighterCount();
+}
+
+static void mnPlayersVSInitExpandedRoster(void)
+{
+	sMNPlayersVSModFighterCount = 0;
+
+	port_fighter_for_each(mnPlayersVSCollectModFighter, NULL);
+	port_log("SSB64: CSS_EXPANDED_ROSTER vanilla=%d mods=%d visible=%d slots=%d\n",
+	         MNPLAYERS_VS_VANILLA_SLOTS,
+	         sMNPlayersVSModFighterCount,
+	         mnPlayersVSGetVisibleModFighterCount(),
+	         mnPlayersVSGetExpandedRosterCount());
+	if (sMNPlayersVSModFighterCount > MNPLAYERS_VS_MOD_VISIBLE_MAX)
+	{
+		port_log("SSB64: CSS_EXPANDED_ROSTER_TRUNCATED mods=%d visible_max=%d\n",
+		         sMNPlayersVSModFighterCount, MNPLAYERS_VS_MOD_VISIBLE_MAX);
+	}
+}
+
+static s32 mnPlayersVSGetExpandedSlotFighterKind(s32 slot)
+{
+	if ((slot < 0) || (slot >= mnPlayersVSGetExpandedRosterCount()))
+	{
+		return nFTKindNull;
+	}
+	if (slot < MNPLAYERS_VS_VANILLA_SLOTS)
+	{
+		return mnPlayersVSGetFighterKind(slot);
+	}
+	return sMNPlayersVSModFighters[slot - MNPLAYERS_VS_VANILLA_SLOTS];
+}
+
+static s32 mnPlayersVSGetModFighterPortrait(s32 fkind)
+{
+	s32 i;
+
+	for (i = 0; i < mnPlayersVSGetVisibleModFighterCount(); i++)
+	{
+		if (sMNPlayersVSModFighters[i] == fkind)
+		{
+			return MNPLAYERS_VS_VANILLA_SLOTS + i;
+		}
+	}
+	return 0;
+}
+
+static void mnPlayersVSGetExpandedSlotGeometry(s32 slot, f32 *x, f32 *y)
+{
+	if (x != NULL)
+	{
+		*x = MNPLAYERS_VS_EXPANDED_X + ((slot % MNPLAYERS_VS_EXPANDED_COLUMNS) * MNPLAYERS_VS_EXPANDED_CELL_W);
+	}
+	if (y != NULL)
+	{
+		*y = MNPLAYERS_VS_EXPANDED_Y + ((slot / MNPLAYERS_VS_EXPANDED_COLUMNS) * MNPLAYERS_VS_EXPANDED_CELL_H);
+	}
+}
+
+static void mnPlayersVSFitModPortraitToExpandedCell(SObj *sobj)
+{
+	if ((sobj == NULL) || (sobj->sprite.width == 0) || (sobj->sprite.height == 0))
+	{
+		return;
+	}
+
+	sobj->sprite.scalex = MNPLAYERS_VS_EXPANDED_CELL_W / (f32)sobj->sprite.width;
+	sobj->sprite.scaley = MNPLAYERS_VS_EXPANDED_CELL_H / (f32)sobj->sprite.height;
+}
+
+enum {
+    MNPLAYERS_VS_MOD_CSS_PORTRAIT = 0,
+    MNPLAYERS_VS_MOD_CSS_NAME = 1,
+    MNPLAYERS_VS_MOD_CSS_EMBLEM = 2,
+    MNPLAYERS_VS_MOD_CSS_PORTRAIT_FLASH = 3,
+};
+
+static Sprite *mnPlayersVSGetModPresentationSprite(s32 fkind, s32 kind)
+{
+    unsigned int file_id = 0;
+    unsigned int offset = 0;
+    void *file;
+    size_t file_size;
+    sb32 found = FALSE;
+
+    switch (kind)
+    {
+    case MNPLAYERS_VS_MOD_CSS_PORTRAIT:
+        found = port_fighter_css_portrait(fkind, &file_id, &offset);
+        break;
+    case MNPLAYERS_VS_MOD_CSS_NAME:
+        found = port_fighter_css_name(fkind, &file_id, &offset);
+        break;
+    case MNPLAYERS_VS_MOD_CSS_EMBLEM:
+        found = port_fighter_css_emblem(fkind, &file_id, &offset);
+        break;
+    case MNPLAYERS_VS_MOD_CSS_PORTRAIT_FLASH:
+        found = port_fighter_css_portrait_flash(fkind, &file_id, &offset);
+        break;
+    }
+    if (found == FALSE)
+    {
+        return NULL;
+    }
+
+    file = lbRelocGetStatusBufferFile(file_id);
+    if (file == NULL)
+    {
+        file_size = lbRelocGetFileSize(file_id);
+        if ((file_size < sizeof(Sprite)) || (offset > (file_size - sizeof(Sprite))))
+        {
+            port_log("SSB64: CSS_MOD_ASSET_FAIL fkind=%d kind=%d file_id=%u offset=0x%x size=%u reason=oob\n",
+                     (int)fkind, (int)kind, file_id, offset, (unsigned)file_size);
+            return NULL;
+        }
+        file = lbRelocGetExternHeapFile(file_id, syTaskmanMalloc(file_size, 0x10));
+        if (file == NULL)
+        {
+            port_log("SSB64: CSS_MOD_ASSET_FAIL fkind=%d kind=%d file_id=%u offset=0x%x reason=load\n",
+                     (int)fkind, (int)kind, file_id, offset);
+            return NULL;
+        }
+        port_log("SSB64: CSS_MOD_ASSET_LOAD fkind=%d kind=%d file_id=%u size=%u\n",
+                 (int)fkind, (int)kind, file_id, (unsigned)file_size);
+    }
+    return lbRelocGetFileData(Sprite*, file, offset);
+}
+#endif
+
 // 0x80131B20
 void mnPlayersVSFuncLights(Gfx **dls)
 {
@@ -227,6 +404,15 @@ void mnPlayersVSSelectFighterPuck(s32 player, s32 select_button)
 		mnPlayersVSUpdateHandicapLevel(held_player);
 	}
 	mnPlayersVSMakePortraitFlash(held_player);
+#ifdef PORT
+	if (port_netplay_css_active() && (player == port_netplay_css_get_local_player()))
+	{
+		port_netplay_css_notify_lock(
+			sMNPlayersVSSlots[held_player].fkind,
+			sMNPlayersVSSlots[held_player].costume,
+			sMNPlayersVSSlots[held_player].shade);
+	}
+#endif
 }
 
 // 0x80131DC4
@@ -243,6 +429,15 @@ f32 mnPlayersVSGetNextPortraitX(s32 portrait, f32 current_pos_x)
 		1.9F, 3.9F, 7.8F, -7.8F, -3.8F, -1.8F,
 		1.8F, 3.8F, 7.8F, -7.8F, -3.8F, -1.8F
 	};
+
+#ifdef PORT
+	if (mnPlayersVSUseExpandedRoster() != FALSE)
+	{
+		f32 target_x;
+		mnPlayersVSGetExpandedSlotGeometry(portrait, &target_x, NULL);
+		return (current_pos_x == target_x) ? -1.0F : target_x;
+	}
+#endif
 
 	if (current_pos_x == portrait_pos_x[portrait])
 	{
@@ -296,6 +491,16 @@ void mnPlayersVSSetPortraitWallpaperPosition(SObj *sobj, s32 portrait)
 		{ -35.0F, 79.0F }, { 310.0F, 79.0F },
 		{ 310.0F, 79.0F }, { 310.0F, 79.0F }
 	};
+
+#ifdef PORT
+	if (mnPlayersVSUseExpandedRoster() != FALSE)
+	{
+		mnPlayersVSGetExpandedSlotGeometry(portrait, &sobj->pos.x, &sobj->pos.y);
+		sobj->sprite.scalex = MNPLAYERS_VS_EXPANDED_PORTRAIT_SCALE;
+		sobj->sprite.scaley = MNPLAYERS_VS_EXPANDED_PORTRAIT_SCALE;
+		return;
+	}
+#endif
 
 	sobj->pos.x = pos[portrait].x;
 	sobj->pos.y = pos[portrait].y;
@@ -383,6 +588,13 @@ s32 mnPlayersVSGetPortrait(s32 fkind)
 	};
 
 #ifdef PORT
+		/* Synthetic fighters occupy real slots after the 12 vanilla portraits in
+		 * the expanded Remix-style roster. */
+		if ((fkind >= nFTKindEnumCount) && (port_fighter_descriptor(fkind) != NULL))
+		{
+			return mnPlayersVSGetModFighterPortrait(fkind);
+		}
+
 	/* fkind comes from sMNPlayersVSSlots[player].fkind which can be a non-playable
 	   kind (nFTKindNull=28, nFTKindBoss=12, polygon variants, etc.) when the slot
 	   is unselected or transitioning. ASan caught a stack-OOB read here when an
@@ -522,6 +734,51 @@ void mnPlayersVSMakePortraitAll(void)
 	}
 }
 
+#ifdef PORT
+static void mnPlayersVSMakeModPortraitAll(void)
+{
+	s32 mod_index;
+
+	if (sMNPlayersVSModFighterCount == 0)
+	{
+		return;
+	}
+
+    for (mod_index = 0; mod_index < mnPlayersVSGetVisibleModFighterCount(); mod_index++)
+    {
+        GObj *wallpaper_gobj;
+        GObj *portrait_gobj;
+        SObj *sobj;
+        s32 slot = MNPLAYERS_VS_VANILLA_SLOTS + mod_index;
+        s32 fkind = sMNPlayersVSModFighters[mod_index];
+        Sprite *portrait_sprite = mnPlayersVSGetModPresentationSprite(
+            fkind, MNPLAYERS_VS_MOD_CSS_PORTRAIT);
+
+		wallpaper_gobj = gcMakeGObjSPAfter(0, NULL, 29, GOBJ_PRIORITY_DEFAULT);
+		gcAddGObjDisplay(wallpaper_gobj, lbCommonDrawSObjAttr, 36, GOBJ_PRIORITY_DEFAULT, ~0);
+		sobj = lbCommonMakeSObjForGObj(
+			wallpaper_gobj,
+			lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[5], llMNPlayersPortraitsPortraitFireBgSprite));
+		mnPlayersVSSetPortraitWallpaperPosition(sobj, slot);
+
+        portrait_gobj = gcMakeGObjSPAfter(0, NULL, 18, GOBJ_PRIORITY_DEFAULT);
+        gcAddGObjDisplay(portrait_gobj, lbCommonDrawSObjAttr, 27, GOBJ_PRIORITY_DEFAULT, ~0);
+        sobj = lbCommonMakeSObjForGObj(
+            portrait_gobj,
+            (portrait_sprite != NULL)
+                ? portrait_sprite
+                : lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[5], llMNPlayersPortraitsPortraitQuestionMarkSprite));
+        mnPlayersVSSetPortraitWallpaperPosition(sobj, slot);
+		if (portrait_sprite != NULL)
+		{
+			mnPlayersVSFitModPortraitToExpandedCell(sobj);
+		}
+        sobj->sprite.attr &= ~SP_FASTCOPY;
+        sobj->sprite.attr |= SP_TRANSPARENT;
+	}
+}
+#endif
+
 // 0x8013271C
 void mnPlayersVSMakeTeamSelect(s32 team, s32 player)
 {
@@ -644,6 +901,43 @@ void mnPlayersVSMakeNameAndEmblem(GObj *gobj, s32 player, s32 fkind)
 		llMNPlayersCommonKirbyTextSprite,      llMNPlayersCommonPikachuTextSprite,
 		llMNPlayersCommonJigglypuffTextSprite, llMNPlayersCommonNessTextSprite
 	};
+
+#ifdef PORT
+	/* Synthetic fighters source CSS presentation directly from their mod. */
+	if ((fkind >= nFTKindEnumCount) && (port_fighter_descriptor(fkind) != NULL))
+	{
+		Sprite *emblem_sprite = mnPlayersVSGetModPresentationSprite(fkind, MNPLAYERS_VS_MOD_CSS_EMBLEM);
+		Sprite *name_sprite = mnPlayersVSGetModPresentationSprite(fkind, MNPLAYERS_VS_MOD_CSS_NAME);
+
+		gcRemoveSObjAll(gobj);
+		if (emblem_sprite != NULL)
+		{
+			f32 scale = 1.0F;
+			sobj = lbCommonMakeSObjForGObj(gobj, emblem_sprite);
+			if (sobj->sprite.width > 32) scale = 32.0F / sobj->sprite.width;
+			if ((sobj->sprite.height * scale) > 32.0F) scale = 32.0F / sobj->sprite.height;
+			sobj->pos.x = (player * 69) + 24;
+			sobj->pos.y = 143.0F;
+			sobj->sprite.scalex = scale;
+			sobj->sprite.scaley = scale;
+			sobj->sprite.attr &= ~SP_FASTCOPY;
+			sobj->sprite.attr |= SP_TRANSPARENT;
+		}
+		if (name_sprite != NULL)
+		{
+			f32 scale = 1.0F;
+			sobj = lbCommonMakeSObjForGObj(gobj, name_sprite);
+			if (sobj->sprite.width > 58) scale = 58.0F / sobj->sprite.width;
+			sobj->pos.x = (player * 69) + 6;
+			sobj->pos.y = 201.0F;
+			sobj->sprite.scalex = scale;
+			sobj->sprite.scaley = scale;
+			sobj->sprite.attr &= ~SP_FASTCOPY;
+			sobj->sprite.attr |= SP_TRANSPARENT;
+		}
+		return;
+	}
+#endif
 
 	if (fkind != nFTKindNull)
 	{
@@ -1153,6 +1447,59 @@ void mnPlayersVSMakeGate(s32 player)
 	gcAddGObjDisplay(gobj, lbCommonDrawSObjAttr, 28, GOBJ_PRIORITY_DEFAULT, ~0);
 
 	mnPlayersVSUpdateNameAndEmblem(player);
+
+#ifdef PORT
+	if (port_netplay_css_active() && port_netplay_css_slot_connected(player))
+	{
+		static intptr_t font_offsets[26] =
+		{
+			llMNCommonFontsLetterASprite, llMNCommonFontsLetterBSprite,
+			llMNCommonFontsLetterCSprite, llMNCommonFontsLetterDSprite,
+			llMNCommonFontsLetterESprite, llMNCommonFontsLetterFSprite,
+			llMNCommonFontsLetterGSprite, llMNCommonFontsLetterHSprite,
+			llMNCommonFontsLetterISprite, llMNCommonFontsLetterJSprite,
+			llMNCommonFontsLetterKSprite, llMNCommonFontsLetterLSprite,
+			llMNCommonFontsLetterMSprite, llMNCommonFontsLetterNSprite,
+			llMNCommonFontsLetterOSprite, llMNCommonFontsLetterPSprite,
+			llMNCommonFontsLetterQSprite, llMNCommonFontsLetterRSprite,
+			llMNCommonFontsLetterSSprite, llMNCommonFontsLetterTSprite,
+			llMNCommonFontsLetterUSprite, llMNCommonFontsLetterVSprite,
+			llMNCommonFontsLetterWSprite, llMNCommonFontsLetterXSprite,
+			llMNCommonFontsLetterYSprite, llMNCommonFontsLetterZSprite
+		};
+		char player_name[20];
+		s32 slot_state, ping, jitter, i;
+		f32 x = (player * 69) + 25.0F;
+		const f32 scale = 0.55F;
+
+		player_name[0] = '\0';
+		port_netplay_lobby_get_slot(player, player_name, ARRAY_COUNT(player_name),
+		                              &slot_state, &ping, &jitter);
+		gobj = gcMakeGObjSPAfter(0, NULL, 22, GOBJ_PRIORITY_DEFAULT);
+		gcAddGObjDisplay(gobj, lbCommonDrawSObjAttr, 28, GOBJ_PRIORITY_DEFAULT, ~0);
+		for (i = 0; player_name[i] != '\0'; i++)
+		{
+			if (player_name[i] == ' ')
+			{
+				x += 2.5F;
+				continue;
+			}
+			if ((player_name[i] < 'A') || (player_name[i] > 'Z')) continue;
+			sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(
+				Sprite*, sMNPlayersVSFiles[8], font_offsets[player_name[i] - 'A']));
+			sobj->pos.x = x;
+			sobj->pos.y = 219.0F;
+			sobj->sprite.scalex = scale;
+			sobj->sprite.scaley = scale;
+			sobj->sprite.attr &= ~SP_FASTCOPY;
+			sobj->sprite.attr |= SP_TRANSPARENT;
+			sobj->sprite.red = 0xFF;
+			sobj->sprite.green = 0xD0;
+			sobj->sprite.blue = 0x40;
+			x += 5.0F * scale;
+		}
+	}
+#endif
 
 	if ((mnPlayersVSCheckHandicap() != FALSE) || (sMNPlayersVSSlots[player].pkind == nFTPlayerKindCom))
 	{
@@ -1892,9 +2239,17 @@ void mnPlayersVSMakeFighter(GObj *fighter_gobj, s32 player, s32 fkind, s32 costu
 #endif
 		fighter_gobj = ftManagerMakeFighter(&desc);
 
-		sMNPlayersVSSlots[player].player = fighter_gobj;
+			sMNPlayersVSSlots[player].player = fighter_gobj;
+			if (fighter_gobj == NULL)
+			{
+#ifdef PORT
+				port_log("SSB64: VS_FIGHTER_PREVIEW_ABORT player=%d fkind=%d reason=create-failed\n",
+				         (int)player, (int)fkind);
+#endif
+				return;
+			}
 
-		gcAddGObjProcess(fighter_gobj, mnPlayersVSFighterProcUpdate, nGCProcessKindFunc, 1);
+			gcAddGObjProcess(fighter_gobj, mnPlayersVSFighterProcUpdate, nGCProcessKindFunc, 1);
 
 		DObjGetStruct(fighter_gobj)->translate.vec.f.x = (player * 840) - 1250;
 		DObjGetStruct(fighter_gobj)->translate.vec.f.y = -850.0F;
@@ -2802,6 +3157,18 @@ void mnPlayersVSMakePortraitFlash(s32 player)
 	GObj *gobj;
 	SObj *sobj;
 	s32 portrait = mnPlayersVSGetPortrait(sMNPlayersVSSlots[player].fkind);
+#ifdef PORT
+	Sprite *mod_flash_sprite = NULL;
+#endif
+
+#ifdef PORT
+	if ((sMNPlayersVSSlots[player].fkind >= nFTKindEnumCount) &&
+	    (port_fighter_descriptor(sMNPlayersVSSlots[player].fkind) != NULL))
+	{
+		mod_flash_sprite = mnPlayersVSGetModPresentationSprite(
+			sMNPlayersVSSlots[player].fkind, MNPLAYERS_VS_MOD_CSS_PORTRAIT_FLASH);
+	}
+#endif
 
 	mnPlayersVSDestroyPortraitFlash(player);
 	
@@ -2810,7 +3177,30 @@ void mnPlayersVSMakePortraitFlash(s32 player)
 	gobj->user_data.s = player;
 	gcAddGObjProcess(gobj, mnPlayersVSPortraitFlashThreadUpdate, nGCProcessKindThread, 1);
 
-	sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[5], llMNPlayersPortraitsWhiteSquareSprite));
+	sobj = lbCommonMakeSObjForGObj(
+		gobj,
+#ifdef PORT
+		(mod_flash_sprite != NULL) ? mod_flash_sprite :
+#endif
+		lbRelocGetFileData(Sprite*, sMNPlayersVSFiles[5], llMNPlayersPortraitsWhiteSquareSprite));
+#ifdef PORT
+		if (mnPlayersVSUseExpandedRoster() != FALSE)
+		{
+			mnPlayersVSGetExpandedSlotGeometry(portrait, &sobj->pos.x, &sobj->pos.y);
+			if (mod_flash_sprite != NULL)
+			{
+				mnPlayersVSFitModPortraitToExpandedCell(sobj);
+			}
+			else
+			{
+				sobj->pos.x += 1.0F;
+				sobj->pos.y += 1.0F;
+				sobj->sprite.scalex = MNPLAYERS_VS_EXPANDED_PORTRAIT_SCALE;
+				sobj->sprite.scaley = MNPLAYERS_VS_EXPANDED_PORTRAIT_SCALE;
+			}
+			return;
+		}
+#endif
 	sobj->pos.x = (((portrait >= 6) ? portrait - 6 : portrait) * 45) + 26;
 	sobj->pos.y = (((portrait >= 6) ? 1 : 0) * 43) + 37;
 }
@@ -2913,10 +3303,16 @@ void mnPlayersVSAnnounceFighter(s32 player, s32 slot)
 	func_800269C0_275C0(nSYAudioFGMMarioDash);
 
 #ifdef PORT
-	/* Synth fkinds OOB the 12-wide announce table. CE's AnnounceFighter hook
-	 * plays the synth announcer; this is the backstop when it isn't installed. */
+	/* Synthetic fighters own their announcer id through the registry. Native
+	 * mods can back that FGM with PCM from their O2R, so no vanilla table index
+	 * or character-specific core hook is required. */
 	if ((u32)sMNPlayersVSSlots[slot].fkind >= ARRAY_COUNT(announce_names))
 	{
+		int announce_fgm = port_fighter_announce_fgm(sMNPlayersVSSlots[slot].fkind);
+		if (announce_fgm > 0)
+		{
+			func_800269C0_275C0((u16)announce_fgm);
+		}
 		sMNPlayersVSSlots[player].p_sfx = NULL;
 		return;
 	}
@@ -3366,13 +3762,42 @@ sb32 mnPlayersVSCheckCursorPuckGrab(GObj *gobj, s32 player)
 	return FALSE;
 }
 
-// 0x8013782C
 s32 mnPlayersVSGetPuckFighterKind(s32 player)
 {
 	SObj *sobj = SObjGetStruct(sMNPlayersVSSlots[player].puck);
 	s32 pos_x = (s32) sobj->pos.x + 13;
 	s32 pos_y = (s32) sobj->pos.y + 12;
 	s32 fkind;
+
+#ifdef PORT
+	if (mnPlayersVSUseExpandedRoster() != FALSE)
+	{
+		s32 column;
+		s32 row;
+		s32 slot;
+		f32 grid_right = MNPLAYERS_VS_EXPANDED_X + (MNPLAYERS_VS_EXPANDED_COLUMNS * MNPLAYERS_VS_EXPANDED_CELL_W);
+		f32 grid_bottom = MNPLAYERS_VS_EXPANDED_Y + (MNPLAYERS_VS_EXPANDED_ROWS * MNPLAYERS_VS_EXPANDED_CELL_H);
+
+		if ((pos_x < MNPLAYERS_VS_EXPANDED_X) || (pos_x >= grid_right) ||
+		    (pos_y < MNPLAYERS_VS_EXPANDED_Y) || (pos_y >= grid_bottom))
+		{
+			return nFTKindNull;
+		}
+		column = (s32)((pos_x - MNPLAYERS_VS_EXPANDED_X) / MNPLAYERS_VS_EXPANDED_CELL_W);
+		row = (s32)((pos_y - MNPLAYERS_VS_EXPANDED_Y) / MNPLAYERS_VS_EXPANDED_CELL_H);
+		slot = (row * MNPLAYERS_VS_EXPANDED_COLUMNS) + column;
+		fkind = mnPlayersVSGetExpandedSlotFighterKind(slot);
+
+		if ((fkind == nFTKindNull) ||
+		    (mnPlayersVSCheckFighterCrossed(fkind) != FALSE) ||
+		    (mnPlayersVSCheckFighterLocked(fkind) != FALSE))
+		{
+			return nFTKindNull;
+		}
+		return fkind;
+	}
+#endif
+
 	sb32 is_in_range = ((pos_y > 35) && (pos_y < 79)) ? TRUE : FALSE;
 
 	if (is_in_range != FALSE)
@@ -3383,13 +3808,13 @@ s32 mnPlayersVSGetPuckFighterKind(s32 player)
 		{
 			fkind = mnPlayersVSGetFighterKind((pos_x - 25) / 45);
 
-			if ((mnPlayersVSCheckFighterCrossed(fkind) != FALSE) || (mnPlayersVSCheckFighterLocked(fkind) != FALSE))
-			{
-				return nFTKindNull;
-			}
+				if ((mnPlayersVSCheckFighterCrossed(fkind) != FALSE) || (mnPlayersVSCheckFighterLocked(fkind) != FALSE))
+				{
+					return nFTKindNull;
+				}
 			else return fkind;
+			}
 		}
-	}
 	is_in_range = ((pos_y > 78) && (pos_y < 122)) ? TRUE : FALSE;
 
 	if (is_in_range != FALSE)
@@ -3400,13 +3825,13 @@ s32 mnPlayersVSGetPuckFighterKind(s32 player)
 		{
 			fkind = mnPlayersVSGetFighterKind(((pos_x - 25) / 45) + 6);
 
-			if ((mnPlayersVSCheckFighterCrossed(fkind) != FALSE) || (mnPlayersVSCheckFighterLocked(fkind) != FALSE))
-			{
-				return nFTKindNull;
-			}
+				if ((mnPlayersVSCheckFighterCrossed(fkind) != FALSE) || (mnPlayersVSCheckFighterLocked(fkind) != FALSE))
+				{
+					return nFTKindNull;
+				}
 			else return fkind;
+			}
 		}
-	}
 	return nFTKindNull;
 }
 
@@ -3591,6 +4016,12 @@ void mnPlayersVSRecallPuck(s32 player)
 		sMNPlayersVSSlots[player].recall_mid_y = sMNPlayersVSSlots[player].recall_end_y - 20.0F;
 	}
 	else sMNPlayersVSSlots[player].recall_mid_y = sMNPlayersVSSlots[player].recall_start_y - 20.0F;
+#ifdef PORT
+	if (port_netplay_css_active() && (player == port_netplay_css_get_local_player()))
+	{
+		port_netplay_css_notify_unlock();
+	}
+#endif
 }
 
 // 0x801380F4
@@ -3627,6 +4058,12 @@ void mnPlayersVSBackToVSMode(void)
 // 0x80138140
 void mnPlayersVSDetectBack(s32 player)
 {
+#ifdef PORT
+	if (port_netplay_css_active())
+	{
+		return;
+	}
+#endif
 	if (sMNPlayersVSSlots[player].is_hold_b != FALSE)
 	{
 		if (sMNPlayersVSSlots[player].hold_b_tics != 0)
@@ -3666,6 +4103,13 @@ s32 mnPlayersVSCheckBackInRange(GObj *gobj)
 	f32 pos_x, pos_y;
 	sb32 is_in_range;
 	SObj *sobj;
+
+#ifdef PORT
+	if (port_netplay_css_active())
+	{
+		return FALSE;
+	}
+#endif
 
 	sobj = SObjGetStruct(gobj);
 
@@ -3883,6 +4327,18 @@ void mnPlayersVSUpdatePuck(GObj *gobj, s32 puck)
 void mnPlayersVSCenterPuckInPortrait(GObj *gobj, s32 fkind)
 {
 	s32 portrait = mnPlayersVSGetPortrait(fkind);
+
+#ifdef PORT
+	if (mnPlayersVSUseExpandedRoster() != FALSE)
+	{
+		f32 x;
+		f32 y;
+		mnPlayersVSGetExpandedSlotGeometry(portrait, &x, &y);
+		SObjGetStruct(gobj)->pos.x = x + (MNPLAYERS_VS_EXPANDED_CELL_W * 0.5F) - 13.0F;
+		SObjGetStruct(gobj)->pos.y = y + (MNPLAYERS_VS_EXPANDED_CELL_H * 0.5F) - 12.0F;
+		return;
+	}
+#endif
 
 	if (portrait >= 6)
 	{
@@ -4271,24 +4727,35 @@ void mnPlayersVSPuckAdjustPortraitEdge(s32 player)
 	s32 portrait = mnPlayersVSGetPortrait(sMNPlayersVSSlots[player].fkind);
 	f32 portrait_edge_x = ((portrait >= 6) ? portrait - 6 : portrait) * 45 + 25;
 	f32 portrait_edge_y = ((portrait >= 6) ? 1 : 0) * 43 + 36;
+	f32 portrait_width = 45.0F;
+	f32 portrait_height = 43.0F;
 	f32 new_pos_x = SObjGetStruct(sMNPlayersVSSlots[player].puck)->pos.x + sMNPlayersVSSlots[player].puck_vel_x + 13.0F;
 	f32 new_pos_y = SObjGetStruct(sMNPlayersVSSlots[player].puck)->pos.y + sMNPlayersVSSlots[player].puck_vel_y + 12.0F;
+
+#ifdef PORT
+	if (mnPlayersVSUseExpandedRoster() != FALSE)
+	{
+		mnPlayersVSGetExpandedSlotGeometry(portrait, &portrait_edge_x, &portrait_edge_y);
+		portrait_width = MNPLAYERS_VS_EXPANDED_CELL_W;
+		portrait_height = MNPLAYERS_VS_EXPANDED_CELL_H;
+	}
+#endif
 
 	if (new_pos_x < (portrait_edge_x + 5.0F))
 	{
 		sMNPlayersVSSlots[player].puck_vel_x = ((portrait_edge_x + 5.0F) - new_pos_x) / 10.0F;
 	}
-	if (((portrait_edge_x + 45.0F) - 5.0F) < new_pos_x)
+	if (((portrait_edge_x + portrait_width) - 5.0F) < new_pos_x)
 	{
-		sMNPlayersVSSlots[player].puck_vel_x = ((new_pos_x - ((portrait_edge_x + 45.0F) - 5.0F)) * -1.0F) / 10.0F;
+		sMNPlayersVSSlots[player].puck_vel_x = ((new_pos_x - ((portrait_edge_x + portrait_width) - 5.0F)) * -1.0F) / 10.0F;
 	}
 	if (new_pos_y < (portrait_edge_y + 5.0F))
 	{
 		sMNPlayersVSSlots[player].puck_vel_y = ((portrait_edge_y + 5.0F) - new_pos_y) / 10.0F;
 	}
-	if (((portrait_edge_y + 43.0F) - 5.0F) < new_pos_y)
+	if (((portrait_edge_y + portrait_height) - 5.0F) < new_pos_y)
 	{
-		sMNPlayersVSSlots[player].puck_vel_y = ((new_pos_y - ((portrait_edge_y + 43.0F) - 5.0F)) * -1.0F) / 10.0F;
+		sMNPlayersVSSlots[player].puck_vel_y = ((new_pos_y - ((portrait_edge_y + portrait_height) - 5.0F)) * -1.0F) / 10.0F;
 	}
 }
 
@@ -4707,6 +5174,17 @@ void mnPlayersVSUpdateControllerOrders(void)
 {
 	s32 player, order;
 
+#ifdef PORT
+	if (port_netplay_css_active())
+	{
+		for (player = 0; player < ARRAY_COUNT(sMNPlayersVSControllerOrders); player++)
+		{
+			sMNPlayersVSControllerOrders[player] = port_netplay_css_slot_connected(player) ? player : -1;
+		}
+		return;
+	}
+#endif
+
 	for (player = 0; player < ARRAY_COUNT(sMNPlayersVSControllerOrders); player++)
 	{
 		sMNPlayersVSControllerOrders[player] = -1;
@@ -4843,6 +5321,33 @@ sb32 mnPlayersVSCheckReady(void)
 			}
 			return is_ready;
 		}
+	}
+	if (port_netplay_css_active())
+	{
+		s32 i;
+		s32 connected = 0;
+
+		for (i = 0; i < ARRAY_COUNT(sMNPlayersVSSlots); i++)
+		{
+			if (port_netplay_css_slot_connected(i))
+			{
+				connected++;
+				if ((sMNPlayersVSSlots[i].pkind != nFTPlayerKindMan) ||
+				    (sMNPlayersVSSlots[i].is_fighter_selected == FALSE))
+				{
+					return FALSE;
+				}
+			}
+		}
+		if (connected < 2 || mnPlayersVSCheckNoPuckOnPortraitAll() == FALSE)
+		{
+			return FALSE;
+		}
+		if ((sMNPlayersVSIsTeamBattle != FALSE) && (mnPlayersVSCheckSingleTeam() != FALSE))
+		{
+			return FALSE;
+		}
+		return TRUE;
 	}
 #endif
 	if (mnPlayersVSGetReadyPlayerCount() < 2)
@@ -4996,6 +5501,118 @@ void mnPlayersVSSetSceneDataClassicCoop(void)
 }
 #endif /* PORT */
 
+#ifdef PORT
+static void mnPlayersVSNetplayCommitMatch(void)
+{
+	static u8 stage_list[/* */] =
+	{
+		nGRKindCastle,
+		nGRKindSector,
+		nGRKindJungle,
+		nGRKindZebes,
+		nGRKindHyrule,
+		nGRKindYoster,
+		nGRKindPupupu,
+		nGRKindYamabuki,
+		nGRKindInishie
+	};
+	PortNetplayMatchConfig config = {0};
+	SCBattleState *battle_state;
+	u32 seed;
+	s32 player;
+
+	gSCManagerSceneData.gkind = stage_list[syUtilsRandIntRange(ARRAY_COUNT(stage_list))];
+	mnPlayersVSSetIdlePlayerNotAll();
+	mnPlayersVSSetSceneData();
+	battle_state = &gSCManagerTransferBattleState;
+	battle_state->gkind = gSCManagerSceneData.gkind;
+
+	seed = ((u32)syUtilsRandUShort() << 16) | syUtilsRandUShort();
+	if (seed == 0) seed = 1;
+	syUtilsSetRandomSeed((s32)seed);
+
+	config.rng_seed = seed;
+	config.stage_kind = battle_state->gkind;
+	config.stocks = battle_state->stocks;
+	config.time_limit = battle_state->time_limit;
+	config.item_switch = 0;
+	config.item_toggles = battle_state->item_toggles;
+	config.game_type = battle_state->game_type;
+	config.game_rules = battle_state->game_rules;
+	config.is_team_battle = battle_state->is_team_battle;
+	config.handicap = battle_state->handicap;
+	config.is_team_attack = battle_state->is_team_attack;
+	config.damage_ratio = battle_state->damage_ratio;
+	config.item_appearance_rate = battle_state->item_appearance_rate;
+	config.is_not_teamshadows = battle_state->is_not_teamshadows;
+
+	for (player = 0; player < GMCOMMON_PLAYERS_MAX; player++)
+	{
+		if (port_netplay_css_slot_connected(player)) config.player_count++;
+		config.player_kinds[player] = battle_state->players[player].pkind;
+		config.fighter_kinds[player] = battle_state->players[player].fkind;
+		config.costumes[player] = battle_state->players[player].costume;
+		config.teams[player] = battle_state->players[player].team;
+		config.handicaps[player] = battle_state->players[player].handicap;
+		config.levels[player] = battle_state->players[player].level;
+		config.shades[player] = battle_state->players[player].shade;
+	}
+	port_log("[NETPLAY] CSS host commit stage=%u seed=%u players=%u\n",
+	         config.stage_kind, config.rng_seed, config.player_count);
+	port_netplay_css_host_commit_match(&config);
+}
+
+static sb32 mnPlayersVSNetplayApplyMatchConfig(void)
+{
+	PortNetplayMatchConfig config;
+	SYNetInputReplayMetadata metadata = {0};
+	s32 player;
+
+	if (port_netplay_get_match_config(&config) == FALSE)
+	{
+		return FALSE;
+	}
+	metadata.magic = SYNETINPUT_REPLAY_MAGIC;
+	metadata.version = SYNETINPUT_REPLAY_VERSION;
+	metadata.scene_kind = nSCKindVSBattle;
+	metadata.player_count = config.player_count;
+	metadata.stage_kind = config.stage_kind;
+	metadata.stocks = config.stocks;
+	metadata.time_limit = config.time_limit;
+	metadata.item_switch = config.item_switch;
+	metadata.item_toggles = config.item_toggles;
+	metadata.rng_seed = config.rng_seed;
+	metadata.game_type = config.game_type;
+	metadata.game_rules = config.game_rules;
+	metadata.is_team_battle = config.is_team_battle;
+	metadata.handicap = config.handicap;
+	metadata.is_team_attack = config.is_team_attack;
+	metadata.is_stage_select = FALSE;
+	metadata.damage_ratio = config.damage_ratio;
+	metadata.item_appearance_rate = config.item_appearance_rate;
+	metadata.is_not_teamshadows = config.is_not_teamshadows;
+	for (player = 0; player < GMCOMMON_PLAYERS_MAX; player++)
+	{
+		metadata.player_kinds[player] = config.player_kinds[player];
+		metadata.fighter_kinds[player] = config.fighter_kinds[player];
+		metadata.costumes[player] = config.costumes[player];
+		metadata.teams[player] = config.teams[player];
+		metadata.handicaps[player] = config.handicaps[player];
+		metadata.levels[player] = config.levels[player];
+		metadata.shades[player] = config.shades[player];
+	}
+	syNetReplayApplyBattleMetadata(&metadata);
+	syUtilsSetRandomSeed((s32)config.rng_seed);
+	gSCManagerSceneData.gkind = config.stage_kind;
+	gSCManagerSceneData.scene_prev = nSCKindPlayersVS;
+	gSCManagerSceneData.scene_curr = nSCKindVSBattle;
+	port_log("[NETPLAY] CSS loading synchronized match stage=%u seed=%u players=%u\n",
+	         config.stage_kind, config.rng_seed, config.player_count);
+	syTaskmanSetLoadScene();
+	return TRUE;
+}
+#endif
+
 // 0x8013A8B8
 void mnPlayersVSPauseSlotProcesses(void)
 {
@@ -5060,6 +5677,34 @@ void mnPlayersVSFuncRun(GObj *gobj)
 	sMNPlayersVSTotalTimeTics++;
 
 	mnPlayersVSUpdateControllerOrders();
+
+#ifdef PORT
+	if (port_netplay_get_state() == PORT_NETPLAY_STATE_LOADING_MATCH)
+	{
+		mnPlayersVSNetplayApplyMatchConfig();
+		return;
+	}
+	if (port_netplay_css_active())
+	{
+		if (port_netplay_css_is_host() &&
+		    (scSubsysControllerGetPlayerTapButtons(START_BUTTON) != FALSE) &&
+		    (sMNPlayersVSTotalTimeTics > I_SEC_TO_TICS(1)))
+		{
+			if (mnPlayersVSCheckReady() != FALSE)
+			{
+				func_800269C0_275C0(nSYAudioVoicePublicCheer);
+				mnPlayersVSNetplayCommitMatch();
+				mnPlayersVSPauseSlotProcesses();
+			}
+			else func_800269C0_275C0(nSYAudioFGMMenuDenied);
+		}
+		for (i = 0; i < ARRAY_COUNT(sMNPlayersVSSlots); i++)
+		{
+			mnPlayersVSUpdateGate(i);
+		}
+		return;
+	}
+#endif
 
 	if (sMNPlayersVSTotalTimeTics == sMNPlayersVSReturnTic)
 	{
@@ -5385,6 +6030,13 @@ void mnPlayersVSInitVars(void)
 		sMNPlayersVSSlots[i].recall_end_tic = 0;
 	}
 #ifdef PORT
+	if (port_netplay_css_active())
+	{
+		for (i = 0; i < GMCOMMON_PLAYERS_MAX; i++)
+		{
+			sMNPlayersVSNetplayInputs[i] = (SYController){0};
+		}
+	}
 	{
 		/* Classic Co-op context: a classic run has at most two players —
 		 * lock slots 3 and 4 closed (their kind button is also disabled in
@@ -5469,14 +6121,19 @@ void mnPlayersVSFuncStart(void)
 	mnPlayersVSInitVars();
 	ftManagerAllocFighter(FTDATA_FLAG_SUBMOTION, 4);
 
-	for (i = nFTKindPlayableStart; i <= nFTKindPlayableEnd; i++)
-	{
-		ftManagerSetupFilesAllKind(i);
-	}
-	for (i = 0; i < ARRAY_COUNT(sMNPlayersVSSlots); i++)
-	{
-		sMNPlayersVSSlots[i].figatree_heap = syTaskmanMalloc(gFTManagerFigatreeHeapSize, 0x10);
-	}
+		for (i = nFTKindPlayableStart; i <= nFTKindPlayableEnd; i++)
+		{
+			ftManagerSetupFilesAllKind(i);
+		}
+#ifdef PORT
+		/* Mod fighters stay descriptor-only in CSS. The preview path lazily
+		 * loads the selected fighter through ftManagerMakeFighter(). */
+		mnPlayersVSInitExpandedRoster();
+#endif
+		for (i = 0; i < ARRAY_COUNT(sMNPlayersVSSlots); i++)
+		{
+			sMNPlayersVSSlots[i].figatree_heap = syTaskmanMalloc(gFTManagerFigatreeHeapSize, 0x10);
+		}
 	mnPlayersVSMakePortraitCamera();
 	mnPlayersVSMakeCursorCamera();
 	mnPlayersVSMakePuckCamera();
@@ -5488,10 +6145,13 @@ void mnPlayersVSFuncStart(void)
 	mnPlayersVSMakeHandicapLevelCamera();
 	mnPlayersVSMakePortraitWallpaperCamera();
 	mnPlayersVSMakePortraitFlashCamera();
-	mnPlayersVSMakeReadyCamera();
-	mnPlayersVSMakeWallpaper();
-	mnPlayersVSMakePortraitAll();
-	mnPlayersVSInitSlotAll();
+		mnPlayersVSMakeReadyCamera();
+		mnPlayersVSMakeWallpaper();
+		mnPlayersVSMakePortraitAll();
+#ifdef PORT
+			mnPlayersVSMakeModPortraitAll();
+#endif
+		mnPlayersVSInitSlotAll();
 	mnPlayersVSMakeLabels();
 	mnPlayersVSMakePuckAdjust();
 	mnPlayersVSMakePuckGlow();
@@ -5510,6 +6170,74 @@ void mnPlayersVSFuncStart(void)
 	}
 	else func_800269C0_275C0(nSYAudioVoiceAnnounceTeamBattle);
 }
+
+#ifdef PORT
+static void mnPlayersVSNetplayControllerFuncRead(void)
+{
+	SYController physical;
+	s32 local_player;
+	s32 player;
+
+	syControllerFuncRead();
+
+	if (!port_netplay_css_active())
+	{
+		return;
+	}
+	local_player = port_netplay_css_get_local_player();
+	if ((local_player < 0) || (local_player >= GMCOMMON_PLAYERS_MAX))
+	{
+		return;
+	}
+
+	physical = gSYControllerDevices[0];
+	port_netplay_css_submit_input(physical.button_hold, physical.stick_range.x, physical.stick_range.y);
+
+	for (player = 0; player < GMCOMMON_PLAYERS_MAX; player++)
+	{
+		if (!port_netplay_css_slot_connected(player))
+		{
+			sMNPlayersVSNetplayInputs[player] = (SYController){0};
+			gSYControllerDevices[player] = sMNPlayersVSNetplayInputs[player];
+			continue;
+		}
+
+		if (player == local_player)
+		{
+			sMNPlayersVSNetplayInputs[player] = physical;
+			gSYControllerDevices[player] = physical;
+			continue;
+		}
+
+		{
+			u16 buttons = 0;
+			u16 button_tap = 0;
+			u16 button_release = 0;
+			s8 stick_x = 0;
+			s8 stick_y = 0;
+
+			if (port_netplay_css_consume_input(player, &buttons, &button_tap, &button_release,
+			                                      &stick_x, &stick_y))
+			{
+				sMNPlayersVSNetplayInputs[player].button_hold = buttons;
+				sMNPlayersVSNetplayInputs[player].button_tap = button_tap;
+				sMNPlayersVSNetplayInputs[player].button_update = button_tap;
+				sMNPlayersVSNetplayInputs[player].button_release = button_release;
+				sMNPlayersVSNetplayInputs[player].stick_range.x = stick_x;
+				sMNPlayersVSNetplayInputs[player].stick_range.y = stick_y;
+			}
+			else
+			{
+				sMNPlayersVSNetplayInputs[player].button_tap = 0;
+				sMNPlayersVSNetplayInputs[player].button_update = 0;
+				sMNPlayersVSNetplayInputs[player].button_release = 0;
+			}
+			gSYControllerDevices[player] = sMNPlayersVSNetplayInputs[player];
+		}
+	}
+	gSYControllerMain = gSYControllerDevices[local_player];
+}
+#endif
 
 // 0x8013B980
 SYVideoSetup dMNPlayersVSVideoSetup = SYVIDEO_SETUP_DEFAULT();
@@ -5534,7 +6262,11 @@ SYTaskmanSetup dMNPlayersVSTaskmanSetup =
         2,                          // ???
         0x8000,                     // RDP Output Buffer Size
         mnPlayersVSFuncLights,   	// Pre-render function
+#ifdef PORT
+        mnPlayersVSNetplayControllerFuncRead, // Controller I/O function
+#else
         syControllerFuncRead,       // Controller I/O function
+#endif
     },
 
     0,                              // Number of GObjThreads

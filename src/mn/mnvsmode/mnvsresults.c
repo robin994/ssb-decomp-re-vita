@@ -3498,6 +3498,10 @@ void mnVSResultsFuncStart(void)
 	{
 		ftManagerSetupFilesAllKind(i);
 	}
+#ifdef PORT
+	/* Results only needs the winner; ftManagerMakeFighter() loads that fighter
+	 * lazily instead of materializing the entire mod roster. */
+#endif
 	for (i = 0; i < ARRAY_COUNT(sMNVSResultsFigatreeHeaps); i++)
 	{
 		sMNVSResultsFigatreeHeaps[i] = syTaskmanMalloc(gFTManagerFigatreeHeapSize, 0x10);

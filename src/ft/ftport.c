@@ -161,6 +161,9 @@ void port_fighter_seed_vanilla(void)
         (void)zero_data;
 
         desc.ft_data                            = dFTManagerDataFiles[fkind];
+        desc.parent_fkind                       = fkind;
+        desc.forward_throw_status_id             = -1;
+        desc.jab3_status_id                      = -1;
         desc.special_descs                      = dFTMainSpecialStatusDescs[fkind];
         desc.special_descs_count                = 0;  /* vanilla never bounds-checks; synth fills this */
 

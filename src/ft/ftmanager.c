@@ -7,6 +7,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <sys/debug.h>
+#include "fighter_registry.h"
 extern void port_log(const char *fmt, ...);
 extern bool portRelocDescribePointer(const void *ptr, uintptr_t *out_base, size_t *out_size, u32 *out_file_id, const char **out_path);
 #if defined(__vita__) && defined(SSB64_VITA_SCENE_DIAG) && !SSB64_VITA_SCENE_DIAG
@@ -260,6 +261,95 @@ LBFileNode sFTManagerForceStatusBuffer[64];
 //                               //
 // // // // // // // // // // // //
 
+#ifdef PORT
+typedef struct PortFighterSizingContext
+{
+    u32 data_flags;
+    size_t max_anim_size;
+} PortFighterSizingContext;
+
+static size_t ftManagerPortGetLargestAnimSize(FTData *data, u32 data_flags)
+{
+    size_t largest_size = 0;
+    size_t current_size;
+    s32 i;
+
+    if (data == NULL) return 0;
+
+    if ((data_flags & FTDATA_FLAG_MAINMOTION) && data->mainmotion != NULL)
+    {
+        for (i = 0; i < data->mainmotion_array_count; i++)
+        {
+            FTMotionDesc *motion_desc = &data->mainmotion->motion_desc[i];
+            if ((motion_desc->anim_file_id != 0) && !motion_desc->anim_desc.flags.is_use_shieldpose)
+            {
+                current_size = lbRelocGetFileSize(motion_desc->anim_file_id);
+                if (largest_size < current_size) largest_size = current_size;
+            }
+        }
+    }
+
+    if ((data_flags & FTDATA_FLAG_SUBMOTION) && data->submotion != NULL && data->submotion_array_count != NULL)
+    {
+        for (i = 0; i < *data->submotion_array_count; i++)
+        {
+            FTMotionDesc *motion_desc = &data->submotion->motion_desc[i];
+            if ((motion_desc->anim_file_id != 0) && !motion_desc->anim_desc.flags.is_use_shieldpose)
+            {
+                current_size = lbRelocGetFileSize(motion_desc->anim_file_id);
+                if (largest_size < current_size) largest_size = current_size;
+            }
+        }
+    }
+
+    return largest_size;
+}
+
+static void ftManagerPortSetupSyntheticFileSize(s32 fkind, const FighterDescriptor *desc, void *user)
+{
+    FTData *data;
+    (void)user;
+
+    if (fkind < nFTKindEnumCount || desc == NULL || desc->ft_data == NULL) return;
+    data = desc->ft_data;
+    /* Native packages may precompute these sizes at build time. That avoids
+     * walking/decompressing every registered mod RELO during application boot.
+     * Keep the old runtime calculation only as a compatibility fallback. */
+    if (data->file_main_size == 0)
+    {
+        data->file_main_size = lbRelocGetFileSize(data->file_main_id);
+    }
+    if (data->file_anim_size == 0)
+    {
+        data->file_anim_size = ftManagerPortGetLargestAnimSize(
+            data, FTDATA_FLAG_MAINMOTION | FTDATA_FLAG_SUBMOTION);
+    }
+}
+
+static void ftManagerPortAllocSyntheticFighter(s32 fkind, const FighterDescriptor *desc, void *user)
+{
+    PortFighterSizingContext *ctx = user;
+    FTData *data;
+
+    if (fkind < nFTKindEnumCount || desc == NULL || desc->ft_data == NULL || ctx == NULL) return;
+    data = desc->ft_data;
+
+    if (data->p_file_main != NULL) *data->p_file_main = NULL;
+    if (data->file_main_size == 0)
+    {
+        data->file_main_size = lbRelocGetFileSize(data->file_main_id);
+    }
+    if (data->file_anim_size == 0)
+    {
+        data->file_anim_size = ftManagerPortGetLargestAnimSize(data, ctx->data_flags);
+    }
+    if (ctx->max_anim_size < data->file_anim_size)
+    {
+        ctx->max_anim_size = data->file_anim_size;
+    }
+}
+#endif
+
 // 0x800D6FE0
 void ftManagerSetupFileSize(void)
 {
@@ -333,6 +423,13 @@ void ftManagerSetupFileSize(void)
         }
         file_size->submotion_largest_anim = largest_size;
     }
+
+#ifdef PORT
+    /* Synthetic fighters are not represented by gSCManagerFighterFileSizes[].
+     * Size their registered FTData directly so native mods can use the normal
+     * ftManager file-loading path without patching this function. */
+    port_fighter_for_each(ftManagerPortSetupSyntheticFileSize, NULL);
+#endif
 }
 
 // 0x800D7194
@@ -409,6 +506,16 @@ void ftManagerAllocFighter(u32 data_flags, s32 allocs_num)
             heap_size = data->file_anim_size;
         }
     }
+
+#ifdef PORT
+    {
+        PortFighterSizingContext ctx;
+        ctx.data_flags = data_flags;
+        ctx.max_anim_size = heap_size;
+        port_fighter_for_each(ftManagerPortAllocSyntheticFighter, &ctx);
+        heap_size = ctx.max_anim_size;
+    }
+#endif
     gFTManagerFigatreeHeapSize = heap_size;
 
     if (data_flags & FTDATA_FLAG_SUBMOTION)
@@ -567,6 +674,11 @@ void ftManagerSetupFilesAllKind(s32 fkind)
 {
 #ifdef PORT
     FTData *data = port_fighter_data(fkind);
+    if ((data == NULL) || (data->p_file_main == NULL))
+    {
+        port_log("SSB64: FIGHTER_FILE_SETUP_SKIP fkind=%d reason=no-data\n", (int)fkind);
+        return;
+    }
     /* The FTData pointer slots are process-lifetime globals while their
      * reloc-backed contents live in the recyclable scene arena. A non-NULL
      * p_file_main can therefore survive after the current scene's status
@@ -595,6 +707,44 @@ void ftManagerSetupFilesAllKind(s32 fkind)
         ftManagerSetupFilesKind(fkind);
     }
 }
+
+#ifdef PORT
+typedef struct FTManagerPortModPreloadContext
+{
+    s32 count;
+} FTManagerPortModPreloadContext;
+
+static void ftManagerPortPreloadModFighter(s32 fkind, const FighterDescriptor *desc, void *user)
+{
+    FTManagerPortModPreloadContext *ctx = user;
+
+    (void)desc;
+
+    /* Vanilla fighter kinds are already handled by each scene's original
+     * preload loop. Only add synthetic rows registered by external mods. */
+    if (fkind < nFTKindEnumCount)
+    {
+        return;
+    }
+
+    ftManagerSetupFilesAllKind(fkind);
+    if (ctx != NULL)
+    {
+        ctx->count++;
+    }
+}
+
+void ftManagerSetupFilesModsAll(void)
+{
+    FTManagerPortModPreloadContext ctx = { 0 };
+
+    port_fighter_for_each(ftManagerPortPreloadModFighter, &ctx);
+    if (ctx.count != 0)
+    {
+        port_log("SSB64: MOD_FIGHTER_PRELOAD count=%d\n", (int)ctx.count);
+    }
+}
+#endif
 
 // 0x800D78B4
 void* ftManagerAllocFigatreeHeapKind(s32 fkind)
@@ -1052,6 +1202,39 @@ GObj* ftManagerMakeFighter(FTDesc *desc) // Create fighter
     fp->data = port_fighter_data(fp->fkind);
 #else
     fp->data = dFTManagerDataFiles[fp->fkind];
+#endif
+#ifdef PORT
+    /* Synthetic fighter FTData lives for the process lifetime, but every
+     * p_file_* value points into scene-owned reloc storage. A scene change can
+     * therefore leave a non-NULL stale pointer behind. Reconcile registered
+     * mod fighters with the current scene's status buffer on every creation;
+     * ftManagerSetupFilesAllKind reloads only what is no longer published. */
+    if ((fp->fkind >= nFTKindEnumCount) &&
+        (port_fighter_descriptor(fp->fkind) != NULL) &&
+        (fp->data != NULL) &&
+        (fp->data->p_file_main != NULL))
+    {
+        port_log("SSB64: FIGHTER_CREATE_RECONCILE fkind=%d file_id=%u\n",
+                 (int)fp->fkind, (unsigned)fp->data->file_main_id);
+        ftManagerSetupFilesAllKind(fp->fkind);
+    }
+    else if ((fp->data != NULL) && (fp->data->p_file_main != NULL) && (*fp->data->p_file_main == NULL))
+    {
+        port_log("SSB64: FIGHTER_CREATE_LAZY_SETUP fkind=%d file_id=%u\n",
+                 (int)fp->fkind, (unsigned)fp->data->file_main_id);
+        ftManagerSetupFilesAllKind(fp->fkind);
+    }
+    if ((fp->data == NULL) || (fp->data->p_file_main == NULL) || (*fp->data->p_file_main == NULL))
+    {
+        port_log("SSB64: FIGHTER_CREATE_ABORT fkind=%d reason=missing-main file_id=%u data=%p p_main=%p main=%p\n",
+                 (int)fp->fkind,
+                 (fp->data != NULL) ? (unsigned)fp->data->file_main_id : 0u,
+                 fp->data,
+                 (fp->data != NULL) ? fp->data->p_file_main : NULL,
+                 ((fp->data != NULL) && (fp->data->p_file_main != NULL)) ? *fp->data->p_file_main : NULL);
+        gcEjectGObj(fighter_gobj);
+        return NULL;
+    }
 #endif
     attr = fp->attr = lbRelocGetFileData(FTAttributes*, *fp->data->p_file_main, fp->data->o_attributes);
 #ifdef PORT

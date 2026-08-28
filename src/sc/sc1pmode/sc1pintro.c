@@ -6,6 +6,34 @@
 #ifdef PORT
 #include <sys/audio.h>
 #include <sys/scheduler.h>
+#include "fighter_registry.h"
+#include "port_log.h"
+
+/* The 1P intro camera tables are fixed to the 12 vanilla playable fighters.
+ * Synthetic fighters keep their real fkind for fighter construction, but use
+ * their registered parent row for camera framing / camera animation. */
+static s32 sc1PIntroGetCameraFKind(s32 fkind)
+{
+    s32 camera_fkind = fkind;
+
+    if ((u32)camera_fkind >= 12u)
+    {
+        camera_fkind = port_fighter_parent_fkind(fkind);
+
+        if ((u32)camera_fkind >= 12u)
+        {
+            port_log("SSB64: INTRO_CAMERA_PARENT_INVALID fkind=%d parent=%d fallback=%d\n",
+                     (int)fkind, (int)camera_fkind, (int)nFTKindMario);
+            camera_fkind = nFTKindMario;
+        }
+        else
+        {
+            port_log("SSB64: INTRO_CAMERA_PARENT fkind=%d parent=%d\n",
+                     (int)fkind, (int)camera_fkind);
+        }
+    }
+    return camera_fkind;
+}
 #endif
 
 extern void func_800266A0_272A0();
@@ -659,6 +687,49 @@ s32 sc1PIntroGetAlliesNum(s32 stage)
 }
 
 // 0x80132668
+#ifdef PORT
+static Sprite *sc1PIntroGetFighterNameSprite(s32 fkind, const intptr_t *vanilla_offsets, s32 vanilla_count)
+{
+    unsigned int file_id;
+    unsigned int offset;
+    size_t file_size;
+    void *file;
+
+    if ((fkind >= 0) && (fkind < vanilla_count))
+    {
+        return lbRelocGetFileData(Sprite*, sSC1PIntroFiles[1], vanilla_offsets[fkind]);
+    }
+    if (!port_fighter_intro_name(fkind, &file_id, &offset))
+    {
+        port_log("SSB64: INTRO_NAME_MISSING fkind=%d\n", (int)fkind);
+        return NULL;
+    }
+
+    file_size = lbRelocGetFileSize(file_id);
+    if ((file_size < sizeof(Sprite)) || (offset > (file_size - sizeof(Sprite))))
+    {
+        port_log("SSB64: INTRO_NAME_FAIL fkind=%d file_id=%u offset=0x%x size=%u reason=oob\n",
+                 (int)fkind, file_id, offset, (unsigned)file_size);
+        return NULL;
+    }
+    file = lbRelocGetStatusBufferFile(file_id);
+    if (file == NULL)
+    {
+        void *dst = syTaskmanMalloc(file_size, 0x10);
+        if (dst != NULL) file = lbRelocGetExternHeapFile(file_id, dst);
+    }
+    if (file == NULL)
+    {
+        port_log("SSB64: INTRO_NAME_FAIL fkind=%d file_id=%u reason=load\n",
+                 (int)fkind, file_id);
+        return NULL;
+    }
+    port_log("SSB64: INTRO_NAME_LOAD fkind=%d file_id=%u offset=0x%x\n",
+             (int)fkind, file_id, offset);
+    return lbRelocGetFileData(Sprite*, file, offset);
+}
+#endif
+
 void sc1PIntroMakeName(s32 stage)
 {
     GObj *gobj;
@@ -699,7 +770,23 @@ void sc1PIntroMakeName(s32 stage)
     sSC1PIntroNameGObj = gobj = gcMakeGObjSPAfter(0, NULL, 19, GOBJ_PRIORITY_DEFAULT);
     gcAddGObjDisplay(gobj, lbCommonDrawSObjAttr, 27, GOBJ_PRIORITY_DEFAULT, ~0);
     
+#ifdef PORT
+    {
+        Sprite *name_sprite = sc1PIntroGetFighterNameSprite(
+            sSC1PIntroPlayerFighterDemoDesc.fkind, name_offsets, ARRAY_COUNT(name_offsets));
+        if (name_sprite == NULL)
+        {
+            name_sprite = lbRelocGetFileData(Sprite*, sSC1PIntroFiles[1], llCharacterNamesMarioSprite);
+        }
+        port_log("SSB64: INTRO_NAME_MAKE_BEGIN fkind=%d sprite=%p\n",
+                 (int)sSC1PIntroPlayerFighterDemoDesc.fkind, name_sprite);
+        sobj = lbCommonMakeSObjForGObj(gobj, name_sprite);
+        port_log("SSB64: INTRO_NAME_MAKE_END fkind=%d sobj=%p\n",
+                 (int)sSC1PIntroPlayerFighterDemoDesc.fkind, sobj);
+    }
+#else
     sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sSC1PIntroFiles[1], name_offsets[sSC1PIntroPlayerFighterDemoDesc.fkind]));
+#endif
     
     sobj->sprite.attr &= ~SP_FASTCOPY;
     sobj->sprite.attr |= SP_TRANSPARENT;
@@ -723,7 +810,19 @@ void sc1PIntroMakeName(s32 stage)
         sobj->sprite.green = 0xFF;
         sobj->sprite.blue = 0xFF;
         
+#ifdef PORT
+        {
+            Sprite *name_sprite = sc1PIntroGetFighterNameSprite(
+                sSC1PIntroAlly1FighterDemoDesc.fkind, name_offsets, ARRAY_COUNT(name_offsets));
+            if (name_sprite == NULL)
+            {
+                name_sprite = lbRelocGetFileData(Sprite*, sSC1PIntroFiles[1], llCharacterNamesMarioSprite);
+            }
+            sobj = lbCommonMakeSObjForGObj(gobj, name_sprite);
+        }
+#else
         sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sSC1PIntroFiles[1], name_offsets[sSC1PIntroAlly1FighterDemoDesc.fkind]));
+#endif
         
         sobj->sprite.attr &= ~SP_FASTCOPY;
         sobj->sprite.attr |= SP_TRANSPARENT;
@@ -734,7 +833,19 @@ void sc1PIntroMakeName(s32 stage)
         
         if (sc1PIntroGetAlliesNum(stage) == 2)
         {
+#ifdef PORT
+            {
+                Sprite *name_sprite = sc1PIntroGetFighterNameSprite(
+                    sSC1PIntroAlly2FighterDemoDesc.fkind, name_offsets, ARRAY_COUNT(name_offsets));
+                if (name_sprite == NULL)
+                {
+                    name_sprite = lbRelocGetFileData(Sprite*, sSC1PIntroFiles[1], llCharacterNamesMarioSprite);
+                }
+                sobj = lbCommonMakeSObjForGObj(gobj, name_sprite);
+            }
+#else
             sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sSC1PIntroFiles[1], name_offsets[sSC1PIntroAlly2FighterDemoDesc.fkind]));
+#endif
             
             sobj->sprite.attr &= ~SP_FASTCOPY;
             sobj->sprite.attr |= SP_TRANSPARENT;
@@ -1708,6 +1819,13 @@ void sc1PIntroMakeFighterCamera(s32 fkind, s32 cobj_id)
     GObj* gobj;
     CObj *cobj;
     CObjDesc cobj_desc;
+#ifdef PORT
+    s32 camera_fkind = sc1PIntroGetCameraFKind(fkind);
+    port_log("SSB64: INTRO_CAMERA_BEGIN fkind=%d camera_fkind=%d cobj_id=%d\n",
+             (int)fkind, (int)camera_fkind, (int)cobj_id);
+#else
+    s32 camera_fkind = fkind;
+#endif
 
     // 0x801359D0
     intptr_t camanim_joints[/* */] =
@@ -1777,9 +1895,9 @@ void sc1PIntroMakeFighterCamera(s32 fkind, s32 cobj_id)
 
     syRdpSetViewport(&cobj->viewport, 10.0F, 10.0F, 310.0F, 230.0F);
     
-    sc1PIntroGetFighterCObjDesc(&cobj_desc, fkind, cobj_id);
+    sc1PIntroGetFighterCObjDesc(&cobj_desc, camera_fkind, cobj_id);
     
-    gcAddCObjCamAnimJoint(cobj, lbRelocGetFileData(AObjEvent32*, sSC1PIntroFiles[0], camanim_joints[fkind]), 0.0F);
+    gcAddCObjCamAnimJoint(cobj, lbRelocGetFileData(AObjEvent32*, sSC1PIntroFiles[0], camanim_joints[camera_fkind]), 0.0F);
     gcPlayCamAnim(gobj);
     
     cobj->vec.eye.x = cobj_desc.eye.x;
@@ -1794,6 +1912,10 @@ void sc1PIntroMakeFighterCamera(s32 fkind, s32 cobj_id)
     cobj->projection.persp.far = 16384.0F;
 
     cobj->flags |= COBJ_FLAG_ZBUFFER;
+#ifdef PORT
+    port_log("SSB64: INTRO_CAMERA_END fkind=%d camera_fkind=%d cobj_id=%d\n",
+             (int)fkind, (int)camera_fkind, (int)cobj_id);
+#endif
 }
 
 // 0x80134190
@@ -2017,6 +2139,14 @@ void sc1PIntroUpdateAnnounce(void)
     {
         if ((sySchedulerGetTicCount() >= 2) && (sSC1PIntroIsAnnouncedFighterName == FALSE))
         {
+#ifdef PORT
+            if ((u32)sSC1PIntroPlayerFighterDemoDesc.fkind >= ARRAY_COUNT(fighter_voices))
+            {
+                int announce_fgm = port_fighter_announce_fgm(sSC1PIntroPlayerFighterDemoDesc.fkind);
+                if (announce_fgm > 0) func_800269C0_275C0((u16)announce_fgm);
+            }
+            else
+#endif
             func_800269C0_275C0(fighter_voices[sSC1PIntroPlayerFighterDemoDesc.fkind]);
 
             sSC1PIntroIsAnnouncedFighterName = TRUE;
@@ -2234,11 +2364,22 @@ void sc1PIntroFuncStart(void)
     sc1PIntroMakeLabels(sSC1PIntroStage);
     sc1PIntroMakeFigures(sSC1PIntroStage);
     sc1PIntroMakeStageInfo(sSC1PIntroStage);
+#ifdef PORT
+    port_log("SSB64: INTRO_STAGE_INFO_DONE stage=%d player_fkind=%d\n",
+             (int)sSC1PIntroStage, (int)sSC1PIntroPlayerFighterDemoDesc.fkind);
+#endif
     
     if (sc1PIntroCheckNotBonusStage(sSC1PIntroStage) != FALSE)
     {
         sc1PIntroInitFighters(sSC1PIntroStage);
+#ifdef PORT
+        port_log("SSB64: INTRO_PLAYER_FIGHTERS_DONE stage=%d player_fkind=%d\n",
+                 (int)sSC1PIntroStage, (int)sSC1PIntroPlayerFighterDemoDesc.fkind);
+#endif
         sc1PIntroInitVSFighters(sSC1PIntroStage);
+#ifdef PORT
+        port_log("SSB64: INTRO_VS_FIGHTERS_DONE stage=%d\n", (int)sSC1PIntroStage);
+#endif
     }
     scSubsysFighterSetLightParams(-20.0F, 30.0F, 0xFF, 0xFF, 0xFF, 0xFF);
     

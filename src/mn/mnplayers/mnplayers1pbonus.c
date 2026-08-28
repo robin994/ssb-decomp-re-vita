@@ -10,6 +10,7 @@ extern void *func_800269C0_275C0(u16 id);
 extern void func_80026738_27338(void *arg0);
 #ifdef PORT
 #include "fighter_registry.h"
+extern void port_log(const char *fmt, ...);
 #endif
 extern void func_800266A0_272A0(void);
 #ifdef PORT
@@ -1374,6 +1375,7 @@ void mnPlayers1PBonusMakeFighter(GObj *fighter_gobj, s32 player, s32 fkind)
 		{
 			rot_y = DObjGetStruct(fighter_gobj)->rotate.vec.f.y;
 			ftManagerDestroyFighter(fighter_gobj);
+			sMNPlayers1PBonusSlot.player = NULL;
 		}
 		else rot_y = F_CST_DTOR32(0.0F);
 
@@ -1385,6 +1387,14 @@ void mnPlayers1PBonusMakeFighter(GObj *fighter_gobj, s32 player, s32 fkind)
 		desc.is_skip_shadow_setup = TRUE;
 #endif
 		sMNPlayers1PBonusSlot.player = fighter_gobj = ftManagerMakeFighter(&desc);
+		if (fighter_gobj == NULL)
+		{
+#ifdef PORT
+			port_log("SSB64: CSS_BONUS_PREVIEW_SKIP player=%d fkind=%d reason=fighter-create-failed\n",
+			         (int)player, (int)fkind);
+#endif
+			return;
+		}
 
 		gcAddGObjProcess(fighter_gobj, mnPlayers1PBonusFighterProcUpdate, nGCProcessKindFunc, 1);
 
@@ -1754,6 +1764,8 @@ void mnPlayers1PBonusAnnounceFighter(s32 player, s32 slot)
 	 * plays the synth announcer; this is the backstop when it isn't installed. */
 	if ((u32)sMNPlayers1PBonusSlot.fkind >= ARRAY_COUNT(announce_names))
 	{
+		int announce_fgm = port_fighter_announce_fgm(sMNPlayers1PBonusSlot.fkind);
+		if (announce_fgm > 0) func_800269C0_275C0((u16)announce_fgm);
 		sMNPlayers1PBonusSlot.p_sfx = NULL;
 		return;
 	}
@@ -2977,6 +2989,9 @@ void mnPlayers1PBonusFuncStart(void)
 	{
 		ftManagerSetupFilesAllKind(i);
 	}
+#ifdef PORT
+	/* Synthetic fighters are loaded on demand when a preview is created. */
+#endif
 	sMNPlayers1PBonusFigatreeHeap = syTaskmanMalloc(gFTManagerFigatreeHeapSize, 0x10);
 
 	mnPlayers1PBonusInitVars();

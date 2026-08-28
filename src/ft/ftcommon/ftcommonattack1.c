@@ -8,6 +8,7 @@
  * FighterParentKindResolveEvent query; with no listener (or for a non-synth
  * fighter) the payload comes back unchanged and the vanilla gates apply. */
 #include "hooks/Events.h"
+#include "fighter_registry.h"
 static s32 ftCommonAttack1ResolveParentKind(s32 fkind)
 {
     CALL_EVENT(FighterParentKindResolveEvent, fkind, fkind);
@@ -24,7 +25,7 @@ static s32 ftCommonAttack1ResolveParentKind(s32 fkind)
 //                               //
 // // // // // // // // // // // //
 
-#define ftCommonAttack13CheckFighterKind(fp)\
+#define ftCommonAttack13CheckVanillaFighterKind(fp)\
 (                                           \
     (FT_A1_KIND(fp) == nFTKindMario)   ||      \
     (FT_A1_KIND(fp) == nFTKindMMario)  ||      \
@@ -38,6 +39,13 @@ static s32 ftCommonAttack1ResolveParentKind(s32 fkind)
     (FT_A1_KIND(fp) == nFTKindNess)    ||      \
     (FT_A1_KIND(fp) == nFTKindNNess)           \
 )
+
+#ifdef PORT
+#define ftCommonAttack13CheckFighterKind(fp) \
+    ((port_fighter_jab3_status((fp)->fkind) >= 0) || ftCommonAttack13CheckVanillaFighterKind(fp))
+#else
+#define ftCommonAttack13CheckFighterKind(fp) ftCommonAttack13CheckVanillaFighterKind(fp)
+#endif
 
 // // // // // // // // // // // //
 //                               //
@@ -182,6 +190,13 @@ void ftCommonAttack12SetStatus(GObj *fighter_gobj)
 
         fp->attack1_status_id = fp->status_id;
 
+#ifdef PORT
+        if (port_fighter_jab3_status(fp->fkind) >= 0)
+        {
+            fp->attack1_followup_frames = FTCOMMON_ATTACK1_FOLLOWUP_FRAMES_DEFAULT;
+            return;
+        }
+#endif
         switch (fp->fkind)
         {
         case nFTKindMario:
@@ -221,6 +236,11 @@ void ftCommonAttack13SetStatus(GObj *fighter_gobj)
 
     if (ftCommonGetCheckInterruptCommon(fighter_gobj) == FALSE)
     {
+#ifdef PORT
+        status_id = port_fighter_jab3_status(fp->fkind);
+        if (status_id < 0)
+        {
+#endif
         switch (fp->fkind)
         {
         case nFTKindMario:
@@ -249,6 +269,9 @@ void ftCommonAttack13SetStatus(GObj *fighter_gobj)
             status_id = nFTNessStatusAttack13;
             break;
         }
+#ifdef PORT
+        }
+#endif
         ftMainSetStatus(fighter_gobj, status_id, 0.0F, 1.0F, FTSTATUS_PRESERVE_NONE);
         ftMainPlayAnimEventsAll(fighter_gobj);
 

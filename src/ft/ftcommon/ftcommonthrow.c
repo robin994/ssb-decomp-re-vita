@@ -2,6 +2,7 @@
 
 #ifdef PORT
 extern void port_log(const char *fmt, ...);
+#include "fighter_registry.h"
 #endif
 
 extern void ftParamSetCaptureImmuneMask(FTStruct*, u8);
@@ -77,6 +78,9 @@ void ftCommonThrowSetStatus(GObj *fighter_gobj, sb32 is_throwf)
     GObj *catch_gobj;
     FTStruct *catch_fp;
     FTThrownStatus *thrown_status;
+#ifdef PORT
+    const s32 custom_throwf_status = port_fighter_forward_throw_status(this_fp->fkind);
+#endif
 
     catch_gobj = this_fp->catch_gobj;
     catch_fp = ftGetStruct(catch_gobj);
@@ -94,6 +98,14 @@ void ftCommonThrowSetStatus(GObj *fighter_gobj, sb32 is_throwf)
 
     if ((is_throwf != FALSE) || ((this_fp->input.pl.stick_range.x * this_fp->lr) >= 0))
     {
+#ifdef PORT
+        if (custom_throwf_status >= 0)
+        {
+            status_id = custom_throwf_status;
+            mpCommonSetFighterAir(this_fp);
+        }
+        else
+#endif
         if ((this_fp->fkind == nFTKindKirby) || (this_fp->fkind == nFTKindNKirby))
         {
             status_id = nFTKirbyStatusThrowF;
@@ -136,7 +148,11 @@ void ftCommonThrowSetStatus(GObj *fighter_gobj, sb32 is_throwf)
     }
     else ftCommonThrownSetStatusImmediate(catch_gobj, thrown_status->status2);
 
-    if ((this_fp->fkind == nFTKindKirby) || (this_fp->fkind == nFTKindNKirby))
+    if (
+#ifdef PORT
+        (custom_throwf_status >= 0) ||
+#endif
+        (this_fp->fkind == nFTKindKirby) || (this_fp->fkind == nFTKindNKirby))
     {
         if (status_id == nFTKirbyStatusThrowF)
         {
