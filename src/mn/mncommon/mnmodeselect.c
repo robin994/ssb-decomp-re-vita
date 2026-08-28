@@ -1052,8 +1052,13 @@ static void mnModeSelectNetplayFuncRun(void)
         {
             if (sMNModeSelectNetplayOption == nMNModeSelectNetplayModeBack)
             {
+                sb32 was_adhoc = (port_netplay_get_mode() == PORT_NETPLAY_MODE_LOCAL_ADHOC);
+                if (was_adhoc)
+                {
+                    port_netplay_set_mode(PORT_NETPLAY_MODE_NONE);
+                }
                 sMNModeSelectNetplayPage = nMNModeSelectNetplayPageRoot;
-                sMNModeSelectNetplayOption = (port_netplay_get_mode() == 1) ?
+                sMNModeSelectNetplayOption = was_adhoc ?
                     nMNModeSelectNetplayRootAdhoc : nMNModeSelectNetplayRootOnline;
                 func_800269C0_275C0(nSYAudioFGMMenuScroll1);
                 mnModeSelectNetplayRefresh();
@@ -1088,8 +1093,13 @@ static void mnModeSelectNetplayFuncRun(void)
         }
         else if (cancel)
         {
+            sb32 was_adhoc = (port_netplay_get_mode() == PORT_NETPLAY_MODE_LOCAL_ADHOC);
+            if (was_adhoc)
+            {
+                port_netplay_set_mode(PORT_NETPLAY_MODE_NONE);
+            }
             sMNModeSelectNetplayPage = nMNModeSelectNetplayPageRoot;
-            sMNModeSelectNetplayOption = (port_netplay_get_mode() == 1) ?
+            sMNModeSelectNetplayOption = was_adhoc ?
                 nMNModeSelectNetplayRootAdhoc : nMNModeSelectNetplayRootOnline;
             func_800269C0_275C0(nSYAudioFGMMenuScroll1);
             mnModeSelectNetplayRefresh();
@@ -1769,6 +1779,9 @@ void mnModeSelectMakeOptions(void)
     mnModeSelectMakeVSMode();
     mnModeSelectMakeOption();
     mnModeSelectMakeData();
+#if defined(PORT) && defined(__vita__)
+    mnModeSelectMakeMultiplayer();
+#endif
 }
 
 // 0x80132510

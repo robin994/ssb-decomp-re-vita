@@ -198,8 +198,10 @@ typedef enum MNModeSelectOptions
 	nMNModeSelectOptionData,
 #if defined(PORT) && defined(__vita__)
 	nMNModeSelectOptionMultiplayer,
-#endif
+	nMNModeSelectOptionEnd = nMNModeSelectOptionMultiplayer,
+#else
 	nMNModeSelectOptionEnd = nMNModeSelectOptionData,
+#endif
 
 	nMNModeSelectOptionEnumCount
 
