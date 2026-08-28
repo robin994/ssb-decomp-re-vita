@@ -68,6 +68,139 @@ Unk80045268 D_80045268[MAXCONTROLLERS];
 // 0x800452C8
 OSPfs sSYControllerMotorPfs[MAXCONTROLLERS];
 
+#if defined(PORT) && defined(__vita__)
+// Vita's D-pad doubles as a digital approximation of the N64 analog stick
+// during gameplay. A normal press stays below Smash 64's dash/run threshold;
+// a second press in the same direction within ~220 ms reaches full range.
+#define SYCONTROLLER_VITA_DPAD_SLOW_RANGE 48
+#define SYCONTROLLER_VITA_DPAD_FAST_RANGE 80
+#define SYCONTROLLER_VITA_DPAD_DOUBLE_TAP_TICS 13
+
+typedef struct SYControllerVitaDPadState
+{
+    u32 last_left_tap;
+    u32 last_right_tap;
+    ub8 left_tap_armed;
+    ub8 right_tap_armed;
+    ub8 left_fast;
+    ub8 right_fast;
+
+} SYControllerVitaDPadState;
+
+static SYControllerVitaDPadState sSYControllerVitaDPadStates[MAXCONTROLLERS];
+
+static void syControllerVitaResetDPadState(s32 player)
+{
+    SYControllerVitaDPadState *state = &sSYControllerVitaDPadStates[player];
+
+    state->last_left_tap = state->last_right_tap = 0;
+    state->left_tap_armed = state->right_tap_armed = FALSE;
+    state->left_fast = state->right_fast = FALSE;
+}
+
+static void syControllerVitaApplyDPadMovement(s32 player, u16 button_hold, u16 button_tap, s8 *stick_x, s8 *stick_y, sb32 in_gameplay)
+{
+    SYControllerVitaDPadState *state;
+    u32 tic;
+    sb32 left_hold;
+    sb32 right_hold;
+    sb32 up_hold;
+    sb32 down_hold;
+
+    if ((player < 0) || (player >= MAXCONTROLLERS))
+    {
+        return;
+    }
+
+    if (in_gameplay == FALSE)
+    {
+        syControllerVitaResetDPadState(player);
+        return;
+    }
+
+    state = &sSYControllerVitaDPadStates[player];
+    tic = sySchedulerGetTicCount();
+
+    if (state->left_tap_armed && ((u32)(tic - state->last_left_tap) > SYCONTROLLER_VITA_DPAD_DOUBLE_TAP_TICS))
+    {
+        state->left_tap_armed = FALSE;
+    }
+    if (state->right_tap_armed && ((u32)(tic - state->last_right_tap) > SYCONTROLLER_VITA_DPAD_DOUBLE_TAP_TICS))
+    {
+        state->right_tap_armed = FALSE;
+    }
+
+    if (button_tap & L_JPAD)
+    {
+        state->right_tap_armed = FALSE;
+        state->right_fast = FALSE;
+
+        if (state->left_tap_armed && ((u32)(tic - state->last_left_tap) <= SYCONTROLLER_VITA_DPAD_DOUBLE_TAP_TICS))
+        {
+            state->left_fast = TRUE;
+            state->left_tap_armed = FALSE;
+        }
+        else
+        {
+            state->left_fast = FALSE;
+            state->left_tap_armed = TRUE;
+            state->last_left_tap = tic;
+        }
+    }
+    if (button_tap & R_JPAD)
+    {
+        state->left_tap_armed = FALSE;
+        state->left_fast = FALSE;
+
+        if (state->right_tap_armed && ((u32)(tic - state->last_right_tap) <= SYCONTROLLER_VITA_DPAD_DOUBLE_TAP_TICS))
+        {
+            state->right_fast = TRUE;
+            state->right_tap_armed = FALSE;
+        }
+        else
+        {
+            state->right_fast = FALSE;
+            state->right_tap_armed = TRUE;
+            state->last_right_tap = tic;
+        }
+    }
+
+    left_hold = (button_hold & L_JPAD) != 0;
+    right_hold = (button_hold & R_JPAD) != 0;
+    up_hold = (button_hold & U_JPAD) != 0;
+    down_hold = (button_hold & D_JPAD) != 0;
+
+    if (!left_hold)
+    {
+        state->left_fast = FALSE;
+    }
+    if (!right_hold)
+    {
+        state->right_fast = FALSE;
+    }
+
+    // The real analog stick always wins when both inputs are used together.
+    if ((*stick_x == 0) && (left_hold != right_hold))
+    {
+        if (left_hold)
+        {
+            *stick_x = state->left_fast ? -SYCONTROLLER_VITA_DPAD_FAST_RANGE : -SYCONTROLLER_VITA_DPAD_SLOW_RANGE;
+        }
+        else
+        {
+            *stick_x = state->right_fast ? SYCONTROLLER_VITA_DPAD_FAST_RANGE : SYCONTROLLER_VITA_DPAD_SLOW_RANGE;
+        }
+    }
+
+    // Vertical D-pad input mirrors a full-range analog Y direction. This keeps
+    // jump/crouch/drop-through behaviour identical to pushing the stick fully.
+    if ((*stick_y == 0) && (up_hold != down_hold))
+    {
+        *stick_y = up_hold ? SYCONTROLLER_VITA_DPAD_FAST_RANGE : -SYCONTROLLER_VITA_DPAD_FAST_RANGE;
+    }
+}
+#endif
+
 // 0x80003C00
 void syControllerUpdateDeviceIndexes(void)
 {
@@ -223,6 +356,14 @@ void syControllerUpdateGlobalData(void)
                                 || scene == nSCKind1PGame
                                 || scene == nSCKind1PBonusStage
                                 || scene == nSCKind1PTrainingMode);
+#if defined(PORT) && defined(__vita__)
+            syControllerVitaApplyDPadMovement(i,
+                gSYControllerDevices[i].button_hold,
+                sSYControllerDescs[i].unk04,
+                &gSYControllerDevices[i].stick_range.x,
+                &gSYControllerDevices[i].stick_range.y,
+                in_gameplay);
+#endif
             if (i < GMCOMMON_PLAYERS_MAX && in_gameplay) {
                 port_enhancement_c_stick_smash(i,
                     &gSYControllerDevices[i].button_hold,
