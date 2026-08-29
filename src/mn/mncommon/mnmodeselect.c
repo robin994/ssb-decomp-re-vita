@@ -145,6 +145,8 @@ s32 sMNModeSelectNetplayOption;
 s32 sMNModeSelectNetplayNavWait;
 s32 sMNModeSelectNetplayNameCursor;
 char sMNModeSelectNetplayNameEdit[13];
+s32 sMNModeSelectNetplayAddrCursor;
+char sMNModeSelectNetplayAddrEdit[16];
 
 void mnModeSelectMakeOptions(void);
 void mnModeSelectEjectOptions(void);
@@ -187,7 +189,8 @@ typedef enum MNModeSelectNetplayPage
     nMNModeSelectNetplayPageHost,
     nMNModeSelectNetplayPageJoin,
     nMNModeSelectNetplayPageSettings,
-    nMNModeSelectNetplayPageNameEdit
+    nMNModeSelectNetplayPageNameEdit,
+    nMNModeSelectNetplayPageJoinAddr
 
 } MNModeSelectNetplayPage;
 
@@ -205,6 +208,7 @@ enum
     nMNModeSelectNetplayModeFind,
     nMNModeSelectNetplayModeHost,
     nMNModeSelectNetplayModeJoin,
+    nMNModeSelectNetplayModeDirect,
     nMNModeSelectNetplayModeBack,
     nMNModeSelectNetplayModeCount
 };
@@ -597,6 +601,27 @@ static void mnModeSelectNetplayMakeNameEdit(GObj *gobj)
     mnModeSelectNetplayMakeString(gobj, "A SAVE B CANCEL", 77.0F, 180.0F, 0xFF, 0x40, 0x40);
 }
 
+static void mnModeSelectNetplayMakeJoinAddr(GObj *gobj)
+{
+    s32 i;
+    char letter[2] = { 0, 0 };
+
+    mnModeSelectNetplayMakeString(gobj, "ENTER HOST IP", 92.0F, 45.0F, 0xFF, 0x20, 0x20);
+
+    for (i = 0; i < 15; i++)
+    {
+        letter[0] = sMNModeSelectNetplayAddrEdit[i];
+        if (letter[0] == '\0') letter[0] = ' ';
+        mnModeSelectNetplayMakeString(gobj, letter, 34.0F + (i * 16.0F), 93.0F,
+            (i == sMNModeSelectNetplayAddrCursor) ? 0xFF : 0xD0,
+            (i == sMNModeSelectNetplayAddrCursor) ? 0xFF : 0x20,
+            (i == sMNModeSelectNetplayAddrCursor) ? 0xFF : 0x20);
+    }
+    mnModeSelectNetplayMakeString(gobj, "UP DOWN CHANGE", 82.0F, 137.0F, 0xFF, 0x40, 0x40);
+    mnModeSelectNetplayMakeString(gobj, "LEFT RIGHT MOVE", 75.0F, 153.0F, 0xFF, 0x40, 0x40);
+    mnModeSelectNetplayMakeString(gobj, "A CONNECT B CANCEL", 63.0F, 180.0F, 0xFF, 0x40, 0x40);
+}
+
 static void mnModeSelectNetplayRefresh(void)
 {
     static const char *root_options[nMNModeSelectNetplayRootCount] =
@@ -605,7 +630,7 @@ static void mnModeSelectNetplayRefresh(void)
     };
     static const char *mode_options[nMNModeSelectNetplayModeCount] =
     {
-        "FIND GAME", "HOST GAME", "JOIN GAME", "BACK"
+        "FIND GAME", "HOST GAME", "JOIN GAME", "DIRECT IP", "BACK"
     };
     static const char *settings_options[nMNModeSelectNetplaySettingsCount] =
     {
@@ -719,6 +744,10 @@ static void mnModeSelectNetplayRefresh(void)
     else if (sMNModeSelectNetplayPage == nMNModeSelectNetplayPageNameEdit)
     {
         mnModeSelectNetplayMakeNameEdit(sMNModeSelectNetplayGObj);
+    }
+    else if (sMNModeSelectNetplayPage == nMNModeSelectNetplayPageJoinAddr)
+    {
+        mnModeSelectNetplayMakeJoinAddr(sMNModeSelectNetplayGObj);
     }
     else if (sMNModeSelectNetplayPage == nMNModeSelectNetplayPageHost)
     {
@@ -859,6 +888,7 @@ static void mnModeSelectNetplayEnter(void)
     sMNModeSelectNetplayNavWait = 0;
     sMNModeSelectNetplayRuleCursor = 0;
     sMNModeSelectNetplayNameCursor = 0;
+    sMNModeSelectNetplayAddrCursor = 0;
     mnModeSelectNetplayRefresh();
 }
 
@@ -909,6 +939,63 @@ static void mnModeSelectNetplayCycleNameLetter(s32 delta)
     if (index > 26) index = 0;
     sMNModeSelectNetplayNameEdit[sMNModeSelectNetplayNameCursor] = (index == 0) ? ' ' : ('A' + index - 1);
     func_800269C0_275C0(nSYAudioFGMMenuScroll2);
+    mnModeSelectNetplayRefresh();
+}
+
+static void mnModeSelectNetplayBeginJoinAddr(void)
+{
+    char current[16];
+    s32 i;
+
+    port_netplay_get_join_address(current, ARRAY_COUNT(current));
+    for (i = 0; i < 15; i++)
+    {
+        sMNModeSelectNetplayAddrEdit[i] = (current[i] != '\0') ? current[i] : ' ';
+    }
+    sMNModeSelectNetplayAddrEdit[15] = '\0';
+    sMNModeSelectNetplayAddrCursor = 0;
+    sMNModeSelectNetplayPage = nMNModeSelectNetplayPageJoinAddr;
+    mnModeSelectNetplayRefresh();
+}
+
+static void mnModeSelectNetplayCycleAddrChar(s32 delta)
+{
+    static const char set[] = " 0123456789.";
+    char c = sMNModeSelectNetplayAddrEdit[sMNModeSelectNetplayAddrCursor];
+    s32 index = 0;
+    s32 k;
+
+    for (k = 0; k < 12; k++)
+    {
+        if (set[k] == c) { index = k; break; }
+    }
+    index += delta;
+    if (index < 0) index = 11;
+    if (index > 11) index = 0;
+    sMNModeSelectNetplayAddrEdit[sMNModeSelectNetplayAddrCursor] = set[index];
+    func_800269C0_275C0(nSYAudioFGMMenuScroll2);
+    mnModeSelectNetplayRefresh();
+}
+
+static void mnModeSelectNetplayCommitJoinAddr(void)
+{
+    char ip[16];
+    s32 i;
+    s32 n = 0;
+
+    for (i = 0; i < 15; i++)
+    {
+        if (sMNModeSelectNetplayAddrEdit[i] != ' ') ip[n++] = sMNModeSelectNetplayAddrEdit[i];
+    }
+    ip[n] = '\0';
+
+    if (port_netplay_join_address(ip) != 0)
+    {
+        sMNModeSelectNetplayPage = nMNModeSelectNetplayPageJoin;
+        sMNModeSelectNetplayOption = 0;
+        func_800269C0_275C0(nSYAudioFGMMenuSelect);
+    }
+    else func_800269C0_275C0(nSYAudioFGMMenuDenied);
     mnModeSelectNetplayRefresh();
 }
 
@@ -993,6 +1080,33 @@ static void mnModeSelectNetplayFuncRun(void)
         {
             sMNModeSelectNetplayPage = nMNModeSelectNetplayPageSettings;
             sMNModeSelectNetplayOption = nMNModeSelectNetplaySettingsName;
+            func_800269C0_275C0(nSYAudioFGMMenuScroll1);
+            mnModeSelectNetplayRefresh();
+        }
+        return;
+    }
+
+    if (sMNModeSelectNetplayPage == nMNModeSelectNetplayPageJoinAddr)
+    {
+        if (up) mnModeSelectNetplayCycleAddrChar(+1);
+        else if (down) mnModeSelectNetplayCycleAddrChar(-1);
+        else if (left)
+        {
+            sMNModeSelectNetplayAddrCursor = (sMNModeSelectNetplayAddrCursor == 0) ? 14 : sMNModeSelectNetplayAddrCursor - 1;
+            func_800269C0_275C0(nSYAudioFGMMenuScroll2);
+            mnModeSelectNetplayRefresh();
+        }
+        else if (right)
+        {
+            sMNModeSelectNetplayAddrCursor = (sMNModeSelectNetplayAddrCursor == 14) ? 0 : sMNModeSelectNetplayAddrCursor + 1;
+            func_800269C0_275C0(nSYAudioFGMMenuScroll2);
+            mnModeSelectNetplayRefresh();
+        }
+        else if (accept) mnModeSelectNetplayCommitJoinAddr();
+        else if (cancel)
+        {
+            sMNModeSelectNetplayPage = nMNModeSelectNetplayPageMode;
+            sMNModeSelectNetplayOption = nMNModeSelectNetplayModeDirect;
             func_800269C0_275C0(nSYAudioFGMMenuScroll1);
             mnModeSelectNetplayRefresh();
         }
@@ -1278,6 +1392,9 @@ static void mnModeSelectNetplayFuncRun(void)
                 sMNModeSelectNetplayPage = nMNModeSelectNetplayPageJoin;
                 sMNModeSelectNetplayOption = 0;
                 port_netplay_start_discovery();
+                break;
+            case nMNModeSelectNetplayModeDirect:
+                mnModeSelectNetplayBeginJoinAddr();
                 break;
             }
             func_800269C0_275C0(nSYAudioFGMMenuSelect);
