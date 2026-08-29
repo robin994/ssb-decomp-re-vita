@@ -61,6 +61,8 @@ typedef struct SYNetInputReplayMetadata
 
 } SYNetInputReplayMetadata;
 
+#define SYNETINPUT_PAUSE_BIT 0x0040U
+
 /* The incremental rollback snapshot does not include object-process/thread
  * execution state.  Modern netplay therefore advances a logical frame only
  * after every remote participant has supplied its authoritative input.  The
@@ -89,6 +91,9 @@ extern void syNetInputDeactivateModernSession(void);
 extern sb32 syNetInputModernNetplayActive(void);
 extern sb32 syNetInputModernFrameReady(void);
 extern u32 syNetInputGetModernStallCount(void);
+extern sb32 syNetInputModernPaused(void);
+extern s32 syNetInputModernPausePlayer(void);
+extern void syNetInputRequestModernPause(void);
 extern void syNetInputPrepareResimulation(u32 start_tick);
 extern void syNetInputPublishResimulationFrame(u32 tick);
 extern void syNetInputSetSavedInput(s32 player, u32 tick, u16 buttons, s8 stick_x, s8 stick_y);

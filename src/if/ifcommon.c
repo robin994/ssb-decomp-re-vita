@@ -2733,7 +2733,9 @@ SObj* ifCommonTimerMakeDigits(void)
 
     // Decouple timer HUD for Competitive Ruleset
     extern int port_get_comp_ruleset(void);
-    if ((!(gSCManagerBattleState->game_rules & SCBATTLE_GAMERULE_TIME) && !(port_get_comp_ruleset() && gSCManagerSceneData.scene_curr == nSCKindVSBattle)) || (gSCManagerBattleState->time_limit == SCBATTLE_TIMELIMIT_INFINITE))
+    extern int port_netplay_battle_is_timed(void);
+    if (!port_netplay_battle_is_timed() &&
+        ((!(gSCManagerBattleState->game_rules & SCBATTLE_GAMERULE_TIME) && !(port_get_comp_ruleset() && gSCManagerSceneData.scene_curr == nSCKindVSBattle)) || (gSCManagerBattleState->time_limit == SCBATTLE_TIMELIMIT_INFINITE)))
     {
         return NULL;
     }
@@ -2780,7 +2782,8 @@ void ifCommonTimerFuncRun(GObj *interface_gobj)
 
             // decouple timer logic for comp. ruleset
             extern int port_get_comp_ruleset(void);
-            if (((gSCManagerBattleState->game_rules & SCBATTLE_GAMERULE_TIME) || (port_get_comp_ruleset() && gSCManagerSceneData.scene_curr == nSCKindVSBattle)) && (gSCManagerBattleState->time_limit != SCBATTLE_TIMELIMIT_INFINITE))
+            extern int port_netplay_battle_is_timed(void);
+            if ((port_netplay_battle_is_timed() || (((gSCManagerBattleState->game_rules & SCBATTLE_GAMERULE_TIME) || (port_get_comp_ruleset() && gSCManagerSceneData.scene_curr == nSCKindVSBattle)) && (gSCManagerBattleState->time_limit != SCBATTLE_TIMELIMIT_INFINITE))))
             {
                 if (gSCManagerBattleState->time_remain != 0)
                 {
@@ -2828,7 +2831,17 @@ void ifCommonTimerFuncRun(GObj *interface_gobj)
 // 0x80113398
 void ifCommonTimerMakeInterface(void (*proc)(void))
 {
-    gSCManagerBattleState->time_remain = sIFCommonTimerLimit = I_MIN_TO_TICS(gSCManagerBattleState->time_limit);
+    extern int port_netplay_battle_is_timed(void);
+    extern int port_netplay_battle_time_seconds(void);
+
+    if (port_netplay_battle_is_timed())
+    {
+        gSCManagerBattleState->time_remain = sIFCommonTimerLimit = I_SEC_TO_TICS(port_netplay_battle_time_seconds());
+    }
+    else
+    {
+        gSCManagerBattleState->time_remain = sIFCommonTimerLimit = I_MIN_TO_TICS(gSCManagerBattleState->time_limit);
+    }
     gSCManagerBattleState->time_passed = 0;
 
     sIFCommonTimerIsStarted = FALSE;
@@ -3210,6 +3223,53 @@ void ifCommonBattleGoUpdateInterface(void)
     Vec3f sp68;
     Vec3f sp5C;
 
+#ifdef PORT
+    {
+        extern sb32 syNetInputModernNetplayActive(void);
+        extern sb32 syNetInputModernPaused(void);
+        extern s32 syNetInputModernPausePlayer(void);
+        if (syNetInputModernNetplayActive() != FALSE)
+        {
+            if (syNetInputModernPaused() != FALSE)
+            {
+                s32 pp = syNetInputModernPausePlayer();
+                if ((pp < 0) || (pp >= GMCOMMON_PLAYERS_MAX) ||
+                    (gSCManagerBattleState->players[pp].pkind == nFTPlayerKindNot))
+                {
+                    pp = 0;
+                }
+                fighter_gobj = gSCManagerBattleState->players[pp].fighter_gobj;
+                if (fighter_gobj != NULL)
+                {
+                    fp = ftGetStruct(fighter_gobj);
+                    if (gmCameraCheckPausePlayerOutBounds(&DObjGetStruct(fighter_gobj)->translate.vec.f) != FALSE)
+                    {
+                        sIFCommonBattlePauseKindInterface = nIFPauseKindPlayerNA;
+                    }
+                    else
+                    {
+                        gmCameraSetStatusPlayerZoom(fighter_gobj, 0.0F, 0.0F, fp->attr->closeup_camera_zoom, 0.1F, 29.0F);
+                        sIFCommonBattlePauseCameraEyeXOrigin = gGMCameraPauseCameraEyeX;
+                        sIFCommonBattlePauseCameraEyeYOrigin = gGMCameraPauseCameraEyeY;
+                        sIFCommonBattlePauseKindInterface = nIFPauseKindDefault;
+                        sIFCommonBattlePausePlayerDetail = fp->detail_curr;
+                        ftParamSetModelPartDetailAll(fighter_gobj, nFTPartsDetailHigh);
+                    }
+                }
+                else sIFCommonBattlePauseKindInterface = 0;
+                ifCommonBattlePauseInitInterface(pp);
+                {
+                    extern void scVSBattleNetplayMenuOpen(s32 pause_player);
+                    scVSBattleNetplayMenuOpen(pp);
+                }
+                return;
+            }
+            gcRunAll();
+            return;
+        }
+    }
+#endif
+
     for (player = 0; player < (ARRAY_COUNT(gSCManagerBattleState->players) + ARRAY_COUNT(gSYControllerDevices)) / 2; player++) // WARNING: GMCOMMON_PLAYERS_MAX and MAX_CONTROLLERS should be identical
     {
         if (gSYControllerDevices[player].button_tap & START_BUTTON)
@@ -3323,6 +3383,36 @@ void ifCommonBattlePauseUpdateInterface(void)
             }
         }
     }
+#ifdef PORT
+    {
+        extern sb32 syNetInputModernNetplayActive(void);
+        extern sb32 syNetInputModernPaused(void);
+        if (syNetInputModernNetplayActive() != FALSE)
+        {
+            extern void scVSBattleNetplayMenuClose(void);
+            extern void scVSBattleNetplayMenuTick(void);
+            if (syNetInputModernPaused() == FALSE)
+            {
+                scVSBattleNetplayMenuClose();
+                if (sIFCommonBattlePauseKindInterface != nIFPauseKindPlayerNA)
+                {
+                    gmCameraSetStatusPrev();
+                    sIFCommonBattlePauseCameraRestoreWait = 20;
+                }
+                else sIFCommonBattlePauseCameraRestoreWait = 0;
+                gSCManagerBattleState->game_status = nSCBattleGameStatusUnpause;
+                return;
+            }
+            scVSBattleNetplayMenuTick();
+            if (sIFCommonBattlePauseKindInterface != nIFPauseKindPlayerNA)
+            {
+                gmCameraRunFuncCamera(gGMCameraGObj);
+                grWallpaperRunProcessAll();
+            }
+            return;
+        }
+    }
+#endif
     if (button_tap)
     {
         if (button_tap & START_BUTTON)

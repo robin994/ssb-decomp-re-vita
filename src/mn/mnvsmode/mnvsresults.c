@@ -3397,7 +3397,9 @@ void mnVSResultsFuncRun(GObj *gobj)
 		}
 		if ((state == PORT_NETPLAY_STATE_OFFLINE) ||
 		    (state == PORT_NETPLAY_STATE_DISCONNECTED) ||
-		    (state == PORT_NETPLAY_STATE_ERROR))
+		    (state == PORT_NETPLAY_STATE_ERROR) ||
+		    (state == PORT_NETPLAY_STATE_HOSTING_LOBBY) ||
+		    (state == PORT_NETPLAY_STATE_CLIENT_LOBBY))
 		{
 			gSCManagerSceneData.scene_prev = gSCManagerSceneData.scene_curr;
 			gSCManagerSceneData.scene_curr = nSCKindModeSelect;

@@ -336,6 +336,118 @@ static const char* mnModeSelectNetplayGetDelayText(void)
     }
 }
 
+static s32 sMNModeSelectNetplayRuleCursor;
+
+static const char* mnModeSelectNetplayGetStageName(s32 idx)
+{
+    static const char *const names[] =
+    {
+        "CASTLE", "SECTOR Z", "KONGO", "ZEBES", "HYRULE",
+        "YOSHI", "DREAM", "SAFFRON", "MUSHROOM"
+    };
+    if ((idx < 0) || (idx >= (s32)ARRAY_COUNT(names))) return "RANDOM";
+    return names[idx];
+}
+
+static void mnModeSelectNetplayFormatStocks(s32 value, char *buf, s32 buf_size)
+{
+    if (value < 0) snprintf(buf, buf_size, "RANDOM");
+    else snprintf(buf, buf_size, "%d", value);
+}
+
+static void mnModeSelectNetplayFormatTime(s32 units, char *buf, s32 buf_size)
+{
+    if (units < 0) snprintf(buf, buf_size, "RANDOM");
+    else if (units == 0) snprintf(buf, buf_size, "INFINITE");
+    else
+    {
+        s32 secs = units * 30;
+        snprintf(buf, buf_size, "%d.%02d", secs / 60, secs % 60);
+    }
+}
+
+static s32 mnModeSelectNetplayCycleStage(s32 value, s32 dir)
+{
+    s32 next = value + dir;
+    if (next < -1) next = 8;
+    if (next > 8) next = -1;
+    return next;
+}
+
+static s32 mnModeSelectNetplayCycleStocks(s32 value, s32 dir)
+{
+    s32 next;
+    if (value < 0) next = (dir > 0) ? 1 : 5;
+    else
+    {
+        next = value + dir;
+        if (next < 1) next = -1;
+        if (next > 5) next = -1;
+    }
+    return next;
+}
+
+static s32 mnModeSelectNetplayCycleTime(s32 value, s32 dir)
+{
+    static const s32 order[] = { -1, 0, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
+    s32 i;
+    for (i = 0; i < (s32)ARRAY_COUNT(order); i++)
+    {
+        if (order[i] == value)
+        {
+            i = (i + dir + (s32)ARRAY_COUNT(order)) % (s32)ARRAY_COUNT(order);
+            return order[i];
+        }
+    }
+    return -1;
+}
+
+static void mnModeSelectNetplayCycleRule(s32 cursor, s32 dir)
+{
+    if (cursor == 0)
+    {
+        port_netplay_hostrules_set_stage(mnModeSelectNetplayCycleStage(port_netplay_hostrules_get_stage(), dir));
+    }
+    else if (cursor == 1)
+    {
+        port_netplay_hostrules_set_stocks(mnModeSelectNetplayCycleStocks(port_netplay_hostrules_get_stocks(), dir));
+    }
+    else
+    {
+        port_netplay_hostrules_set_time(mnModeSelectNetplayCycleTime(port_netplay_hostrules_get_time(), dir));
+    }
+}
+
+static void mnModeSelectNetplayMakeRuleField(GObj *gobj, const char *text, f32 x, f32 y,
+    sb32 is_host, s32 field, s32 cursor)
+{
+    sb32 hot = (is_host && cursor == field);
+    mnModeSelectNetplayMakeString(gobj, text, x, y,
+        hot ? 0xFF : 0xB0, hot ? 0xFF : 0xB0, hot ? 0x40 : 0xB0);
+}
+
+static void mnModeSelectNetplayMakeRules(GObj *gobj)
+{
+    sb32 is_host = port_netplay_lobby_is_host();
+    s32 stage = is_host ? port_netplay_hostrules_get_stage() : port_netplay_lobby_get_rule_stage();
+    s32 stocks = is_host ? port_netplay_hostrules_get_stocks() : port_netplay_lobby_get_rule_stocks();
+    s32 time_units = is_host ? port_netplay_hostrules_get_time() : port_netplay_lobby_get_rule_time();
+    char stocks_text[12];
+    char time_text[12];
+    char line[40];
+    f32 y = 183.0F;
+
+    mnModeSelectNetplayFormatStocks(stocks, stocks_text, sizeof(stocks_text));
+    mnModeSelectNetplayFormatTime(time_units, time_text, sizeof(time_text));
+
+    snprintf(line, sizeof(line), "STAGE %s", mnModeSelectNetplayGetStageName(stage));
+    mnModeSelectNetplayMakeRuleField(gobj, line, 20.0F, y, is_host, 0, sMNModeSelectNetplayRuleCursor);
+    snprintf(line, sizeof(line), "LIVES %s", stocks_text);
+    mnModeSelectNetplayMakeRuleField(gobj, line, 20.0F, y + 15.0F, is_host, 1, sMNModeSelectNetplayRuleCursor);
+    snprintf(line, sizeof(line), "TIME %s", time_text);
+    mnModeSelectNetplayMakeRuleField(gobj, line, 168.0F, y + 15.0F, is_host, 2, sMNModeSelectNetplayRuleCursor);
+}
+
 static const char* mnModeSelectNetplayGetDeterminismText(void)
 {
     if (syNetReplayGetDeterminismFailed()) return "FAIL";
@@ -416,6 +528,8 @@ static void mnModeSelectNetplayMakeLobby(GObj *gobj, const char *title)
             mnModeSelectNetplayMakeString(gobj, line, 250.0F, 88.0F + (slot * 28.0F), 0xD0, 0xD0, 0xD0);
         }
     }
+
+    mnModeSelectNetplayMakeRules(gobj);
 
     port_netplay_get_lobby_message(message, ARRAY_COUNT(message));
     if (message[0] != '\0')
@@ -743,6 +857,7 @@ static void mnModeSelectNetplayEnter(void)
     sMNModeSelectNetplayPage = nMNModeSelectNetplayPageRoot;
     sMNModeSelectNetplayOption = 0;
     sMNModeSelectNetplayNavWait = 0;
+    sMNModeSelectNetplayRuleCursor = 0;
     sMNModeSelectNetplayNameCursor = 0;
     mnModeSelectNetplayRefresh();
 }
@@ -904,6 +1019,32 @@ static void mnModeSelectNetplayFuncRun(void)
 
         if (sMNModeSelectNetplayPage == nMNModeSelectNetplayPageHost)
         {
+            if (port_netplay_lobby_is_host())
+            {
+                sb32 rule_left = left;
+                sb32 rule_right = right;
+                if (!rule_left && !rule_right && (sMNModeSelectNetplayNavWait == 0))
+                {
+                    if (scSubsysControllerGetPlayerStickLR(20, 1) != 0) rule_right = TRUE;
+                    else if (scSubsysControllerGetPlayerStickLR(-20, 0) != 0) rule_left = TRUE;
+                }
+                if (up || down)
+                {
+                    sMNModeSelectNetplayRuleCursor = (sMNModeSelectNetplayRuleCursor + (up ? 2 : 1)) % 3;
+                    sMNModeSelectNetplayNavWait = 10;
+                    func_800269C0_275C0(nSYAudioFGMMenuScroll1);
+                    mnModeSelectNetplayRefresh();
+                    return;
+                }
+                if (rule_left || rule_right)
+                {
+                    mnModeSelectNetplayCycleRule(sMNModeSelectNetplayRuleCursor, rule_right ? 1 : -1);
+                    sMNModeSelectNetplayNavWait = 10;
+                    func_800269C0_275C0(nSYAudioFGMMenuScroll2);
+                    mnModeSelectNetplayRefresh();
+                    return;
+                }
+            }
             if (action && port_netplay_lobby_is_connected())
             {
                 port_netplay_lobby_toggle_ready();
@@ -1887,6 +2028,7 @@ void mnModeSelectInitVars(void)
     sMNModeSelectNetplayPage = nMNModeSelectNetplayPageRoot;
     sMNModeSelectNetplayOption = 0;
     sMNModeSelectNetplayNavWait = 0;
+    sMNModeSelectNetplayRuleCursor = 0;
 #endif
     
     sMNModeSelectTotalTimeTics = 0;
@@ -1904,6 +2046,17 @@ void mnModeSelectFuncRun(GObj *gobj)
     sMNModeSelectTotalTimeTics++;
 
 #if defined(PORT) && defined(__vita__)
+    if ((sMNModeSelectNetplayGObj == NULL) && (port_netplay_get_mode() != PORT_NETPLAY_MODE_NONE))
+    {
+        s32 np_state = port_netplay_get_state();
+        if ((np_state == PORT_NETPLAY_STATE_HOSTING_LOBBY) || (np_state == PORT_NETPLAY_STATE_CLIENT_LOBBY))
+        {
+            mnModeSelectNetplayEnter();
+            sMNModeSelectNetplayPage = nMNModeSelectNetplayPageHost;
+            sMNModeSelectNetplayOption = 0;
+            mnModeSelectNetplayRefresh();
+        }
+    }
     if (sMNModeSelectNetplayGObj != NULL)
     {
         sMNModeSelectReturnTic = sMNModeSelectTotalTimeTics + I_MIN_TO_TICS(5);

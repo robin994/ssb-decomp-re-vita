@@ -5520,8 +5520,20 @@ static void mnPlayersVSNetplayCommitMatch(void)
 	SCBattleState *battle_state;
 	u32 seed;
 	s32 player;
+	s32 stage_pref = port_netplay_hostrules_get_stage();
+	s32 stocks_pref = port_netplay_hostrules_get_stocks();
+	s32 time_pref = port_netplay_hostrules_get_time();
+	s32 resolved_stage;
+	s32 resolved_stocks;
+	s32 resolved_time_units;
 
-	gSCManagerSceneData.gkind = stage_list[syUtilsRandIntRange(ARRAY_COUNT(stage_list))];
+	resolved_stage = (stage_pref < 0)
+		? stage_list[syUtilsRandIntRange(ARRAY_COUNT(stage_list))]
+		: stage_pref;
+	resolved_stocks = (stocks_pref < 0) ? (1 + syUtilsRandIntRange(5)) : stocks_pref;
+	resolved_time_units = (time_pref < 0) ? (2 + syUtilsRandIntRange(9)) : time_pref;
+
+	gSCManagerSceneData.gkind = resolved_stage;
 	mnPlayersVSSetIdlePlayerNotAll();
 	mnPlayersVSSetSceneData();
 	battle_state = &gSCManagerTransferBattleState;
@@ -5533,12 +5545,15 @@ static void mnPlayersVSNetplayCommitMatch(void)
 
 	config.rng_seed = seed;
 	config.stage_kind = battle_state->gkind;
-	config.stocks = battle_state->stocks;
-	config.time_limit = battle_state->time_limit;
+	config.stocks = (u32)(resolved_stocks - 1);
+	config.time_seconds = (resolved_time_units == 0) ? 0U : (u32)(resolved_time_units * 30);
+	config.time_limit = (resolved_time_units == 0)
+		? SCBATTLE_TIMELIMIT_INFINITE
+		: (u32)((resolved_time_units + 1) / 2);
 	config.item_switch = 0;
 	config.item_toggles = battle_state->item_toggles;
-	config.game_type = battle_state->game_type;
-	config.game_rules = battle_state->game_rules;
+	config.game_type = nSCBattleGameTypeRoyal;
+	config.game_rules = SCBATTLE_GAMERULE_STOCK;
 	config.is_team_battle = battle_state->is_team_battle;
 	config.handicap = battle_state->handicap;
 	config.is_team_attack = battle_state->is_team_attack;
@@ -5679,13 +5694,45 @@ void mnPlayersVSFuncRun(GObj *gobj)
 	mnPlayersVSUpdateControllerOrders();
 
 #ifdef PORT
-	if (port_netplay_get_state() == PORT_NETPLAY_STATE_LOADING_MATCH)
+	if (port_netplay_get_mode() != PORT_NETPLAY_MODE_NONE)
 	{
-		mnPlayersVSNetplayApplyMatchConfig();
-		return;
-	}
-	if (port_netplay_css_active())
-	{
+		s32 np_state = port_netplay_get_state();
+		if (np_state == PORT_NETPLAY_STATE_LOADING_MATCH)
+		{
+			mnPlayersVSNetplayApplyMatchConfig();
+			return;
+		}
+		if (np_state != PORT_NETPLAY_STATE_CHARACTER_SELECT)
+		{
+			mnPlayersVSPauseSlotProcesses();
+			gSCManagerSceneData.scene_prev = gSCManagerSceneData.scene_curr;
+			gSCManagerSceneData.scene_curr = nSCKindModeSelect;
+			syTaskmanSetLoadScene();
+			return;
+		}
+		if ((scSubsysControllerGetPlayerTapButtons(B_BUTTON) != FALSE) &&
+		    (sMNPlayersVSTotalTimeTics > I_SEC_TO_TICS(1)))
+		{
+			func_800269C0_275C0(nSYAudioFGMMenuScroll1);
+			port_netplay_return_to_lobby();
+			mnPlayersVSPauseSlotProcesses();
+			return;
+		}
+		if (sMNPlayersVSTotalTimeTics > I_SEC_TO_TICS(2))
+		{
+			s32 connected = 0;
+			s32 p;
+			for (p = 0; p < GMCOMMON_PLAYERS_MAX; p++)
+			{
+				if (port_netplay_css_slot_connected(p)) connected++;
+			}
+			if (connected < 2)
+			{
+				port_netplay_return_to_lobby();
+				mnPlayersVSPauseSlotProcesses();
+				return;
+			}
+		}
 		if (port_netplay_css_is_host() &&
 		    (scSubsysControllerGetPlayerTapButtons(START_BUTTON) != FALSE) &&
 		    (sMNPlayersVSTotalTimeTics > I_SEC_TO_TICS(1)))

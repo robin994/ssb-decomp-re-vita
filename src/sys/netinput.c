@@ -35,6 +35,10 @@ sb32 sSYNetInputModernIsFrameReady;
 u32 sSYNetInputModernStallCount;
 u32 sSYNetInputModernStallFrame = UINT_MAX;
 u32 sSYNetInputModernStallPolls;
+sb32 sSYNetInputModernPaused;
+s32 sSYNetInputModernPausePlayer;
+sb32 sSYNetInputModernPauseRequest;
+u16 sSYNetInputModernPrevLocalButtons;
 
 u32 syNetInputGetTick(void)
 {
@@ -115,6 +119,10 @@ void syNetInputReset(void)
 	sSYNetInputModernStallCount = 0;
 	sSYNetInputModernStallFrame = UINT_MAX;
 	sSYNetInputModernStallPolls = 0;
+	sSYNetInputModernPaused = FALSE;
+	sSYNetInputModernPausePlayer = 0;
+	sSYNetInputModernPauseRequest = FALSE;
+	sSYNetInputModernPrevLocalButtons = 0;
 
 	sSYNetInputReplayMetadata.magic = SYNETINPUT_REPLAY_MAGIC;
 	sSYNetInputReplayMetadata.version = SYNETINPUT_REPLAY_VERSION;
@@ -613,16 +621,27 @@ static void syNetInputProcessModernFrame(void)
 	}
 	if (delay < 0) delay = 0;
 	if (delay > 4) delay = 4;
+	if (((physical_buttons & START_BUTTON) != 0) && ((sSYNetInputModernPrevLocalButtons & START_BUTTON) == 0))
+	{
+		sSYNetInputModernPauseRequest = TRUE;
+	}
+	sSYNetInputModernPrevLocalButtons = physical_buttons;
 	if ((sSYNetInputModernLocalPlayer >= 0) && (sSYNetInputModernLocalPlayer < MAXCONTROLLERS))
 	{
 		u32 target_tick = tick + (u32)delay;
 		if (syNetInputGetStoredFrame(sSYNetInputLocalDelayedHistory, sSYNetInputModernLocalPlayer,
 		                             target_tick, NULL) == FALSE)
 		{
-			syNetInputMakeFrame(&local_frame, target_tick, physical_buttons, physical_x, physical_y,
+			u16 submit_buttons = physical_buttons;
+			if (sSYNetInputModernPauseRequest != FALSE)
+			{
+				submit_buttons |= SYNETINPUT_PAUSE_BIT;
+				sSYNetInputModernPauseRequest = FALSE;
+			}
+			syNetInputMakeFrame(&local_frame, target_tick, submit_buttons, physical_x, physical_y,
 			                    nSYNetInputSourceLocal, FALSE);
 			syNetInputStoreFrame(sSYNetInputLocalDelayedHistory, sSYNetInputModernLocalPlayer, &local_frame);
-			port_netplay_gameplay_submit_input(target_tick, physical_buttons, physical_x, physical_y);
+			port_netplay_gameplay_submit_input(target_tick, submit_buttons, physical_x, physical_y);
 		}
 	}
 	for (player = 0; player < MAXCONTROLLERS; player++)
@@ -662,10 +681,25 @@ static void syNetInputProcessModernFrame(void)
 	}
 	sSYNetInputModernStallFrame = UINT_MAX;
 	sSYNetInputModernStallPolls = 0;
-	for (player = 0; player < MAXCONTROLLERS; player++)
 	{
-		syNetInputResolveFrame(player, tick, &frame);
-		syNetInputPublishFrame(player, &frame);
+		sb32 pause_toggle = FALSE;
+		s32 pause_player = sSYNetInputModernPausePlayer;
+		for (player = 0; player < MAXCONTROLLERS; player++)
+		{
+			syNetInputResolveFrame(player, tick, &frame);
+			if ((frame.buttons & SYNETINPUT_PAUSE_BIT) != 0)
+			{
+				pause_toggle = TRUE;
+				pause_player = player;
+			}
+			frame.buttons &= (u16)~SYNETINPUT_PAUSE_BIT;
+			syNetInputPublishFrame(player, &frame);
+		}
+		if (pause_toggle != FALSE)
+		{
+			sSYNetInputModernPaused = !sSYNetInputModernPaused;
+			sSYNetInputModernPausePlayer = pause_player;
+		}
 	}
 	syNetInputPublishMainController();
 	sSYNetInputTick++;
@@ -733,8 +767,27 @@ void syNetInputActivateModernSession(void)
 	sSYNetInputModernIsFrameReady = FALSE;
 	sSYNetInputModernStallFrame = UINT_MAX;
 	sSYNetInputModernStallPolls = 0;
+	sSYNetInputModernPaused = FALSE;
+	sSYNetInputModernPausePlayer = 0;
+	sSYNetInputModernPauseRequest = FALSE;
+	sSYNetInputModernPrevLocalButtons = 0;
 	syNetInputProcessModernFrame();
 #endif
+}
+
+sb32 syNetInputModernPaused(void)
+{
+	return sSYNetInputModernPaused;
+}
+
+s32 syNetInputModernPausePlayer(void)
+{
+	return sSYNetInputModernPausePlayer;
+}
+
+void syNetInputRequestModernPause(void)
+{
+	sSYNetInputModernPauseRequest = TRUE;
 }
 
 void syNetInputDeactivateModernSession(void)
@@ -745,6 +798,9 @@ void syNetInputDeactivateModernSession(void)
 	sSYNetInputPredictionMismatchTick = UINT_MAX;
 	sSYNetInputModernStallFrame = UINT_MAX;
 	sSYNetInputModernStallPolls = 0;
+	sSYNetInputModernPaused = FALSE;
+	sSYNetInputModernPauseRequest = FALSE;
+	sSYNetInputModernPrevLocalButtons = 0;
 }
 
 sb32 syNetInputModernNetplayActive(void)

@@ -6,6 +6,7 @@ extern void port_coroutine_yield(void);
 #include <if/interface.h>
 #include <gr/ground.h>
 #include <sc/scene.h>
+#include <sys/rdp.h>
 #include <sys/netinput.h>
 #include <sys/netpeer.h>
 #include <sys/netreplay.h>
@@ -73,6 +74,183 @@ static void scVSBattleSubmitNetplayResult(void)
 	result.final_hash_high = (u32)(digest.total_hash >> 32);
 	result.final_hash_low = (u32)digest.total_hash;
 	port_netplay_gameplay_match_finished(&result);
+}
+
+static GObj *sSCVSBattleNPMenuGObj;
+static s32 sSCVSBattleNPMenuCursor;
+static sb32 sSCVSBattleNPMenuInitiator;
+static s32 sSCVSBattleNPMenuNavWait;
+static sb32 sSCVSBattleNPMenuActionSent;
+
+static const intptr_t dSCVSBattleNPMenuLetters[26] =
+{
+	llIFCommonAnnounceCommonLetterASprite, llIFCommonAnnounceCommonLetterBSprite,
+	llIFCommonAnnounceCommonLetterCSprite, llIFCommonAnnounceCommonLetterDSprite,
+	llIFCommonAnnounceCommonLetterESprite, llIFCommonAnnounceCommonLetterFSprite,
+	llIFCommonAnnounceCommonLetterGSprite, llIFCommonAnnounceCommonLetterHSprite,
+	llIFCommonAnnounceCommonLetterISprite, llIFCommonAnnounceCommonLetterJSprite,
+	llIFCommonAnnounceCommonLetterKSprite, llIFCommonAnnounceCommonLetterLSprite,
+	llIFCommonAnnounceCommonLetterMSprite, llIFCommonAnnounceCommonLetterNSprite,
+	llIFCommonAnnounceCommonLetterOSprite, llIFCommonAnnounceCommonLetterPSprite,
+	llIFCommonAnnounceCommonLetterQSprite, llIFCommonAnnounceCommonLetterRSprite,
+	llIFCommonAnnounceCommonLetterSSprite, llIFCommonAnnounceCommonLetterTSprite,
+	llIFCommonAnnounceCommonLetterUSprite, llIFCommonAnnounceCommonLetterVSprite,
+	llIFCommonAnnounceCommonLetterWSprite, llIFCommonAnnounceCommonLetterXSprite,
+	llIFCommonAnnounceCommonLetterYSprite, llIFCommonAnnounceCommonLetterZSprite
+};
+
+static const char *const dSCVSBattleNPMenuItems[4] =
+{
+	"RESUME", "CHARACTER SELECT", "HOST LOBBY", "EXIT"
+};
+
+static f32 scVSBattleNPMenuText(GObj *gobj, const char *str, f32 x, f32 y, f32 scale, u8 r, u8 g, u8 b)
+{
+	SObj *sobj;
+	s32 i;
+
+	for (i = 0; str[i] != '\0'; i++)
+	{
+		if (str[i] == ' ')
+		{
+			x += 6.0F * scale;
+			continue;
+		}
+		if ((str[i] < 'A') || (str[i] > 'Z')) continue;
+		sobj = lbCommonMakeSObjForGObj(gobj,
+			lbRelocGetFileData(Sprite*, gGMCommonFiles[7], dSCVSBattleNPMenuLetters[str[i] - 'A']));
+		sobj->sprite.attr = SP_TEXSHUF | SP_TRANSPARENT;
+		sobj->sprite.red = r;
+		sobj->sprite.green = g;
+		sobj->sprite.blue = b;
+		sobj->sprite.scalex = scale;
+		sobj->sprite.scaley = scale;
+		sobj->pos.x = x;
+		sobj->pos.y = y;
+		x += (sobj->sprite.width * scale) + 2.0F;
+	}
+	return x;
+}
+
+static void scVSBattleNPMenuProcPanel(GObj *gobj)
+{
+	(void)gobj;
+	gDPPipeSync(gSYTaskmanDLHeads[0]++);
+	gDPSetCycleType(gSYTaskmanDLHeads[0]++, G_CYC_FILL);
+	gDPSetRenderMode(gSYTaskmanDLHeads[0]++, G_RM_NOOP, G_RM_NOOP2);
+	gDPSetFillColor(gSYTaskmanDLHeads[0]++, GPACK_FILL16(GPACK_RGBA5551(0x00, 0x00, 0x10, 0x01)));
+	gDPFillRectangle(gSYTaskmanDLHeads[0]++, 78, 66, 242, 174);
+	lbCommonClearExternSpriteParams();
+}
+
+static void scVSBattleNPMenuRefresh(void)
+{
+	GObj *gobj = sSCVSBattleNPMenuGObj;
+	s32 i;
+
+	if (gobj == NULL) return;
+	gcRemoveSObjAll(gobj);
+
+	if (sSCVSBattleNPMenuInitiator == FALSE)
+	{
+		scVSBattleNPMenuText(gobj, "PAUSED", 118.0F, 112.0F, 0.5F, 0xFF, 0xFF, 0x40);
+		return;
+	}
+	scVSBattleNPMenuText(gobj, "PAUSED", 96.0F, 78.0F, 0.42F, 0xFF, 0xFF, 0x40);
+	for (i = 0; i < 4; i++)
+	{
+		sb32 hot = (i == sSCVSBattleNPMenuCursor);
+		scVSBattleNPMenuText(gobj, dSCVSBattleNPMenuItems[i], 90.0F, 100.0F + (i * 18.0F), 0.34F,
+			hot ? 0xFF : 0xB0, hot ? 0xFF : 0xB0, hot ? 0x40 : 0xB0);
+	}
+}
+
+void scVSBattleNetplayMenuOpen(s32 pause_player)
+{
+	if (gGCCommonLinks[nGCCommonLinkIDPauseMenu] != NULL)
+	{
+		lbCommonEjectGObjLinkedList(gGCCommonLinks[nGCCommonLinkIDPauseMenu]);
+	}
+	sSCVSBattleNPMenuCursor = 0;
+	sSCVSBattleNPMenuNavWait = 0;
+	sSCVSBattleNPMenuActionSent = FALSE;
+	sSCVSBattleNPMenuInitiator = (pause_player == port_netplay_lobby_get_local_player()) ? TRUE : FALSE;
+	sSCVSBattleNPMenuGObj = gcMakeGObjSPAfter(nGCCommonKindPauseMenu, NULL, nGCCommonLinkIDPauseMenu, GOBJ_PRIORITY_DEFAULT);
+	gcAddGObjDisplay(sSCVSBattleNPMenuGObj, scVSBattleNPMenuProcPanel, 22, GOBJ_PRIORITY_DEFAULT, ~0);
+	sSCVSBattleNPMenuGObj = gcMakeGObjSPAfter(nGCCommonKindPauseMenu, NULL, nGCCommonLinkIDPauseMenu, GOBJ_PRIORITY_DEFAULT);
+	gcAddGObjDisplay(sSCVSBattleNPMenuGObj, lbCommonDrawSObjAttr, 23, GOBJ_PRIORITY_DEFAULT, ~0);
+	scVSBattleNPMenuRefresh();
+}
+
+void scVSBattleNetplayMenuClose(void)
+{
+	GObj *gobj = gGCCommonLinks[nGCCommonLinkIDPauseMenu];
+	while (gobj != NULL)
+	{
+		gobj->flags = GOBJ_FLAG_HIDDEN;
+		gobj = gobj->link_next;
+	}
+	sSCVSBattleNPMenuGObj = NULL;
+}
+
+void scVSBattleNetplayMenuTick(void)
+{
+	sb32 up;
+	sb32 down;
+	sb32 accept;
+	sb32 cancel;
+
+	if ((sSCVSBattleNPMenuGObj == NULL) || (sSCVSBattleNPMenuInitiator == FALSE)) return;
+	if (sSCVSBattleNPMenuActionSent != FALSE) return;
+
+	if (sSCVSBattleNPMenuNavWait != 0) sSCVSBattleNPMenuNavWait--;
+
+	up = scSubsysControllerGetPlayerTapButtons(U_JPAD | U_CBUTTONS);
+	down = scSubsysControllerGetPlayerTapButtons(D_JPAD | D_CBUTTONS);
+	accept = scSubsysControllerGetPlayerTapButtons(A_BUTTON);
+	cancel = scSubsysControllerGetPlayerTapButtons(B_BUTTON);
+
+	if (!up && !down && (sSCVSBattleNPMenuNavWait == 0))
+	{
+		if (scSubsysControllerGetPlayerStickUD(20, 1) != 0) up = TRUE;
+		else if (scSubsysControllerGetPlayerStickUD(-20, 0) != 0) down = TRUE;
+	}
+
+	if (up || down)
+	{
+		sSCVSBattleNPMenuCursor = (sSCVSBattleNPMenuCursor + (up ? 3 : 1)) % 4;
+		sSCVSBattleNPMenuNavWait = 10;
+		func_800269C0_275C0(nSYAudioFGMMenuScroll1);
+		scVSBattleNPMenuRefresh();
+		return;
+	}
+	if (cancel)
+	{
+		func_800269C0_275C0(nSYAudioFGMMenuScroll1);
+		syNetInputRequestModernPause();
+		sSCVSBattleNPMenuActionSent = TRUE;
+		return;
+	}
+	if (accept)
+	{
+		func_800269C0_275C0(nSYAudioFGMMenuSelect);
+		sSCVSBattleNPMenuActionSent = TRUE;
+		switch (sSCVSBattleNPMenuCursor)
+		{
+		case 0:
+			syNetInputRequestModernPause();
+			break;
+		case 1:
+			port_netplay_ingame_return_css();
+			break;
+		case 2:
+			port_netplay_return_to_lobby();
+			break;
+		case 3:
+			port_netplay_ingame_leave();
+			break;
+		}
+	}
 }
 #endif
 
