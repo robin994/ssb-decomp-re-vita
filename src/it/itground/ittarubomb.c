@@ -1,6 +1,7 @@
 #include <it/item.h>
 #include <gr/ground.h>
 #include <reloc_data.h>
+#include <sys/utils.h>
 
 // // // // // // // // // // // //
 //                               //
@@ -8,7 +9,6 @@
 //                               //
 // // // // // // // // // // // //
 
-extern f32 syUtilsRandFloat();
 extern f32 syUtilsArcTan2(f32, f32);
 
 extern alSoundEffect *func_800269C0_275C0(u16);
@@ -179,13 +179,13 @@ void itTaruBombContainerSmashMakeEffect(Vec3f *pos)
 
                 dobj->translate.vec.f = *pos;
 
-                dobj->scale.vec.f.x = (syUtilsRandFloat() * 48.0F) + -24.0F;
-                dobj->scale.vec.f.y = (syUtilsRandFloat() * 50.0F) + 10.0F;
-                dobj->scale.vec.f.z = (syUtilsRandFloat() * 32.0F) + -16.0F;
+                dobj->scale.vec.f.x = (syUtilsRandCosmeticFloat() * 48.0F) + -24.0F;
+                dobj->scale.vec.f.y = (syUtilsRandCosmeticFloat() * 50.0F) + 10.0F;
+                dobj->scale.vec.f.z = (syUtilsRandCosmeticFloat() * 32.0F) + -16.0F;
 
-                dobj->anim_wait = F_CLC_DTOR32((syUtilsRandFloat() * 100.0F) + -50.0F);
-                dobj->anim_speed = F_CLC_DTOR32((syUtilsRandFloat() * 100.0F) + -50.0F);
-                dobj->anim_frame = F_CLC_DTOR32((syUtilsRandFloat() * 100.0F) + -50.0F);
+                dobj->anim_wait = F_CLC_DTOR32((syUtilsRandCosmeticFloat() * 100.0F) + -50.0F);
+                dobj->anim_speed = F_CLC_DTOR32((syUtilsRandCosmeticFloat() * 100.0F) + -50.0F);
+                dobj->anim_frame = F_CLC_DTOR32((syUtilsRandCosmeticFloat() * 100.0F) + -50.0F);
             }
             ep->effect_vars.container.lifetime = ITTARUBOMB_GFX_LIFETIME;
 

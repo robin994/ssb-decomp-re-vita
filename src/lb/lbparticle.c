@@ -4,6 +4,7 @@
 #include <ef/efdef.h>
 
 #ifdef PORT
+#include <sys/netrollback.h>
 extern float port_widescreen_clip_x_scale(void);
 #endif
 
@@ -328,6 +329,9 @@ LBParticle* lbParticleMakeStruct
 	LBGenerator *gn
 )
 {
+#ifdef PORT
+	if (syNetRollbackIsResimulating() != FALSE) return NULL;
+#endif
 	LBParticle *new_pc;
 	s32 i;
 
@@ -704,7 +708,7 @@ void lbParticleRotateVel(LBParticle *pc, f32 angle)
 	
 	magnitude = sqrtf(SQUARE(vel.x) + SQUARE(vel.y) + SQUARE(vel.z));
 	
-	vel.y = syUtilsRandFloat() * F_CST_DTOR32(360.0F);
+	vel.y = syUtilsRandCosmeticFloat() * F_CST_DTOR32(360.0F);
 	
 	sin_angle = __sinf(angle) * magnitude;
 	
@@ -987,12 +991,12 @@ LBParticle* lbParticleUpdateStruct(LBParticle *this_pc, LBParticle *other_pc, s3
                         svar2 <<= 8;
                         svar2 += *csr++;
 
-                        this_pc->lifetime = svar1 + (s32) (svar2 * syUtilsRandFloat());
+                        this_pc->lifetime = svar1 + (s32) (svar2 * syUtilsRandCosmeticFloat());
                         break;
                         
                     case LBPARTICLE_OPCODE_TRYDEADRAND:
                         svar1 = *csr++;
-                        svar2 = syUtilsRandFloat() * 100.0F;
+                        svar2 = syUtilsRandCosmeticFloat() * 100.0F;
 
                         if (svar1 < svar2)
                         {
@@ -1003,13 +1007,13 @@ LBParticle* lbParticleUpdateStruct(LBParticle *this_pc, LBParticle *other_pc, s3
                         
                     case LBPARTICLE_OPCODE_ADDVELRAND:    
                         csr = lbParticleReadFloatBigEnd(csr, &fvar1);
-                        this_pc->pos.x += fvar1 * syUtilsRandFloat();
+                        this_pc->pos.x += fvar1 * syUtilsRandCosmeticFloat();
 
                         csr = lbParticleReadFloatBigEnd(csr, &fvar1);
-                        this_pc->pos.y += fvar1 * syUtilsRandFloat();
+                        this_pc->pos.y += fvar1 * syUtilsRandCosmeticFloat();
 
                         csr = lbParticleReadFloatBigEnd(csr, &fvar1);
-                        this_pc->pos.z += fvar1 * syUtilsRandFloat();
+                        this_pc->pos.z += fvar1 * syUtilsRandCosmeticFloat();
                         break;
                         
                     case LBPARTICLE_OPCODE_SETVELANGLE:
@@ -1026,7 +1030,7 @@ LBParticle* lbParticleUpdateStruct(LBParticle *this_pc, LBParticle *other_pc, s3
                         svar2 <<= 8;
                         svar2 += *csr++;
 
-                        svar1 += (s32) (svar2 * syUtilsRandFloat());
+                        svar1 += (s32) (svar2 * syUtilsRandCosmeticFloat());
 
                         current_pc = lbParticleMakeChildScriptID(this_pc, this_pc->bank_id, svar1);
                             
@@ -1060,7 +1064,7 @@ LBParticle* lbParticleUpdateStruct(LBParticle *this_pc, LBParticle *other_pc, s3
                         csr = lbParticleReadFloatBigEnd(csr, &this_pc->size_target);
                         csr = lbParticleReadFloatBigEnd(csr, &fvar1);
                             
-                        this_pc->size_target += fvar1 * syUtilsRandFloat();
+                        this_pc->size_target += fvar1 * syUtilsRandCosmeticFloat();
                             
                         if (this_pc->size_target_length == 1) 
                         {
@@ -1151,13 +1155,13 @@ LBParticle* lbParticleUpdateStruct(LBParticle *this_pc, LBParticle *other_pc, s3
                         
                     case LBPARTICLE_OPCODE_PRIMBLENDRAND:
                         fvar1 = *csr++;
-                        this_pc->target_primcolor.r += fvar1 * syUtilsRandFloat();
+                        this_pc->target_primcolor.r += fvar1 * syUtilsRandCosmeticFloat();
                         fvar1 = *csr++;
-                        this_pc->target_primcolor.g += fvar1 * syUtilsRandFloat();
+                        this_pc->target_primcolor.g += fvar1 * syUtilsRandCosmeticFloat();
                         fvar1 = *csr++;
-                        this_pc->target_primcolor.b += fvar1 * syUtilsRandFloat();
+                        this_pc->target_primcolor.b += fvar1 * syUtilsRandCosmeticFloat();
                         fvar1 = *csr++;
-                        this_pc->target_primcolor.a += fvar1 * syUtilsRandFloat();
+                        this_pc->target_primcolor.a += fvar1 * syUtilsRandCosmeticFloat();
                             
                         if (this_pc->primcolor_target_length == 0)
                         {
@@ -1168,13 +1172,13 @@ LBParticle* lbParticleUpdateStruct(LBParticle *this_pc, LBParticle *other_pc, s3
                         
                     case LBPARTICLE_OPCODE_ENVBLENDRAND:
                         fvar1 = *csr++;
-                        this_pc->target_envcolor.r += fvar1 * syUtilsRandFloat();
+                        this_pc->target_envcolor.r += fvar1 * syUtilsRandCosmeticFloat();
                         fvar1 = *csr++;
-                        this_pc->target_envcolor.g += fvar1 * syUtilsRandFloat();
+                        this_pc->target_envcolor.g += fvar1 * syUtilsRandCosmeticFloat();
                         fvar1 = *csr++;
-                        this_pc->target_envcolor.b += fvar1 * syUtilsRandFloat();
+                        this_pc->target_envcolor.b += fvar1 * syUtilsRandCosmeticFloat();
                         fvar1 = *csr++;
-                        this_pc->target_envcolor.a += fvar1 * syUtilsRandFloat();
+                        this_pc->target_envcolor.a += fvar1 * syUtilsRandCosmeticFloat();
 
                         if (this_pc->envcolor_target_length == 0)
                         {
@@ -1186,14 +1190,14 @@ LBParticle* lbParticleUpdateStruct(LBParticle *this_pc, LBParticle *other_pc, s3
                     case 0xBC:    
                         this_pc->frame_id = *csr++;
                         fvar1 = *csr++;
-                        this_pc->frame_id += fvar1 * syUtilsRandFloat();
+                        this_pc->frame_id += fvar1 * syUtilsRandCosmeticFloat();
                         break;
                         
                     case LBPARTICLE_OPCODE_SETVELMAG:
                         csr = lbParticleReadFloatBigEnd(csr, &fvar1);
                         csr = lbParticleReadFloatBigEnd(csr, &fvar2);
 
-                        fvar1 += fvar2 * syUtilsRandFloat();
+                        fvar1 += fvar2 * syUtilsRandCosmeticFloat();
 
                         fvar2 = sqrtf(SQUARE(this_pc->vel.x) + SQUARE(this_pc->vel.y) + SQUARE(this_pc->vel.z));
                         
@@ -2441,7 +2445,7 @@ void lbParticleGeneratorFuncRun(GObj *gobj)
         {
             gn->frame -= gn->update_rate;
         }
-        else gn->frame += (syUtilsRandFloat() * gn->update_rate);
+        else gn->frame += (syUtilsRandCosmeticFloat() * gn->update_rate);
 
         if (gn->frame >= 1.0F)
         {
@@ -2462,12 +2466,12 @@ void lbParticleGeneratorFuncRun(GObj *gobj)
             case 0:
             case 3:
             case 4:
-                pv0 = gn->generator_vars.rotate.base + (syUtilsRandFloat() * (gn->generator_vars.rotate.target - gn->generator_vars.rotate.base));
+                pv0 = gn->generator_vars.rotate.base + (syUtilsRandCosmeticFloat() * (gn->generator_vars.rotate.target - gn->generator_vars.rotate.base));
                 spB8 = (gn->generator_vars.rotate.target - gn->generator_vars.rotate.base) / (s32) gn->frame;
                 break;
 
             default:
-                pv0 = F_CST_DTOR32(360.0F) * syUtilsRandFloat();
+                pv0 = F_CST_DTOR32(360.0F) * syUtilsRandCosmeticFloat();
                 spB8 = F_CST_DTOR32(360.0F) / (s32) gn->frame;
                 break;
             }
@@ -2502,7 +2506,7 @@ void lbParticleGeneratorFuncRun(GObj *gobj)
                 }
                 else
                 {
-                    pv1 = vmag = syUtilsRandFloat();
+                    pv1 = vmag = syUtilsRandCosmeticFloat();
 
                     if (gn->kind != 0)
                     {
@@ -2517,7 +2521,7 @@ void lbParticleGeneratorFuncRun(GObj *gobj)
                 }
                 else
                 {
-                    pv0 = gn->generator_vars.rotate.base + (syUtilsRandFloat() * (gn->generator_vars.rotate.target - gn->generator_vars.rotate.base));
+                    pv0 = gn->generator_vars.rotate.base + (syUtilsRandCosmeticFloat() * (gn->generator_vars.rotate.target - gn->generator_vars.rotate.base));
                     pv1 *= gn->unk_gn_0x3C;
                 }
                 zero = 0.0F;
@@ -2570,7 +2574,7 @@ void lbParticleGeneratorFuncRun(GObj *gobj)
                 vel_y = vel.y;
                 vel_z = vel.z;
                         
-                pos_random = syUtilsRandFloat();
+                pos_random = syUtilsRandCosmeticFloat();
 
                 pos_x = gn->pos.x + (pos_random * (gn->generator_vars.move.x - gn->pos.x));
                 pos_y = gn->pos.y + (pos_random * (gn->generator_vars.move.y - gn->pos.y));
@@ -2610,8 +2614,8 @@ void lbParticleGeneratorFuncRun(GObj *gobj)
                         
                 magnitude = sqrtf(SQUARE(vel_x) + SQUARE(vel_y) + SQUARE(vel_z));
                         
-                pv1 = (gn->unk_gn_0x38 < 0.0F) ? 1.0F : syUtilsRandFloat();
-                pv0 = (gn->unk_gn_0x3C < 0.0F) ? pv0 + spB8 : syUtilsRandFloat() * F_CST_DTOR32(360.0F);
+                pv1 = (gn->unk_gn_0x38 < 0.0F) ? 1.0F : syUtilsRandCosmeticFloat();
+                pv0 = (gn->unk_gn_0x3C < 0.0F) ? pv0 + spB8 : syUtilsRandCosmeticFloat() * F_CST_DTOR32(360.0F);
 
                 gn->generator_vars.vortex.f = magnitude;
 
@@ -2736,6 +2740,9 @@ LBGenerator* lbParticleGetGenerator(void)
 // 0x800D35DC
 LBGenerator* lbParticleMakeGenerator(s32 bank_id, s32 script_id)
 {
+#ifdef PORT
+    if (syNetRollbackIsResimulating() != FALSE) return NULL;
+#endif
     LBGenerator *gn;
     s32 id = bank_id & 7;  
     s32 unused;

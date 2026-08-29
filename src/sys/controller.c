@@ -7,6 +7,9 @@
 #include "enhancements/enhancements.h"
 #include "sc/scmanager.h"
 #include "sc/sctypes.h"
+#ifdef PORT
+#include <sys/netrollback.h>
+#endif
 
 // 0x800450F0
 OSMesgQueue sSYControllerInitMesgQueue; // Queue for OS controller Init, Status, and Read
@@ -509,6 +512,9 @@ void syControllerSetStatusDelay(s32 delay)
 // 0x800043C0
 void syControllerUpdateRumbleEvent(s32 port, s32 ev_kind)
 {
+#ifdef PORT
+    if (syNetRollbackIsResimulating() != FALSE) return;
+#endif
     s32 i;
     OSMesg msg;
 

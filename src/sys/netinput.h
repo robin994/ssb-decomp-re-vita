@@ -61,6 +61,21 @@ typedef struct SYNetInputReplayMetadata
 
 } SYNetInputReplayMetadata;
 
+/* The incremental rollback snapshot does not include object-process/thread
+ * execution state.  Modern netplay therefore advances a logical frame only
+ * after every remote participant has supplied its authoritative input.  The
+ * first input-delay frames are deterministic neutral frames on every peer. */
+static inline sb32 syNetInputConfirmedBarrierReady(u32 tick, u32 input_delay,
+	                                                u32 participant_mask, u32 confirmed_mask,
+	                                                u32 local_player)
+{
+	u32 local_mask = (local_player < MAXCONTROLLERS) ? (1U << local_player) : 0U;
+	u32 required_mask = participant_mask & ~local_mask;
+
+	if (tick < input_delay) return TRUE;
+	return ((confirmed_mask & required_mask) == required_mask) ? TRUE : FALSE;
+}
+
 extern void syNetInputReset(void);
 extern void syNetInputStartVSSession(void);
 extern u32 syNetInputGetTick(void);
@@ -68,6 +83,14 @@ extern void syNetInputSetTick(u32 tick);
 extern void syNetInputSetSlotSource(s32 player, SYNetInputSource source);
 extern SYNetInputSource syNetInputGetSlotSource(s32 player);
 extern void syNetInputSetRemoteInput(s32 player, u32 tick, u16 buttons, s8 stick_x, s8 stick_y);
+extern sb32 syNetInputConsumePredictionMismatch(u32 *out_tick);
+extern void syNetInputActivateModernSession(void);
+extern void syNetInputDeactivateModernSession(void);
+extern sb32 syNetInputModernNetplayActive(void);
+extern sb32 syNetInputModernFrameReady(void);
+extern u32 syNetInputGetModernStallCount(void);
+extern void syNetInputPrepareResimulation(u32 start_tick);
+extern void syNetInputPublishResimulationFrame(u32 tick);
 extern void syNetInputSetSavedInput(s32 player, u32 tick, u16 buttons, s8 stick_x, s8 stick_y);
 extern sb32 syNetInputGetHistoryFrame(s32 player, u32 tick, SYNetInputFrame *out_frame);
 extern sb32 syNetInputGetPublishedFrame(s32 player, SYNetInputFrame *out_frame);

@@ -2,6 +2,12 @@
 
 #include <sys/netpeer.h>
 #include <sys/taskman.h>
+#ifdef PORT
+#include <netplay/netplay_bridge.h>
+extern void port_log(const char *fmt, ...);
+#endif
+
+#include <limits.h>
 
 typedef struct SYNetInputSlot
 {
@@ -14,6 +20,7 @@ typedef struct SYNetInputSlot
 SYNetInputSlot sSYNetInputSlots[MAXCONTROLLERS];
 SYNetInputFrame sSYNetInputHistory[MAXCONTROLLERS][SYNETINPUT_HISTORY_LENGTH];
 SYNetInputFrame sSYNetInputRemoteHistory[MAXCONTROLLERS][SYNETINPUT_HISTORY_LENGTH];
+SYNetInputFrame sSYNetInputLocalDelayedHistory[MAXCONTROLLERS][SYNETINPUT_HISTORY_LENGTH];
 SYNetInputFrame sSYNetInputSavedHistory[MAXCONTROLLERS][SYNETINPUT_HISTORY_LENGTH];
 SYNetInputFrame sSYNetInputReplayFrames[MAXCONTROLLERS][SYNETINPUT_REPLAY_MAX_FRAMES];
 SYNetInputReplayMetadata sSYNetInputReplayMetadata;
@@ -21,6 +28,13 @@ u32 sSYNetInputTick;
 u32 sSYNetInputRecordedFrameCount;
 sb32 sSYNetInputIsRecording;
 sb32 sSYNetInputIsReplayMetadataValid;
+sb32 sSYNetInputModernNetplayIsActive;
+s32 sSYNetInputModernLocalPlayer = -1;
+u32 sSYNetInputPredictionMismatchTick = UINT_MAX;
+sb32 sSYNetInputModernIsFrameReady;
+u32 sSYNetInputModernStallCount;
+u32 sSYNetInputModernStallFrame = UINT_MAX;
+u32 sSYNetInputModernStallPolls;
 
 u32 syNetInputGetTick(void)
 {
@@ -94,6 +108,13 @@ void syNetInputReset(void)
 	sSYNetInputRecordedFrameCount = 0;
 	sSYNetInputIsRecording = FALSE;
 	sSYNetInputIsReplayMetadataValid = FALSE;
+	sSYNetInputModernNetplayIsActive = FALSE;
+	sSYNetInputModernLocalPlayer = -1;
+	sSYNetInputPredictionMismatchTick = UINT_MAX;
+	sSYNetInputModernIsFrameReady = FALSE;
+	sSYNetInputModernStallCount = 0;
+	sSYNetInputModernStallFrame = UINT_MAX;
+	sSYNetInputModernStallPolls = 0;
 
 	sSYNetInputReplayMetadata.magic = SYNETINPUT_REPLAY_MAGIC;
 	sSYNetInputReplayMetadata.version = SYNETINPUT_REPLAY_VERSION;
@@ -132,6 +153,7 @@ void syNetInputReset(void)
 		{
 			syNetInputClearFrame(&sSYNetInputHistory[player][i]);
 			syNetInputClearFrame(&sSYNetInputRemoteHistory[player][i]);
+			syNetInputClearFrame(&sSYNetInputLocalDelayedHistory[player][i]);
 			syNetInputClearFrame(&sSYNetInputSavedHistory[player][i]);
 		}
 		for (i = 0; i < SYNETINPUT_REPLAY_MAX_FRAMES; i++)
@@ -166,12 +188,30 @@ SYNetInputSource syNetInputGetSlotSource(s32 player)
 void syNetInputSetRemoteInput(s32 player, u32 tick, u16 buttons, s8 stick_x, s8 stick_y)
 {
 	SYNetInputFrame frame;
+	SYNetInputFrame published;
 
 	if (syNetInputCheckPlayer(player) != FALSE)
 	{
+		if ((syNetInputGetStoredFrame(sSYNetInputHistory, player, tick, &published) != FALSE) &&
+		    (published.is_predicted != FALSE) &&
+		    ((published.buttons != buttons) || (published.stick_x != stick_x) || (published.stick_y != stick_y)))
+		{
+			if ((sSYNetInputPredictionMismatchTick == UINT_MAX) || (tick < sSYNetInputPredictionMismatchTick))
+			{
+				sSYNetInputPredictionMismatchTick = tick;
+			}
+		}
 		syNetInputMakeFrame(&frame, tick, buttons, stick_x, stick_y, nSYNetInputSourceRemoteConfirmed, FALSE);
 		syNetInputStoreFrame(sSYNetInputRemoteHistory, player, &frame);
 	}
+}
+
+sb32 syNetInputConsumePredictionMismatch(u32 *out_tick)
+{
+	if (sSYNetInputPredictionMismatchTick == UINT_MAX) return FALSE;
+	if (out_tick != NULL) *out_tick = sSYNetInputPredictionMismatchTick;
+	sSYNetInputPredictionMismatchTick = UINT_MAX;
+	return TRUE;
 }
 
 void syNetInputSetSavedInput(s32 player, u32 tick, u16 buttons, s8 stick_x, s8 stick_y)
@@ -188,6 +228,15 @@ void syNetInputSetSavedInput(s32 player, u32 tick, u16 buttons, s8 stick_x, s8 s
 void syNetInputMakeLocalFrame(s32 player, u32 tick, SYNetInputFrame *out_frame)
 {
 	SYController *controller = &gSYControllerDevices[player];
+
+	if ((sSYNetInputModernNetplayIsActive != FALSE) && (player == sSYNetInputModernLocalPlayer))
+	{
+		if (syNetInputGetStoredFrame(sSYNetInputLocalDelayedHistory, player, tick, out_frame) == FALSE)
+		{
+			syNetInputMakeFrame(out_frame, tick, 0, 0, 0, nSYNetInputSourceLocal, FALSE);
+		}
+		return;
+	}
 
 	syNetInputMakeFrame
 	(
@@ -273,12 +322,15 @@ void syNetInputPublishFrame(s32 player, SYNetInputFrame *frame)
 
 void syNetInputPublishMainController(void)
 {
-	gSYControllerMain.button_hold = gSYControllerDevices[0].button_hold;
-	gSYControllerMain.button_tap = gSYControllerDevices[0].button_tap;
-	gSYControllerMain.button_update = gSYControllerDevices[0].button_update;
-	gSYControllerMain.button_release = gSYControllerDevices[0].button_release;
-	gSYControllerMain.stick_range.x = gSYControllerDevices[0].stick_range.x;
-	gSYControllerMain.stick_range.y = gSYControllerDevices[0].stick_range.y;
+	s32 player = ((sSYNetInputModernNetplayIsActive != FALSE) &&
+	              (sSYNetInputModernLocalPlayer >= 0) && (sSYNetInputModernLocalPlayer < MAXCONTROLLERS))
+	             ? sSYNetInputModernLocalPlayer : 0;
+	gSYControllerMain.button_hold = gSYControllerDevices[player].button_hold;
+	gSYControllerMain.button_tap = gSYControllerDevices[player].button_tap;
+	gSYControllerMain.button_update = gSYControllerDevices[player].button_update;
+	gSYControllerMain.button_release = gSYControllerDevices[player].button_release;
+	gSYControllerMain.stick_range.x = gSYControllerDevices[player].stick_range.x;
+	gSYControllerMain.stick_range.y = gSYControllerDevices[player].stick_range.y;
 }
 
 sb32 syNetInputGetHistoryFrame(s32 player, u32 tick, SYNetInputFrame *out_frame)
@@ -536,6 +588,227 @@ sb32 syNetInputGetReplayMetadata(SYNetInputReplayMetadata *out_metadata)
 	return TRUE;
 }
 
+static void syNetInputProcessModernFrame(void)
+{
+#ifdef PORT
+	SYNetInputFrame frame;
+	SYNetInputFrame local_frame;
+	u32 tick = syNetInputGetTick();
+	u32 participant_mask = 0;
+	u32 confirmed_mask = 0;
+	u32 remote_tick;
+	u16 remote_buttons;
+	u16 physical_buttons = gSYControllerDevices[0].button_hold;
+	s8 remote_x;
+	s8 remote_y;
+	s8 physical_x = gSYControllerDevices[0].stick_range.x;
+	s8 physical_y = gSYControllerDevices[0].stick_range.y;
+	s32 remote_player;
+	s32 player;
+	s32 delay = port_netplay_gameplay_get_input_delay();
+
+	while (port_netplay_gameplay_consume_input(&remote_player, &remote_tick, &remote_buttons, &remote_x, &remote_y) != 0)
+	{
+		syNetInputSetRemoteInput(remote_player, remote_tick, remote_buttons, remote_x, remote_y);
+	}
+	if (delay < 0) delay = 0;
+	if (delay > 4) delay = 4;
+	if ((sSYNetInputModernLocalPlayer >= 0) && (sSYNetInputModernLocalPlayer < MAXCONTROLLERS))
+	{
+		u32 target_tick = tick + (u32)delay;
+		if (syNetInputGetStoredFrame(sSYNetInputLocalDelayedHistory, sSYNetInputModernLocalPlayer,
+		                             target_tick, NULL) == FALSE)
+		{
+			syNetInputMakeFrame(&local_frame, target_tick, physical_buttons, physical_x, physical_y,
+			                    nSYNetInputSourceLocal, FALSE);
+			syNetInputStoreFrame(sSYNetInputLocalDelayedHistory, sSYNetInputModernLocalPlayer, &local_frame);
+			port_netplay_gameplay_submit_input(target_tick, physical_buttons, physical_x, physical_y);
+		}
+	}
+	for (player = 0; player < MAXCONTROLLERS; player++)
+	{
+		SYNetInputSource source = sSYNetInputSlots[player].source;
+		if ((source != nSYNetInputSourceRemoteConfirmed) &&
+		    (source != nSYNetInputSourceRemotePredicted) &&
+		    (player != sSYNetInputModernLocalPlayer))
+		{
+			continue;
+		}
+		participant_mask |= (1U << player);
+		if ((player == sSYNetInputModernLocalPlayer) ||
+		    (syNetInputGetStoredFrame(sSYNetInputRemoteHistory, player, tick, NULL) != FALSE))
+		{
+			confirmed_mask |= (1U << player);
+		}
+	}
+	if (syNetInputConfirmedBarrierReady(tick, (u32)delay, participant_mask, confirmed_mask,
+	                                   (u32)sSYNetInputModernLocalPlayer) == FALSE)
+	{
+		sSYNetInputModernIsFrameReady = FALSE;
+		sSYNetInputModernStallCount++;
+		if (sSYNetInputModernStallFrame != tick)
+		{
+			sSYNetInputModernStallFrame = tick;
+			sSYNetInputModernStallPolls = 1;
+		}
+		else sSYNetInputModernStallPolls++;
+		return;
+	}
+	if ((sSYNetInputModernStallFrame == tick) && (sSYNetInputModernStallPolls > 1U) &&
+	    ((sSYNetInputModernStallPolls >= 4U) || ((tick % 60U) == 0U)))
+	{
+		port_log("[NETPLAY] confirmed input barrier released frame=%u waits=%u required=0x%02X\n",
+		         tick, sSYNetInputModernStallPolls, participant_mask);
+	}
+	sSYNetInputModernStallFrame = UINT_MAX;
+	sSYNetInputModernStallPolls = 0;
+	for (player = 0; player < MAXCONTROLLERS; player++)
+	{
+		syNetInputResolveFrame(player, tick, &frame);
+		syNetInputPublishFrame(player, &frame);
+	}
+	syNetInputPublishMainController();
+	sSYNetInputTick++;
+	sSYNetInputModernIsFrameReady = TRUE;
+#else
+	(void)0;
+#endif
+}
+
+void syNetInputActivateModernSession(void)
+{
+#ifdef PORT
+	s32 player;
+	s32 i;
+
+	if (sSYNetInputModernNetplayIsActive != FALSE) return;
+	if (port_netplay_gameplay_active() == 0) return;
+	sSYNetInputModernLocalPlayer = port_netplay_lobby_get_local_player();
+	if ((sSYNetInputModernLocalPlayer < 0) || (sSYNetInputModernLocalPlayer >= MAXCONTROLLERS)) return;
+	sSYNetInputTick = 0;
+	sSYNetInputPredictionMismatchTick = UINT_MAX;
+	for (player = 0; player < MAXCONTROLLERS; player++)
+	{
+		syNetInputClearFrame(&sSYNetInputSlots[player].last_confirmed);
+		syNetInputClearFrame(&sSYNetInputSlots[player].last_published);
+		sSYNetInputSlots[player].source = (player == sSYNetInputModernLocalPlayer)
+		    ? nSYNetInputSourceLocal
+		    : (port_netplay_gameplay_slot_connected(player) != 0
+		       ? nSYNetInputSourceRemotePredicted : nSYNetInputSourceLocal);
+		for (i = 0; i < SYNETINPUT_HISTORY_LENGTH; i++)
+		{
+			syNetInputClearFrame(&sSYNetInputHistory[player][i]);
+			syNetInputClearFrame(&sSYNetInputRemoteHistory[player][i]);
+			syNetInputClearFrame(&sSYNetInputLocalDelayedHistory[player][i]);
+		}
+	}
+	{
+		s32 delay = port_netplay_gameplay_get_input_delay();
+		if (delay < 0) delay = 0;
+		if (delay > 4) delay = 4;
+		for (player = 0; player < MAXCONTROLLERS; player++)
+		{
+			if (sSYNetInputSlots[player].source == nSYNetInputSourceRemotePredicted)
+			{
+				for (i = 0; i < delay; i++)
+				{
+					SYNetInputFrame neutral;
+					syNetInputMakeFrame(&neutral, (u32)i, 0, 0, 0,
+					                    nSYNetInputSourceRemoteConfirmed, FALSE);
+					syNetInputStoreFrame(sSYNetInputRemoteHistory, player, &neutral);
+				}
+			}
+			else if (player == sSYNetInputModernLocalPlayer)
+			{
+				for (i = 0; i < delay; i++)
+				{
+					SYNetInputFrame neutral;
+					syNetInputMakeFrame(&neutral, (u32)i, 0, 0, 0, nSYNetInputSourceLocal, FALSE);
+					syNetInputStoreFrame(sSYNetInputLocalDelayedHistory, player, &neutral);
+				}
+			}
+		}
+	}
+	sSYNetInputModernNetplayIsActive = TRUE;
+	sSYNetInputModernIsFrameReady = FALSE;
+	sSYNetInputModernStallFrame = UINT_MAX;
+	sSYNetInputModernStallPolls = 0;
+	syNetInputProcessModernFrame();
+#endif
+}
+
+void syNetInputDeactivateModernSession(void)
+{
+	sSYNetInputModernNetplayIsActive = FALSE;
+	sSYNetInputModernLocalPlayer = -1;
+	sSYNetInputModernIsFrameReady = FALSE;
+	sSYNetInputPredictionMismatchTick = UINT_MAX;
+	sSYNetInputModernStallFrame = UINT_MAX;
+	sSYNetInputModernStallPolls = 0;
+}
+
+sb32 syNetInputModernNetplayActive(void)
+{
+	return sSYNetInputModernNetplayIsActive;
+}
+
+sb32 syNetInputModernFrameReady(void)
+{
+	return sSYNetInputModernIsFrameReady;
+}
+
+u32 syNetInputGetModernStallCount(void)
+{
+	return sSYNetInputModernStallCount;
+}
+
+void syNetInputPrepareResimulation(u32 start_tick)
+{
+	s32 player;
+	for (player = 0; player < MAXCONTROLLERS; player++)
+	{
+		u32 search_tick;
+		syNetInputClearFrame(&sSYNetInputSlots[player].last_published);
+		syNetInputClearFrame(&sSYNetInputSlots[player].last_confirmed);
+		if (start_tick != 0)
+		{
+			SYNetInputFrame frame;
+			if (syNetInputGetHistoryFrame(player, start_tick - 1U, &frame) != FALSE)
+				sSYNetInputSlots[player].last_published = frame;
+			if ((sSYNetInputSlots[player].source == nSYNetInputSourceRemoteConfirmed) ||
+			    (sSYNetInputSlots[player].source == nSYNetInputSourceRemotePredicted))
+			{
+				search_tick = start_tick - 1U;
+				for (;;)
+				{
+					if (syNetInputGetStoredFrame(sSYNetInputRemoteHistory, player, search_tick, &frame) != FALSE)
+					{
+						sSYNetInputSlots[player].last_confirmed = frame;
+						break;
+					}
+					if ((search_tick == 0) || ((start_tick - search_tick) >= SYNETINPUT_HISTORY_LENGTH)) break;
+					search_tick--;
+				}
+			}
+		}
+	}
+	sSYNetInputTick = start_tick;
+}
+
+void syNetInputPublishResimulationFrame(u32 tick)
+{
+	SYNetInputFrame frame;
+	s32 player;
+	sSYNetInputTick = tick;
+	for (player = 0; player < MAXCONTROLLERS; player++)
+	{
+		syNetInputResolveFrame(player, tick, &frame);
+		syNetInputPublishFrame(player, &frame);
+	}
+	syNetInputPublishMainController();
+	sSYNetInputTick = tick + 1U;
+}
+
 void syNetInputFuncRead(void)
 {
 	SYNetInputFrame frame;
@@ -543,6 +816,11 @@ void syNetInputFuncRead(void)
 	s32 player;
 
 	syControllerFuncRead();
+	if (sSYNetInputModernNetplayIsActive != FALSE)
+	{
+		syNetInputProcessModernFrame();
+		return;
+	}
 	tick = syNetInputGetTick();
 
 	for (player = 0; player < MAXCONTROLLERS; player++)

@@ -206,8 +206,8 @@ sb32 itKabigonJumpProcUpdate(GObj *item_gobj)
     {
         Vec3f pos = dobj->translate.vec.f;
 
-        pos.x += (syUtilsRandFloat() * ITKABIGON_JUMP_GFX_MUL_OFF) - ITKABIGON_JUMP_GFX_SUB_OFF;
-        pos.y += (syUtilsRandFloat() * ITKABIGON_JUMP_GFX_MUL_OFF) - ITKABIGON_JUMP_GFX_SUB_OFF;
+        pos.x += (syUtilsRandCosmeticFloat() * ITKABIGON_JUMP_GFX_MUL_OFF) - ITKABIGON_JUMP_GFX_SUB_OFF;
+        pos.y += (syUtilsRandCosmeticFloat() * ITKABIGON_JUMP_GFX_MUL_OFF) - ITKABIGON_JUMP_GFX_SUB_OFF;
 
         efManagerDustExpandLargeMakeEffect(&pos);
 

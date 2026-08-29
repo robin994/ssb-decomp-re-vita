@@ -755,7 +755,7 @@ void ifCommonPlayerDamageUpdateAnim(GObj *interface_gobj)
 
             if (char_id > 0)
             {
-                random = syUtilsRandIntRange(char_id);
+                random = syUtilsRandCosmeticIntRange(char_id);
 
                 for (i = j = 0; i < sIFCommonPlayerDamageInterface[player].char_display_count; i++)
                 {
@@ -1112,7 +1112,7 @@ void ifCommonPlayerDamageStartBreakAnim(FTStruct *fp)
 
     for (i = 0; i < sIFCommonPlayerDamageInterface[player].char_display_count; i++)
     {
-        sIFCommonPlayerDamageInterface[player].chars[i].vel.x = (syUtilsRandFloat() * 2) + (-1.0F);
+        sIFCommonPlayerDamageInterface[player].chars[i].vel.x = (syUtilsRandCosmeticFloat() * 2) + (-1.0F);
         sIFCommonPlayerDamageInterface[player].chars[i].vel.y = -10.0F;
 
         sIFCommonPlayerDamageInterface[player].chars[i].is_lock_movement = FALSE;
@@ -2586,7 +2586,7 @@ void ifCommonEntryAllThread(GObj *interface_gobj)
 {
     gcSleepCurrentGObjThread(90);
     ifCommonCountdownMakeInterface();
-    ifCommonEntryFocusMakeInterface(syUtilsRandIntRange(3));
+    ifCommonEntryFocusMakeInterface(syUtilsRandCosmeticIntRange(3));
     gcEjectGObj(NULL);
     gcSleepCurrentGObjThread(1);
 }

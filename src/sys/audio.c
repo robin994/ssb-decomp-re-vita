@@ -7,6 +7,7 @@
 #include <PR/gu.h>
 
 #ifdef PORT
+#include <sys/netrollback.h>
 #include "audio/audio_playback.h"
 #include "audio/audio_dma.h"
 #include "bridge/audio_bridge.h"
@@ -1659,6 +1660,7 @@ extern u32 port_enhancement_shuffle_music(u32 requested_bgm);
 s32 syAudioPlayBGM(s32 sngplayer, u32 bgm)
 {
 #ifdef PORT
+    if (syNetRollbackIsResimulating() != FALSE) return -1;
     if (syAudioHasBGMData() == FALSE)
     {
         return -1;
@@ -1689,6 +1691,9 @@ s32 syAudioPlayBGM(s32 sngplayer, u32 bgm)
 // 0x80020B08
 void syAudioStopBGM(s32 sngplayer)
 {
+#ifdef PORT
+    if (syNetRollbackIsResimulating() != FALSE) return;
+#endif
     sSYAudioCSPlayerStatuses[sngplayer] = AL_PLAYING;
     sSYAudioBGMPlayingIDs[sngplayer] = -1;
 }
@@ -1773,6 +1778,7 @@ s32 syAudioPlayFGM(u32 fgm)
     s32 i;
 
 #ifdef PORT
+    if (syNetRollbackIsResimulating() != FALSE) return -1;
     if (syAudioHasSoundPlayers() == FALSE)
     {
         return -1;
@@ -1891,6 +1897,7 @@ void func_80020FA0_21BA0(s32 sndplayer, s32 arg1)
 void syAudioStopFGM(s32 sndplayer)
 {
 #ifdef PORT
+    if (syNetRollbackIsResimulating() != FALSE) return;
     if (syAudioHasSoundPlayers() == FALSE)
     {
         return;

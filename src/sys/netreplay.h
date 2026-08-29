@@ -13,5 +13,11 @@ extern void syNetReplayUpdate(void);
 extern void syNetReplayFinishVSSession(void);
 extern sb32 syNetReplayWriteDebugFile(const char *path);
 extern sb32 syNetReplayLoadDebugFile(const char *path);
+extern sb32 syNetReplayGetDeterminismVerified(void);
+extern sb32 syNetReplayGetDeterminismFailed(void);
+extern sb32 syNetReplayArmDeterminismTestRecord(void);
+extern sb32 syNetReplayLaunchDeterminismTestPlayback(void);
+extern sb32 syNetReplayDeterminismTestTraceAvailable(void);
+extern sb32 syNetReplayDeterminismTestRecordArmed(void);
 
 #endif /* _SYNETREPLAY_H_ */

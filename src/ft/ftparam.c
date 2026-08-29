@@ -2091,15 +2091,15 @@ void* ftParamMakeEffect(GObj *fighter_gobj, s32 effect_id, s32 joint_id, Vec3f *
         {
             if (effect_scatter->x != 0)
             {
-                pos.x += (syUtilsRandFloat() - 0.5F) * (effect_scatter->x * 2.0F);
+                pos.x += (syUtilsRandCosmeticFloat() - 0.5F) * (effect_scatter->x * 2.0F);
             }
             if (effect_scatter->y != 0)
             {
-                pos.y += (syUtilsRandFloat() - 0.5F) * (effect_scatter->y * 2.0F);
+                pos.y += (syUtilsRandCosmeticFloat() - 0.5F) * (effect_scatter->y * 2.0F);
             }
             if (effect_scatter->z != 0)
             {
-                pos.z += (syUtilsRandFloat() - 0.5F) * (effect_scatter->z * 2.0F);
+                pos.z += (syUtilsRandCosmeticFloat() - 0.5F) * (effect_scatter->z * 2.0F);
             }
         }
         if (is_scale_pos != FALSE)
@@ -2188,8 +2188,8 @@ void* ftParamMakeEffect(GObj *fighter_gobj, s32 effect_id, s32 joint_id, Vec3f *
         break;
 
     case nEFKindDustExpandLarge:
-        pos.x += ((syUtilsRandFloat() * 160.0F) - 80.0F);
-        pos.y += ((syUtilsRandFloat() * 160.0F) - 80.0F);
+        pos.x += ((syUtilsRandCosmeticFloat() * 160.0F) - 80.0F);
+        pos.y += ((syUtilsRandCosmeticFloat() * 160.0F) - 80.0F);
 
         effect = efManagerDustExpandLargeMakeEffect(&pos);
         break;

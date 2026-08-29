@@ -13,6 +13,7 @@ extern void *func_800269C0_275C0(u16 id);
 #include <stdio.h>
 #include <string.h>
 #include <netplay/netplay_bridge.h>
+#include <sys/netreplay.h>
 #endif
 
 
@@ -213,6 +214,7 @@ enum
     nMNModeSelectNetplaySettingsName,
     nMNModeSelectNetplaySettingsDelay,
     nMNModeSelectNetplaySettingsStats,
+    nMNModeSelectNetplaySettingsDeterminism,
     nMNModeSelectNetplaySettingsReset,
     nMNModeSelectNetplaySettingsBack,
     nMNModeSelectNetplaySettingsCount
@@ -332,6 +334,15 @@ static const char* mnModeSelectNetplayGetDelayText(void)
     case 4: return "FOUR";
     default: return "AUTO";
     }
+}
+
+static const char* mnModeSelectNetplayGetDeterminismText(void)
+{
+    if (syNetReplayGetDeterminismFailed()) return "FAIL";
+    if (syNetReplayGetDeterminismVerified()) return "PASS";
+    if (syNetReplayDeterminismTestRecordArmed()) return "ARMED";
+    if (syNetReplayDeterminismTestTraceAvailable()) return "READY";
+    return "NO TRACE";
 }
 
 static const char* mnModeSelectNetplayGetLobbyStatusText(s32 status)
@@ -484,7 +495,7 @@ static void mnModeSelectNetplayRefresh(void)
     };
     static const char *settings_options[nMNModeSelectNetplaySettingsCount] =
     {
-        "PLAYER NAME", "INPUT DELAY", "NETPLAY STATS", "RESET SETTINGS", "BACK"
+        "PLAYER NAME", "INPUT DELAY", "NETPLAY STATS", "DETERMINISM TEST", "RESET SETTINGS", "BACK"
     };
     char player_name[16];
     s32 i;
@@ -571,18 +582,25 @@ static void mnModeSelectNetplayRefresh(void)
         mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, "MULTIPLAYER SETTINGS", 82.0F, 42.0F, 0xFF, 0x20, 0x20);
         for (i = 0; i < nMNModeSelectNetplaySettingsCount; i++)
         {
-            y = 75.0F + (i * 27.0F);
+            y = 70.0F + (i * 24.0F);
             mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, settings_options[i], 56.0F, y,
                 (i == sMNModeSelectNetplayOption) ? 0xFF : 0xD0,
                 (i == sMNModeSelectNetplayOption) ? 0xFF : 0x20,
                 (i == sMNModeSelectNetplayOption) ? 0xFF : 0x20);
         }
         port_netplay_get_player_name(player_name, ARRAY_COUNT(player_name));
-        mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, player_name, 190.0F, 75.0F, 0xFF, 0xC0, 0x40);
-        mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, mnModeSelectNetplayGetDelayText(), 190.0F, 102.0F, 0xFF, 0xC0, 0x40);
+        mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, player_name, 190.0F, 70.0F, 0xFF, 0xC0, 0x40);
+        mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, mnModeSelectNetplayGetDelayText(), 190.0F, 94.0F, 0xFF, 0xC0, 0x40);
         mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj,
-            port_netplay_get_show_stats() ? "ON" : "OFF", 190.0F, 129.0F, 0xFF, 0xC0, 0x40);
-        mnModeSelectNetplayMakeMarker(sMNModeSelectNetplayGObj, 75.0F + (sMNModeSelectNetplayOption * 27.0F));
+            port_netplay_get_show_stats() ? "ON" : "OFF", 190.0F, 118.0F, 0xFF, 0xC0, 0x40);
+        mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj,
+            mnModeSelectNetplayGetDeterminismText(), 190.0F, 142.0F, 0xFF, 0xC0, 0x40);
+        mnModeSelectNetplayMakeMarker(sMNModeSelectNetplayGObj, 70.0F + (sMNModeSelectNetplayOption * 24.0F));
+        if (sMNModeSelectNetplayOption == nMNModeSelectNetplaySettingsDeterminism)
+        {
+            mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj,
+                "A VERIFY  START RECORD", 70.0F, 218.0F, 0xD0, 0xD0, 0xD0);
+        }
     }
     else if (sMNModeSelectNetplayPage == nMNModeSelectNetplayPageNameEdit)
     {
@@ -995,6 +1013,39 @@ static void mnModeSelectNetplayFuncRun(void)
 
     if (sMNModeSelectNetplayPage == nMNModeSelectNetplayPageSettings)
     {
+        if ((sMNModeSelectNetplayOption == nMNModeSelectNetplaySettingsDeterminism) && start)
+        {
+            if (syNetReplayArmDeterminismTestRecord())
+            {
+                func_800269C0_275C0(nSYAudioFGMMenuSelect);
+            }
+            else func_800269C0_275C0(nSYAudioFGMMenuDenied);
+            mnModeSelectNetplayRefresh();
+            return;
+        }
+        if ((sMNModeSelectNetplayOption == nMNModeSelectNetplaySettingsDeterminism) && action)
+        {
+            if (syNetReplayDeterminismTestTraceAvailable())
+            {
+                port_netplay_leave_menu();
+                if (!syNetReplayLaunchDeterminismTestPlayback())
+                {
+                    port_netplay_enter_menu();
+                    func_800269C0_275C0(nSYAudioFGMMenuDenied);
+                    mnModeSelectNetplayRefresh();
+                    return;
+                }
+                func_800269C0_275C0(nSYAudioFGMMenuSelect);
+                return;
+            }
+            if (syNetReplayArmDeterminismTestRecord())
+            {
+                func_800269C0_275C0(nSYAudioFGMMenuSelect);
+            }
+            else func_800269C0_275C0(nSYAudioFGMMenuDenied);
+            mnModeSelectNetplayRefresh();
+            return;
+        }
         if ((sMNModeSelectNetplayOption == nMNModeSelectNetplaySettingsDelay) && (left || right || accept))
         {
             s32 delay = port_netplay_get_input_delay();

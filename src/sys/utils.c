@@ -15,6 +15,11 @@
 // Linear Congruential Generator based on values from Microsoft Visual/Quick C/C++
 s32 sSYUtilsRandomSeed     = 1;
 s32 *sSYUtilsRandomSeedPtr = &sSYUtilsRandomSeed;
+#ifdef PORT
+/* Presentation must never advance the gameplay RNG stream. Rollback may skip
+ * or replay cosmetic work, so effects/particles use this independent LCG. */
+static s32 sSYUtilsCosmeticRandomSeed = 0x13579BDF;
+#endif
 
 s32 sSYUtilsQSortItemSize = 0;
 s32 (*sSYUtilsQSortFuncCompare)(const void*, const void*) = NULL;
@@ -221,6 +226,27 @@ s32 syUtilsRandIntRange(s32 range)
     return syUtilsRandUShort() * range / 65536;
 #endif
 }
+
+#ifdef PORT
+u16 syUtilsRandCosmeticUShort(void)
+{
+    u32 step = ((u32)sSYUtilsCosmeticRandomSeed * 214013u) + 2531011u;
+    sSYUtilsCosmeticRandomSeed = (s32)step;
+    return (u16)(step >> 16);
+}
+
+f32 syUtilsRandCosmeticFloat(void)
+{
+    u32 step = ((u32)sSYUtilsCosmeticRandomSeed * 214013u) + 2531011u;
+    sSYUtilsCosmeticRandomSeed = (s32)step;
+    return ((step >> 16) & 0xFFFF) / 65536.0F;
+}
+
+s32 syUtilsRandCosmeticIntRange(s32 range)
+{
+    return (s32)((u32)syUtilsRandCosmeticUShort() * (u32)range / 65536u);
+}
+#endif
 
 u8 syUtilsRandTimeUChar(void)
 {

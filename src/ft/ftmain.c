@@ -411,7 +411,7 @@ void ftMainParseMotionEvent(GObj *fighter_gobj, FTStruct *fp, FTMotionScript *ms
     case nFTMotionEventPlaySmashVoice:
         if (!(fp->is_muted))
         {
-            ftParamPlayVoice(fp, fp->attr->smash_sfx[syUtilsRandIntRange(ARRAY_COUNT(fp->attr->smash_sfx))]);
+            ftParamPlayVoice(fp, fp->attr->smash_sfx[syUtilsRandCosmeticIntRange(ARRAY_COUNT(fp->attr->smash_sfx))]);
 
             ftMotionEventAdvance(ms, FTMotionEventDefault);
         }

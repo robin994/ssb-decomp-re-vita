@@ -9,6 +9,9 @@ extern void port_coroutine_yield(void);
 #include <sys/netinput.h>
 #include <sys/netpeer.h>
 #include <sys/netreplay.h>
+#include <sys/netrollback.h>
+#include <sys/netsync.h>
+#include <sys/taskman.h>
 #include <sys/video.h>
 #include <reloc_data.h>
 #include <gm/gmcamera.h>
@@ -35,6 +38,41 @@ static void scVSBattlePortFixupFDMusic(void)
 		gMPCollisionBGMCurrent = gMPCollisionBGMDefault = nSYAudioBGMLast;
 		syAudioPlayBGM(0, nSYAudioBGMLast);
 	}
+}
+
+static void scVSBattleSubmitNetplayResult(void)
+{
+	PortNetplayMatchResult result = {0};
+	SYNetSyncDigest digest;
+	s32 winner_place = 0x7FFFFFFF;
+	s32 player;
+
+	result.final_frame = syNetInputGetTick();
+	result.winner = 0xFF;
+	result.reason = (gSCManagerBattleState->game_status == nSCBattleGameStatusSet)
+	    ? PORT_NETPLAY_RESULT_NO_CONTEST : PORT_NETPLAY_RESULT_COMPLETED;
+	for (player = 0; player < GMCOMMON_PLAYERS_MAX; player++)
+	{
+		SCPlayerData *data = &gSCManagerBattleState->players[player];
+		if (data->pkind == nFTPlayerKindNot)
+		{
+			result.placements[player] = 0xFF;
+			result.stocks_remaining[player] = -1;
+			continue;
+		}
+		result.placements[player] = data->place;
+		result.stocks_remaining[player] = data->stock_count;
+		if ((result.reason == PORT_NETPLAY_RESULT_COMPLETED) && (data->place < winner_place))
+		{
+			winner_place = data->place;
+			result.winner = player;
+		}
+	}
+	syNetSyncComputeDeterministicDigest(result.final_frame, &digest);
+	result.has_final_hash = TRUE;
+	result.final_hash_high = (u32)(digest.total_hash >> 32);
+	result.final_hash_low = (u32)digest.total_hash;
+	port_netplay_gameplay_match_finished(&result);
 }
 #endif
 
@@ -108,8 +146,34 @@ SYTaskmanSetup dSCVSBattleTaskmanSetup =
 void scVSBattleFuncUpdate(void)
 {
 #ifdef PORT
+	u32 netplay_frame = 0;
+	s32 rollback_result = 0;
+	sb32 modern_netplay = FALSE;
+	s32 netplay_state = port_netplay_get_state();
+
+	if ((port_netplay_get_mode() != PORT_NETPLAY_MODE_NONE) &&
+	    ((netplay_state == PORT_NETPLAY_STATE_DISCONNECTED) ||
+	     (netplay_state == PORT_NETPLAY_STATE_ERROR)))
+	{
+		if (syNetInputModernNetplayActive() != FALSE) syNetInputDeactivateModernSession();
+		syTaskmanSetLoadScene();
+		return;
+	}
+
 	if (port_netplay_match_gate_tick() == FALSE)
 	{
+		return;
+	}
+	if ((port_netplay_gameplay_active() != 0) && (syNetInputModernNetplayActive() == FALSE))
+	{
+		syNetInputActivateModernSession();
+		syNetRollbackReset();
+	}
+	modern_netplay = syNetInputModernNetplayActive();
+	if ((modern_netplay != FALSE) && (port_netplay_gameplay_active() == 0))
+	{
+		syNetInputDeactivateModernSession();
+		syTaskmanSetLoadScene();
 		return;
 	}
 #endif
@@ -119,7 +183,25 @@ void scVSBattleFuncUpdate(void)
 	{
 		return;
 	}
+#ifdef PORT
+	if (modern_netplay != FALSE)
+	{
+		if (syNetInputModernFrameReady() == FALSE) return;
+		u32 tick = syNetInputGetTick();
+		netplay_frame = (tick != 0U) ? (tick - 1U) : 0U;
+		if (netplay_frame != 0U)
+		{
+			rollback_result = syNetRollbackHandlePredictionMismatch(netplay_frame - 1U);
+			if (rollback_result < 0) return;
+			if (rollback_result > 0) syNetInputPublishResimulationFrame(netplay_frame);
+		}
+		syNetRollbackCapturePreFrame(netplay_frame);
+	}
+#endif
 	ifCommonBattleUpdateInterfaceAll();
+#ifdef PORT
+	if (modern_netplay != FALSE) syNetRollbackPostFrame(netplay_frame);
+#endif
 	syNetReplayUpdate();
 	syNetPeerUpdate();
 }
@@ -266,6 +348,7 @@ void scVSBattleStartBattle(void)
 	SYColorRGBA color;
 
 	syNetInputStartVSSession();
+	syNetRollbackReset();
 	syNetReplayStartVSSession(gSCManagerBattleState);
 	syNetPeerStartVSSession();
 
@@ -713,15 +796,29 @@ void scVSBattleStartScene(void)
 		func_800266A0_272A0();
 		gmRumbleInitPlayers();
 	}
+	#ifdef PORT
+	if (syNetInputModernNetplayActive() != FALSE)
+	{
+		scVSBattleSubmitNetplayResult();
+	}
+	#endif
 	syNetReplayFinishVSSession();
+	syNetRollbackReset();
 	syNetPeerStopVSSession();
+#ifdef PORT
+	if (syNetInputModernNetplayActive() != FALSE)
+	{
+		syNetInputReset();
+	}
+#endif
 	gSCManagerSceneData.scene_prev = gSCManagerSceneData.scene_curr;
 	gSCManagerSceneData.scene_curr = nSCKindVSResults;
 
 	// skip results (if enabled)
 	{
 		extern int port_enhancement_skip_results_screen(void);
-		if (port_enhancement_skip_results_screen())
+		if (port_enhancement_skip_results_screen() &&
+		    (port_netplay_get_mode() == PORT_NETPLAY_MODE_NONE))
 		{
 			// Override the next scene to immediately boot back to Character Select!
 			gSCManagerSceneData.scene_curr = nSCKindPlayersVS;

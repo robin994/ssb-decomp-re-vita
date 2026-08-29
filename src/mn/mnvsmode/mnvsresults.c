@@ -14,6 +14,7 @@ extern void* func_800269C0_275C0(u16);
 #ifdef PORT
 extern float port_widescreen_clip_x_scale(void);
 #include "fighter_registry.h"
+#include <netplay/netplay_bridge.h>
 #endif
 
 // // // // // // // // // // // //
@@ -181,6 +182,9 @@ LBFileNode sMNVSResultsForceStatusBuffer[7];
 
 // 0x8013A048
 void *sMNVSResultsFiles[ARRAY_COUNT(dMNVSResultsFileIDs)];
+#ifdef PORT
+sb32 sMNVSResultsNetplayActive;
+#endif
 
 // // // // // // // // // // // //
 //                               //
@@ -3371,6 +3375,46 @@ void mnVSResultsFuncRun(GObj *gobj)
 
 	sMNVSResultsTotalTimeTics++;
 
+#ifdef PORT
+	if (sMNVSResultsNetplayActive != FALSE)
+	{
+		s32 state = port_netplay_get_state();
+		if (state == PORT_NETPLAY_STATE_LOADING_MATCH)
+		{
+			gSCManagerTransferBattleState.is_reset_players = FALSE;
+			gSCManagerSceneData.scene_prev = gSCManagerSceneData.scene_curr;
+			gSCManagerSceneData.scene_curr = nSCKindPlayersVS;
+			syTaskmanSetLoadScene();
+			return;
+		}
+		if (state == PORT_NETPLAY_STATE_CHARACTER_SELECT)
+		{
+			gSCManagerTransferBattleState.is_reset_players = TRUE;
+			gSCManagerSceneData.scene_prev = gSCManagerSceneData.scene_curr;
+			gSCManagerSceneData.scene_curr = nSCKindPlayersVS;
+			syTaskmanSetLoadScene();
+			return;
+		}
+		if ((state == PORT_NETPLAY_STATE_OFFLINE) ||
+		    (state == PORT_NETPLAY_STATE_DISCONNECTED) ||
+		    (state == PORT_NETPLAY_STATE_ERROR))
+		{
+			gSCManagerSceneData.scene_prev = gSCManagerSceneData.scene_curr;
+			gSCManagerSceneData.scene_curr = nSCKindModeSelect;
+			syTaskmanSetLoadScene();
+			return;
+		}
+		if ((state == PORT_NETPLAY_STATE_RESULTS) && port_netplay_lobby_is_host() &&
+		    (sMNVSResultsTotalTimeTics >= sMNVSResultsAllowExitWait))
+		{
+			u16 tap = gSYControllerDevices[0].button_tap;
+			if (tap & (START_BUTTON | A_BUTTON)) port_netplay_results_rematch();
+			else if (tap & B_BUTTON) port_netplay_results_character_select();
+			else if (tap & Z_TRIG) port_netplay_results_leave();
+		}
+	}
+#endif
+
 	if (sMNVSResultsTotalTimeTics == sMNVSResultsDrawWallpaperTic)
 	{
 		if (sMNVSResultsKind != nMNVSResultsKindNoContest)
@@ -3413,7 +3457,11 @@ void mnVSResultsFuncRun(GObj *gobj)
 		mnVSResultsPlayWinBGM();
 		mnVSResultsMakeAudioThread();
 	}
-	if (mnVSResultsCheckExit() != FALSE)
+	if ((mnVSResultsCheckExit() != FALSE)
+#ifdef PORT
+	    && (sMNVSResultsNetplayActive == FALSE)
+#endif
+	)
 	{
 		unlocks_num = 0;
 
@@ -3488,6 +3536,10 @@ void mnVSResultsFuncStart(void)
 
 	lbRelocInitSetup(&rl_setup);
 	lbRelocLoadFilesListed(dMNVSResultsFileIDs, sMNVSResultsFiles);
+#ifdef PORT
+	sMNVSResultsNetplayActive = ((port_netplay_get_mode() != PORT_NETPLAY_MODE_NONE) &&
+	                           (port_netplay_lobby_is_connected() != FALSE));
+#endif
 	gcMakeGObjSPAfter(0, mnVSResultsFuncRun, 0, GOBJ_PRIORITY_DEFAULT);
 	gcMakeDefaultCameraGObj(0, GOBJ_PRIORITY_DEFAULT, 100, COBJ_FLAG_FILLCOLOR | COBJ_FLAG_ZBUFFER, GPACK_RGBA8888(0x00, 0x00, 0x00, 0xFF));
 	efParticleInitAll();
@@ -3536,6 +3588,15 @@ void mnVSResultsFuncStart(void)
 	}
 	mnVSResultsMakeWallpaperTint();
 	func_ovl31_8013797C();
+
+#ifdef PORT
+	if (sMNVSResultsNetplayActive != FALSE)
+	{
+		if (port_netplay_lobby_is_host())
+			mnVSResultsMakeString("START REMATCH  B CSS  Z LEAVE", 24.0F, 220.0F, 0, 0.55F);
+		else mnVSResultsMakeString("WAITING FOR HOST", 82.0F, 220.0F, 0, 0.55F);
+	}
+#endif
 
 	if ((sMNVSResultsKind != nMNVSResultsKindNoContest) && (gSCManagerTransferBattleState.players[mnVSResultsGetWinPlayer()].pkind == nFTPlayerKindMan))
 	{

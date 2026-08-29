@@ -22,6 +22,15 @@ extern void syUtilsSetRandomSeedPtr(s32 *seedptr);
 extern u16 syUtilsRandUShort(void);
 extern f32 syUtilsRandFloat(void);
 extern s32 syUtilsRandIntRange(s32 range); // Does this actually return u32? Found a function that needs to cast this to s32, and assigning to a variable first would bump the stack
+#ifdef PORT
+extern u16 syUtilsRandCosmeticUShort(void);
+extern f32 syUtilsRandCosmeticFloat(void);
+extern s32 syUtilsRandCosmeticIntRange(s32 range);
+#else
+#define syUtilsRandCosmeticUShort syUtilsRandUShort
+#define syUtilsRandCosmeticFloat syUtilsRandFloat
+#define syUtilsRandCosmeticIntRange syUtilsRandIntRange
+#endif
 extern u8 syUtilsRandTimeUChar(void);
 extern f32 syUtilsRandTimeFloat(void);
 extern s32 syUtilsRandTimeUCharRange(s32 range);
