@@ -1,6 +1,7 @@
 #include <sys/netinput.h>
 
 #include <sys/netpeer.h>
+#include <sys/netrollback.h>
 #include <sys/taskman.h>
 #ifdef PORT
 #include <netplay/netplay_bridge.h>
@@ -39,6 +40,9 @@ sb32 sSYNetInputModernPaused;
 s32 sSYNetInputModernPausePlayer;
 sb32 sSYNetInputModernPauseRequest;
 u16 sSYNetInputModernPrevLocalButtons;
+u32 sSYNetInputRemoteFrameCount[MAXCONTROLLERS];
+s32 sSYNetInputModernMaxPrediction = 6;
+u32 sSYNetInputModernPredictedFrames;
 
 u32 syNetInputGetTick(void)
 {
@@ -123,6 +127,7 @@ void syNetInputReset(void)
 	sSYNetInputModernPausePlayer = 0;
 	sSYNetInputModernPauseRequest = FALSE;
 	sSYNetInputModernPrevLocalButtons = 0;
+	sSYNetInputModernPredictedFrames = 0;
 
 	sSYNetInputReplayMetadata.magic = SYNETINPUT_REPLAY_MAGIC;
 	sSYNetInputReplayMetadata.version = SYNETINPUT_REPLAY_VERSION;
@@ -149,6 +154,7 @@ void syNetInputReset(void)
 		sSYNetInputSlots[player].source = nSYNetInputSourceLocal;
 		syNetInputClearFrame(&sSYNetInputSlots[player].last_confirmed);
 		syNetInputClearFrame(&sSYNetInputSlots[player].last_published);
+		sSYNetInputRemoteFrameCount[player] = 0;
 		sSYNetInputReplayMetadata.player_kinds[player] = 0;
 		sSYNetInputReplayMetadata.fighter_kinds[player] = 0;
 		sSYNetInputReplayMetadata.costumes[player] = 0;
@@ -211,6 +217,10 @@ void syNetInputSetRemoteInput(s32 player, u32 tick, u16 buttons, s8 stick_x, s8 
 		}
 		syNetInputMakeFrame(&frame, tick, buttons, stick_x, stick_y, nSYNetInputSourceRemoteConfirmed, FALSE);
 		syNetInputStoreFrame(sSYNetInputRemoteHistory, player, &frame);
+		if ((tick + 1U) > sSYNetInputRemoteFrameCount[player])
+		{
+			sSYNetInputRemoteFrameCount[player] = tick + 1U;
+		}
 	}
 }
 
@@ -604,6 +614,9 @@ static void syNetInputProcessModernFrame(void)
 	u32 tick = syNetInputGetTick();
 	u32 participant_mask = 0;
 	u32 confirmed_mask = 0;
+	u32 remote_min_count = UINT_MAX;
+	sb32 has_remote = FALSE;
+	sb32 barrier_ready;
 	u32 remote_tick;
 	u16 remote_buttons;
 	u16 physical_buttons = gSYControllerDevices[0].button_hold;
@@ -654,14 +667,39 @@ static void syNetInputProcessModernFrame(void)
 			continue;
 		}
 		participant_mask |= (1U << player);
-		if ((player == sSYNetInputModernLocalPlayer) ||
-		    (syNetInputGetStoredFrame(sSYNetInputRemoteHistory, player, tick, NULL) != FALSE))
+		if (player == sSYNetInputModernLocalPlayer)
+		{
+			confirmed_mask |= (1U << player);
+			continue;
+		}
+		if (syNetInputGetStoredFrame(sSYNetInputRemoteHistory, player, tick, NULL) != FALSE)
 		{
 			confirmed_mask |= (1U << player);
 		}
+		has_remote = TRUE;
+		if (sSYNetInputRemoteFrameCount[player] < remote_min_count)
+		{
+			remote_min_count = sSYNetInputRemoteFrameCount[player];
+		}
 	}
-	if (syNetInputConfirmedBarrierReady(tick, (u32)delay, participant_mask, confirmed_mask,
-	                                   (u32)sSYNetInputModernLocalPlayer) == FALSE)
+	if (has_remote == FALSE)
+	{
+		remote_min_count = tick + 1U;
+	}
+	if (tick < (u32)delay)
+	{
+		barrier_ready = TRUE;
+	}
+	else
+	{
+		barrier_ready = (tick < (remote_min_count + (u32)sSYNetInputModernMaxPrediction)) ? TRUE : FALSE;
+	}
+	if ((barrier_ready != FALSE) && (tick >= remote_min_count) &&
+	    (syNetRollbackSpeculationSafe(remote_min_count) == FALSE))
+	{
+		barrier_ready = FALSE;
+	}
+	if (barrier_ready == FALSE)
 	{
 		sSYNetInputModernIsFrameReady = FALSE;
 		sSYNetInputModernStallCount++;
@@ -673,11 +711,19 @@ static void syNetInputProcessModernFrame(void)
 		else sSYNetInputModernStallPolls++;
 		return;
 	}
-	if ((sSYNetInputModernStallFrame == tick) && (sSYNetInputModernStallPolls > 1U) &&
-	    ((sSYNetInputModernStallPolls >= 4U) || ((tick % 60U) == 0U)))
 	{
-		port_log("[NETPLAY] confirmed input barrier released frame=%u waits=%u required=0x%02X\n",
-		         tick, sSYNetInputModernStallPolls, participant_mask);
+		u32 predicted_mask = participant_mask & ~confirmed_mask;
+		if (predicted_mask != 0)
+		{
+			sSYNetInputModernPredictedFrames++;
+		}
+		if ((sSYNetInputModernStallFrame == tick) && (sSYNetInputModernStallPolls > 1U) &&
+		    ((sSYNetInputModernStallPolls >= 4U) || ((tick % 60U) == 0U)))
+		{
+			port_log("[NETPLAY] prediction barrier released frame=%u waits=%u predicted=0x%02X depth=%u\n",
+			         tick, sSYNetInputModernStallPolls, predicted_mask,
+			         (tick >= remote_min_count) ? ((tick - remote_min_count) + 1U) : 0U);
+		}
 	}
 	sSYNetInputModernStallFrame = UINT_MAX;
 	sSYNetInputModernStallPolls = 0;
@@ -725,6 +771,7 @@ void syNetInputActivateModernSession(void)
 	{
 		syNetInputClearFrame(&sSYNetInputSlots[player].last_confirmed);
 		syNetInputClearFrame(&sSYNetInputSlots[player].last_published);
+		sSYNetInputRemoteFrameCount[player] = 0;
 		sSYNetInputSlots[player].source = (player == sSYNetInputModernLocalPlayer)
 		    ? nSYNetInputSourceLocal
 		    : (port_netplay_gameplay_slot_connected(player) != 0
@@ -751,6 +798,7 @@ void syNetInputActivateModernSession(void)
 					                    nSYNetInputSourceRemoteConfirmed, FALSE);
 					syNetInputStoreFrame(sSYNetInputRemoteHistory, player, &neutral);
 				}
+				sSYNetInputRemoteFrameCount[player] = (u32)delay;
 			}
 			else if (player == sSYNetInputModernLocalPlayer)
 			{
@@ -771,6 +819,7 @@ void syNetInputActivateModernSession(void)
 	sSYNetInputModernPausePlayer = 0;
 	sSYNetInputModernPauseRequest = FALSE;
 	sSYNetInputModernPrevLocalButtons = 0;
+	sSYNetInputModernPredictedFrames = 0;
 	syNetInputProcessModernFrame();
 #endif
 }
@@ -792,6 +841,7 @@ void syNetInputRequestModernPause(void)
 
 void syNetInputDeactivateModernSession(void)
 {
+	s32 player;
 	sSYNetInputModernNetplayIsActive = FALSE;
 	sSYNetInputModernLocalPlayer = -1;
 	sSYNetInputModernIsFrameReady = FALSE;
@@ -801,11 +851,33 @@ void syNetInputDeactivateModernSession(void)
 	sSYNetInputModernPaused = FALSE;
 	sSYNetInputModernPauseRequest = FALSE;
 	sSYNetInputModernPrevLocalButtons = 0;
+	sSYNetInputModernPredictedFrames = 0;
+	for (player = 0; player < MAXCONTROLLERS; player++)
+	{
+		sSYNetInputRemoteFrameCount[player] = 0;
+	}
 }
 
 sb32 syNetInputModernNetplayActive(void)
 {
 	return sSYNetInputModernNetplayIsActive;
+}
+
+void syNetInputModernSetMaxPrediction(s32 frames)
+{
+	if (frames < 0) frames = 0;
+	if (frames > SYNETROLLBACK_WINDOW) frames = SYNETROLLBACK_WINDOW;
+	sSYNetInputModernMaxPrediction = frames;
+}
+
+s32 syNetInputModernGetMaxPrediction(void)
+{
+	return sSYNetInputModernMaxPrediction;
+}
+
+u32 syNetInputModernGetPredictedFrameCount(void)
+{
+	return sSYNetInputModernPredictedFrames;
 }
 
 sb32 syNetInputModernFrameReady(void)

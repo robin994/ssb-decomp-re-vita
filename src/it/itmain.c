@@ -3,6 +3,10 @@
 #include <ft/fighter.h>
 #include <sc/scene.h>
 #include <reloc_data.h>
+#ifdef PORT
+#include <sys/netinput.h>
+#include <sys/netrollback.h>
+#endif
 
 #ifdef PORT
 #include <config.h>
@@ -328,6 +332,15 @@ void itMainDestroyItem(GObj *item_gobj)
     }
 #endif
     ITStruct *ip = itGetStruct(item_gobj);
+
+#ifdef PORT
+    if ((syNetInputModernNetplayActive() != FALSE) &&
+        !((ip->is_hold) && (ip->owner_gobj != NULL)) &&
+        (syNetRollbackDeferObjectEject(item_gobj, ip, FALSE) != FALSE))
+    {
+        return;
+    }
+#endif
 
 #if defined(PORT) && (!defined(__vita__) || !defined(SSB64_VITA_RUNTIME_DIAG) || SSB64_VITA_RUNTIME_DIAG)
     port_log("SSB64: itMainDestroyItem ENTER gobj=%p id=%u kind=%u ip=%p "

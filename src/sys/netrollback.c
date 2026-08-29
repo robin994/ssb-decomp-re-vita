@@ -5,6 +5,7 @@
 #include <gr/ground.h>
 #include <if/ifcommon.h>
 #include <it/item.h>
+#include <it/itmanager.h>
 #include <mp/map.h>
 #include <netplay/netplay_bridge.h>
 #include <sc/scene.h>
@@ -12,8 +13,10 @@
 #include <sys/netsync.h>
 #include <sys/objdef.h>
 #include <sys/objman.h>
+#include <sys/objtypes.h>
 #include <sys/utils.h>
 #include <wp/weapon.h>
+#include <wp/wpmanager.h>
 
 #include <string.h>
 
@@ -26,7 +29,8 @@ extern void port_log(const char *fmt, ...);
 #define SYNETROLLBACK_AOBJ_MAX 12
 #define SYNETROLLBACK_ITEM_MAPOBJ_MAX 32
 #define SYNETROLLBACK_ITEM_WEIGHT_MAX 64
-#define SYNETROLLBACK_HASH_INTERVAL 60U
+#define SYNETROLLBACK_HASH_INTERVAL 12U
+#define SYNETROLLBACK_FNV32_OFFSET 2166136261U
 
 typedef struct SYNetRollbackAObjState
 {
@@ -61,6 +65,7 @@ typedef struct SYNetRollbackFighterState
     GObj *gobj;
     FTStruct state;
     f32 gobj_anim_frame;
+    u32 tree_sig;
 } SYNetRollbackFighterState;
 
 typedef struct SYNetRollbackItemState
@@ -68,6 +73,7 @@ typedef struct SYNetRollbackItemState
     GObj *gobj;
     ITStruct state;
     f32 gobj_anim_frame;
+    u32 gobj_flags;
 } SYNetRollbackItemState;
 
 typedef struct SYNetRollbackWeaponState
@@ -75,6 +81,7 @@ typedef struct SYNetRollbackWeaponState
     GObj *gobj;
     WPStruct state;
     f32 gobj_anim_frame;
+    u32 gobj_flags;
 } SYNetRollbackWeaponState;
 
 typedef struct SYNetRollbackCameraState
@@ -140,6 +147,110 @@ static u32 sSYNetRollbackSnapshotEncodeUs;
 static u32 sSYNetRollbackSnapshotRestoreUs;
 static u32 sSYNetRollbackResimUs;
 static u32 sSYNetRollbackLastHashSubmitted = UINT32_MAX;
+static u32 sSYNetRollbackTopologyEpochFrame = UINT32_MAX;
+
+#define SYNETROLLBACK_ZOMBIE_MAX (ITEM_ALLOC_MAX + WEAPON_ALLOC_MAX)
+
+typedef struct SYNetRollbackZombie
+{
+    GObj *gobj;
+    void *struct_ptr;
+    u32 destroy_frame;
+    sb32 is_weapon;
+    sb32 active;
+} SYNetRollbackZombie;
+
+static SYNetRollbackZombie sSYNetRollbackZombies[SYNETROLLBACK_ZOMBIE_MAX];
+static u32 sSYNetRollbackForwardFrame;
+
+static SYNetRollbackZombie *syNetRollbackFindZombie(GObj *gobj)
+{
+    u32 i;
+    for (i = 0; i < SYNETROLLBACK_ZOMBIE_MAX; i++)
+    {
+        if ((sSYNetRollbackZombies[i].active != FALSE) && (sSYNetRollbackZombies[i].gobj == gobj))
+            return &sSYNetRollbackZombies[i];
+    }
+    return NULL;
+}
+
+static void syNetRollbackSetGObjProcsPaused(GObj *gobj, sb32 paused)
+{
+    GObjProcess *gp;
+    if (gobj == NULL) return;
+    for (gp = gobj->gobjproc_head; gp != NULL; gp = gp->link_next)
+        gp->is_paused = paused;
+}
+
+static void syNetRollbackRealEject(GObj *gobj, void *struct_ptr, sb32 is_weapon)
+{
+    if (gobj == NULL) return;
+    if (is_weapon != FALSE)
+    {
+        if (struct_ptr != NULL) wpManagerSetPrevStructAlloc((WPStruct *)struct_ptr);
+    }
+    else if (struct_ptr != NULL)
+    {
+        itManagerSetPrevStructAlloc((ITStruct *)struct_ptr);
+    }
+    gcEjectGObj(gobj);
+}
+
+sb32 syNetRollbackDeferObjectEject(GObj *gobj, void *struct_ptr, sb32 is_weapon)
+{
+    u32 i;
+    SYNetRollbackZombie *z;
+
+    if ((gobj == NULL) || (syNetInputModernNetplayActive() == FALSE)) return FALSE;
+    z = syNetRollbackFindZombie(gobj);
+    if (z != NULL)
+    {
+        z->struct_ptr = struct_ptr;
+        z->destroy_frame = sSYNetRollbackForwardFrame;
+        z->is_weapon = is_weapon;
+        syNetRollbackSetGObjProcsPaused(gobj, TRUE);
+        gobj->flags |= GOBJ_FLAG_HIDDEN;
+        return TRUE;
+    }
+    for (i = 0; i < SYNETROLLBACK_ZOMBIE_MAX; i++)
+    {
+        if (sSYNetRollbackZombies[i].active != FALSE) continue;
+        sSYNetRollbackZombies[i].gobj = gobj;
+        sSYNetRollbackZombies[i].struct_ptr = struct_ptr;
+        sSYNetRollbackZombies[i].destroy_frame = sSYNetRollbackForwardFrame;
+        sSYNetRollbackZombies[i].is_weapon = is_weapon;
+        sSYNetRollbackZombies[i].active = TRUE;
+        syNetRollbackSetGObjProcsPaused(gobj, TRUE);
+        gobj->flags |= GOBJ_FLAG_HIDDEN;
+        return TRUE;
+    }
+    return FALSE;
+}
+
+static void syNetRollbackFlushZombies(void)
+{
+    memset(sSYNetRollbackZombies, 0, sizeof(sSYNetRollbackZombies));
+}
+
+static u32 syNetRollbackDObjTreeSig(DObj *dobj, u32 sig, s32 depth)
+{
+    if (depth > 48) return sig;
+    for (; dobj != NULL; dobj = dobj->sib_next)
+    {
+        sig = (sig ^ (u32)(uintptr_t)dobj) * 16777619U;
+        if (dobj->child != NULL) sig = syNetRollbackDObjTreeSig(dobj->child, sig, depth + 1);
+    }
+    return sig;
+}
+
+static u32 syNetRollbackFighterTreeSig(GObj *gobj)
+{
+    if ((gobj != NULL) && (gobj->obj_kind == nGCCommonAppendDObj) && (gobj->obj != NULL))
+    {
+        return syNetRollbackDObjTreeSig(DObjGetStruct(gobj), SYNETROLLBACK_FNV32_OFFSET, 0);
+    }
+    return SYNETROLLBACK_FNV32_OFFSET;
+}
 
 static u32 syNetRollbackElapsedUs(u64 begin)
 {
@@ -269,6 +380,7 @@ static void syNetRollbackSaveObjects(SYNetRollbackSnapshot *snapshot)
         dst->gobj = gobj;
         dst->state = *fp;
         dst->gobj_anim_frame = gobj->anim_frame;
+        dst->tree_sig = syNetRollbackFighterTreeSig(gobj);
         syNetRollbackSaveGObjDObjs(snapshot, gobj);
     }
     for (gobj = gGCCommonLinks[nGCCommonLinkIDItem]; gobj != NULL; gobj = gobj->link_next)
@@ -286,6 +398,7 @@ static void syNetRollbackSaveObjects(SYNetRollbackSnapshot *snapshot)
         dst->gobj = gobj;
         dst->state = *ip;
         dst->gobj_anim_frame = gobj->anim_frame;
+        dst->gobj_flags = gobj->flags;
         syNetRollbackSaveGObjDObjs(snapshot, gobj);
     }
     for (gobj = gGCCommonLinks[nGCCommonLinkIDWeapon]; gobj != NULL; gobj = gobj->link_next)
@@ -303,6 +416,7 @@ static void syNetRollbackSaveObjects(SYNetRollbackSnapshot *snapshot)
         dst->gobj = gobj;
         dst->state = *wp;
         dst->gobj_anim_frame = gobj->anim_frame;
+        dst->gobj_flags = gobj->flags;
         syNetRollbackSaveGObjDObjs(snapshot, gobj);
     }
 }
@@ -338,11 +452,45 @@ void syNetRollbackReset(void)
     sSYNetRollbackSnapshotRestoreUs = 0;
     sSYNetRollbackResimUs = 0;
     sSYNetRollbackLastHashSubmitted = UINT32_MAX;
+    sSYNetRollbackTopologyEpochFrame = UINT32_MAX;
+    sSYNetRollbackForwardFrame = 0;
+    syNetRollbackFlushZombies();
 }
 
 sb32 syNetRollbackIsResimulating(void)
 {
     return sSYNetRollbackResimulating;
+}
+
+sb32 syNetRollbackSpeculationSafe(u32 confirmed_frame_count)
+{
+    if (sSYNetRollbackTopologyEpochFrame == UINT32_MAX) return TRUE;
+    return (sSYNetRollbackTopologyEpochFrame < confirmed_frame_count) ? TRUE : FALSE;
+}
+
+static void syNetRollbackTrackTopology(u32 frame)
+{
+    SYNetRollbackSnapshot *curr = &sSYNetRollbackSnapshots[frame % SYNETROLLBACK_RING];
+    SYNetRollbackSnapshot *prev;
+    u32 i;
+
+    if ((sSYNetRollbackResimulating != FALSE) || (frame == 0)) return;
+    prev = &sSYNetRollbackSnapshots[(frame - 1U) % SYNETROLLBACK_RING];
+    if ((prev->valid == FALSE) || (prev->frame != (frame - 1U))) return;
+    if (prev->fighter_count != curr->fighter_count)
+    {
+        sSYNetRollbackTopologyEpochFrame = frame;
+        return;
+    }
+    for (i = 0; i < curr->fighter_count; i++)
+    {
+        if ((prev->fighters[i].gobj != curr->fighters[i].gobj) ||
+            (prev->fighters[i].tree_sig != curr->fighters[i].tree_sig))
+        {
+            sSYNetRollbackTopologyEpochFrame = frame;
+            return;
+        }
+    }
 }
 
 void syNetRollbackCapturePreFrame(u32 frame)
@@ -351,6 +499,7 @@ void syNetRollbackCapturePreFrame(u32 frame)
     u64 begin = port_netplay_monotonic_us();
     CObj *camera_cobj;
 
+    sSYNetRollbackForwardFrame = frame;
     memset(snapshot, 0, sizeof(*snapshot));
     snapshot->frame = frame;
     snapshot->valid = TRUE;
@@ -373,34 +522,97 @@ void syNetRollbackCapturePreFrame(u32 frame)
     syNetRollbackSaveItemManager(snapshot);
     syNetRollbackSaveMap(snapshot);
     syNetRollbackSaveObjects(snapshot);
+    syNetRollbackTrackTopology(frame);
     sSYNetRollbackSnapshotEncodeUs = syNetRollbackElapsedUs(begin);
+}
+
+static sb32 syNetRollbackSnapshotHasObject(const SYNetRollbackSnapshot *snapshot, GObj *gobj, sb32 is_weapon)
+{
+    u32 i;
+    if (is_weapon != FALSE)
+    {
+        for (i = 0; i < snapshot->weapon_count; i++)
+            if (snapshot->weapons[i].gobj == gobj) return TRUE;
+    }
+    else
+    {
+        for (i = 0; i < snapshot->item_count; i++)
+            if (snapshot->items[i].gobj == gobj) return TRUE;
+    }
+    return FALSE;
+}
+
+static void syNetRollbackReconcileList(const SYNetRollbackSnapshot *snapshot, s32 link_id, sb32 is_weapon)
+{
+    GObj *gobj = gGCCommonLinks[link_id];
+    while (gobj != NULL)
+    {
+        GObj *next = gobj->link_next;
+        if (syNetRollbackSnapshotHasObject(snapshot, gobj, is_weapon) == FALSE)
+        {
+            SYNetRollbackZombie *z = syNetRollbackFindZombie(gobj);
+            void *sp = (z != NULL) ? z->struct_ptr
+                       : (is_weapon != FALSE ? (void *)wpGetStruct(gobj) : (void *)itGetStruct(gobj));
+            if (z != NULL) z->active = FALSE;
+            syNetRollbackRealEject(gobj, sp, is_weapon);
+        }
+        gobj = next;
+    }
+}
+
+static void syNetRollbackApplyZombiePause(GObj *gobj, u32 snap_frame)
+{
+    SYNetRollbackZombie *z = syNetRollbackFindZombie(gobj);
+    sb32 zombied = ((z != NULL) && (z->destroy_frame <= snap_frame)) ? TRUE : FALSE;
+    syNetRollbackSetGObjProcsPaused(gobj, zombied);
+}
+
+static void syNetRollbackReconcileObjects(const SYNetRollbackSnapshot *snapshot)
+{
+    GObj *gobj;
+    syNetRollbackReconcileList(snapshot, nGCCommonLinkIDItem, FALSE);
+    syNetRollbackReconcileList(snapshot, nGCCommonLinkIDWeapon, TRUE);
+    for (gobj = gGCCommonLinks[nGCCommonLinkIDItem]; gobj != NULL; gobj = gobj->link_next)
+        syNetRollbackApplyZombiePause(gobj, snapshot->frame);
+    for (gobj = gGCCommonLinks[nGCCommonLinkIDWeapon]; gobj != NULL; gobj = gobj->link_next)
+        syNetRollbackApplyZombiePause(gobj, snapshot->frame);
+}
+
+static sb32 syNetRollbackFightersMatch(const SYNetRollbackSnapshot *snapshot)
+{
+    GObj *gobj;
+    u32 i = 0;
+    for (gobj = gGCCommonLinks[nGCCommonLinkIDFighter]; gobj != NULL; gobj = gobj->link_next)
+    {
+        if ((i >= snapshot->fighter_count) || (snapshot->fighters[i].gobj != gobj) ||
+            (syNetRollbackFighterTreeSig(gobj) != snapshot->fighters[i].tree_sig)) return FALSE;
+        i++;
+    }
+    return (i == snapshot->fighter_count) ? TRUE : FALSE;
 }
 
 static sb32 syNetRollbackTopologyMatches(const SYNetRollbackSnapshot *snapshot)
 {
     GObj *gobj;
-    u32 i = 0;
+    u32 si;
 
-    for (gobj = gGCCommonLinks[nGCCommonLinkIDFighter]; gobj != NULL; gobj = gobj->link_next)
-    {
-        if ((i >= snapshot->fighter_count) || (snapshot->fighters[i].gobj != gobj)) return FALSE;
-        i++;
-    }
-    if (i != snapshot->fighter_count) return FALSE;
-    i = 0;
+    if (syNetRollbackFightersMatch(snapshot) == FALSE) return FALSE;
+
+    si = 0;
     for (gobj = gGCCommonLinks[nGCCommonLinkIDItem]; gobj != NULL; gobj = gobj->link_next)
     {
-        if ((i >= snapshot->item_count) || (snapshot->items[i].gobj != gobj)) return FALSE;
-        i++;
+        while ((si < snapshot->item_count) && (snapshot->items[si].gobj != gobj)) si++;
+        if (si >= snapshot->item_count) return FALSE;
+        si++;
     }
-    if (i != snapshot->item_count) return FALSE;
-    i = 0;
+    si = 0;
     for (gobj = gGCCommonLinks[nGCCommonLinkIDWeapon]; gobj != NULL; gobj = gobj->link_next)
     {
-        if ((i >= snapshot->weapon_count) || (snapshot->weapons[i].gobj != gobj)) return FALSE;
-        i++;
+        while ((si < snapshot->weapon_count) && (snapshot->weapons[si].gobj != gobj)) si++;
+        if (si >= snapshot->weapon_count) return FALSE;
+        si++;
     }
-    return (i == snapshot->weapon_count) ? TRUE : FALSE;
+    return TRUE;
 }
 
 static void syNetRollbackRestoreDObjs(const SYNetRollbackSnapshot *snapshot)
@@ -468,13 +680,16 @@ static sb32 syNetRollbackRestoreSnapshot(u32 frame)
 {
     SYNetRollbackSnapshot *snapshot = &sSYNetRollbackSnapshots[frame % SYNETROLLBACK_RING];
     u64 begin = port_netplay_monotonic_us();
+    GObj *gobj;
     u32 i;
 
-    if ((snapshot->valid == FALSE) || (snapshot->frame != frame) ||
-        (snapshot->restorable == FALSE) || (syNetRollbackTopologyMatches(snapshot) == FALSE))
+    if ((snapshot->valid == FALSE) || (snapshot->frame != frame) || (snapshot->restorable == FALSE))
     {
         return FALSE;
     }
+    if (syNetRollbackFightersMatch(snapshot) == FALSE) return FALSE;
+    syNetRollbackReconcileObjects(snapshot);
+    if (syNetRollbackTopologyMatches(snapshot) == FALSE) return FALSE;
     syUtilsSetRandomSeed(snapshot->rng_seed);
     if (gSCManagerBattleState != NULL) *gSCManagerBattleState = snapshot->battle;
     gGRCommonStruct = snapshot->ground;
@@ -491,17 +706,31 @@ static sb32 syNetRollbackRestoreSnapshot(u32 frame)
         if (fp != NULL) *fp = snapshot->fighters[i].state;
         snapshot->fighters[i].gobj->anim_frame = snapshot->fighters[i].gobj_anim_frame;
     }
-    for (i = 0; i < snapshot->item_count; i++)
+    for (gobj = gGCCommonLinks[nGCCommonLinkIDItem]; gobj != NULL; gobj = gobj->link_next)
     {
-        ITStruct *ip = itGetStruct(snapshot->items[i].gobj);
-        if (ip != NULL) *ip = snapshot->items[i].state;
-        snapshot->items[i].gobj->anim_frame = snapshot->items[i].gobj_anim_frame;
+        for (i = 0; i < snapshot->item_count; i++)
+        {
+            ITStruct *ip;
+            if (snapshot->items[i].gobj != gobj) continue;
+            ip = itGetStruct(gobj);
+            if (ip != NULL) *ip = snapshot->items[i].state;
+            gobj->anim_frame = snapshot->items[i].gobj_anim_frame;
+            gobj->flags = snapshot->items[i].gobj_flags;
+            break;
+        }
     }
-    for (i = 0; i < snapshot->weapon_count; i++)
+    for (gobj = gGCCommonLinks[nGCCommonLinkIDWeapon]; gobj != NULL; gobj = gobj->link_next)
     {
-        WPStruct *wp = wpGetStruct(snapshot->weapons[i].gobj);
-        if (wp != NULL) *wp = snapshot->weapons[i].state;
-        snapshot->weapons[i].gobj->anim_frame = snapshot->weapons[i].gobj_anim_frame;
+        for (i = 0; i < snapshot->weapon_count; i++)
+        {
+            WPStruct *wp;
+            if (snapshot->weapons[i].gobj != gobj) continue;
+            wp = wpGetStruct(gobj);
+            if (wp != NULL) *wp = snapshot->weapons[i].state;
+            gobj->anim_frame = snapshot->weapons[i].gobj_anim_frame;
+            gobj->flags = snapshot->weapons[i].gobj_flags;
+            break;
+        }
     }
     syNetRollbackRestoreDObjs(snapshot);
     if ((snapshot->camera_cobj.valid != FALSE) && (snapshot->camera_cobj.ptr != NULL))
@@ -600,6 +829,18 @@ s32 syNetRollbackHandlePredictionMismatch(u32 current_frame)
 void syNetRollbackPostFrame(u32 frame)
 {
     SYNetRollbackSnapshot *snapshot = &sSYNetRollbackSnapshots[frame % SYNETROLLBACK_RING];
+    u32 zi;
+
+    for (zi = 0; zi < SYNETROLLBACK_ZOMBIE_MAX; zi++)
+    {
+        SYNetRollbackZombie *z = &sSYNetRollbackZombies[zi];
+        if ((z->active != FALSE) && ((z->destroy_frame + SYNETROLLBACK_WINDOW) < frame))
+        {
+            syNetRollbackRealEject(z->gobj, z->struct_ptr, z->is_weapon);
+            z->active = FALSE;
+        }
+    }
+
     if ((frame % SYNETROLLBACK_HASH_INTERVAL) == 0U && snapshot->valid != FALSE && snapshot->frame == frame)
     {
         syNetSyncComputeDeterministicDigest(frame, &snapshot->post_digest);

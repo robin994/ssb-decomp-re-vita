@@ -8,6 +8,9 @@
 #include <stddef.h>
 
 extern void port_log(const char *fmt, ...);
+#ifdef PORT
+extern sb32 syNetRollbackIsResimulating(void);
+#endif
 
 #if defined(PORT) && defined(PORT_RUNTIME_DIAGNOSTICS)
 /* PORT diag: log GObj allocations for the kinds known to leak stale
@@ -2329,6 +2332,12 @@ GObjProcess* gcRunGObjProcess(GObjProcess *gobjproc)
 	switch (gobjproc->kind)
 	{
 	case nGCProcessKindThread:
+#ifdef PORT
+		if (syNetRollbackIsResimulating() != FALSE)
+		{
+			break;
+		}
+#endif
 		osStartThread(&gobjproc->exec.gobjthread->thread);
 #ifdef PORT
 		/* If the GObj thread's coroutine ran to completion (entry function

@@ -4,6 +4,8 @@
 #include <PR/ultratypes.h>
 #include <ssb_types.h>
 
+struct GObj;
+
 #define SYNETROLLBACK_WINDOW 6
 
 enum
@@ -34,6 +36,8 @@ static inline s32 syNetRollbackClassifyMismatch(u32 mismatch_frame, u32 current_
 
 extern void syNetRollbackReset(void);
 extern sb32 syNetRollbackIsResimulating(void);
+extern sb32 syNetRollbackSpeculationSafe(u32 confirmed_frame_count);
+extern sb32 syNetRollbackDeferObjectEject(struct GObj *gobj, void *struct_ptr, sb32 is_weapon);
 extern void syNetRollbackCapturePreFrame(u32 frame);
 /* 1=rollback performed, 0=no mismatch, -1=controlled abort required. */
 extern s32 syNetRollbackHandlePredictionMismatch(u32 current_frame);
