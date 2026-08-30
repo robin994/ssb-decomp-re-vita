@@ -145,11 +145,7 @@ GObj *sMNModeSelectNetplayGObj;
 s32 sMNModeSelectNetplayPage;
 s32 sMNModeSelectNetplayOption;
 s32 sMNModeSelectNetplayNavWait;
-s32 sMNModeSelectNetplayNameCursor;
-char sMNModeSelectNetplayNameEdit[13];
-s32 sMNModeSelectNetplayAddrCursor;
-s32 sMNModeSelectNetplayAddrTarget;
-char sMNModeSelectNetplayAddrEdit[40];
+s32 sMNModeSelectNetplayImeTarget;
 
 void mnModeSelectMakeOptions(void);
 void mnModeSelectEjectOptions(void);
@@ -192,8 +188,7 @@ typedef enum MNModeSelectNetplayPage
     nMNModeSelectNetplayPageHost,
     nMNModeSelectNetplayPageJoin,
     nMNModeSelectNetplayPageSettings,
-    nMNModeSelectNetplayPageNameEdit,
-    nMNModeSelectNetplayPageJoinAddr,
+    nMNModeSelectNetplayPageTextEntry,
     nMNModeSelectNetplayPageHostRules,
     nMNModeSelectNetplayPageItemToggles
 
@@ -261,71 +256,270 @@ static intptr_t dMNModeSelectNetplayFontOffsets[26] =
     llMNCommonFontsLetterYSprite, llMNCommonFontsLetterZSprite
 };
 
-static intptr_t dMNModeSelectNetplayDigitOffsets[10] =
+static const intptr_t dMNModeSelectNetplayMenuDigits[10] =
 {
-    llIFCommonDigits0Sprite, llIFCommonDigits1Sprite, llIFCommonDigits2Sprite, llIFCommonDigits3Sprite,
-    llIFCommonDigits4Sprite, llIFCommonDigits5Sprite, llIFCommonDigits6Sprite, llIFCommonDigits7Sprite,
-    llIFCommonDigits8Sprite, llIFCommonDigits9Sprite
+    llMNCommonDigit0Sprite, llMNCommonDigit1Sprite, llMNCommonDigit2Sprite, llMNCommonDigit3Sprite,
+    llMNCommonDigit4Sprite, llMNCommonDigit5Sprite, llMNCommonDigit6Sprite, llMNCommonDigit7Sprite,
+    llMNCommonDigit8Sprite, llMNCommonDigit9Sprite
 };
 
-static f32 mnModeSelectNetplayMakeString(GObj *gobj, const char *str, f32 x, f32 y, u8 red, u8 green, u8 blue)
+static f32 mnModeSelectNetplayCharSpacing(const char *str, s32 c)
+{
+    switch (str[c])
+    {
+    case 'A':
+        switch (str[c + 1])
+        {
+        case 'F': case 'P': case 'T': case 'V': case 'Y':
+            return 0.0F;
+        default:
+            return 1.0F;
+        }
+    case 'F': case 'P': case 'V': case 'Y':
+        switch (str[c + 1])
+        {
+        case 'A': case 'T':
+            return 0.0F;
+        default:
+            return 1.0F;
+        }
+    case 'Q': case 'T':
+        switch (str[c + 1])
+        {
+        case '.':
+            return 1.0F;
+        default:
+            return 0.0F;
+        }
+    case '.':
+        return 1.0F;
+    default:
+        return (str[c + 1] == 'T') ? 0.0F : 1.0F;
+    }
+}
+
+static f32 mnModeSelectNetplayMakeStringScaled(GObj *gobj, const char *str, f32 x, f32 y,
+    u8 red, u8 green, u8 blue, f32 scale)
 {
     SObj *sobj;
     s32 i;
 
     for (i = 0; str[i] != '\0'; i++)
     {
-        if (str[i] == ' ')
+        char ch = str[i];
+
+        if (ch == ' ')
         {
-            x += 5.0F;
+            x += 5.0F * scale;
             continue;
         }
-        if ((str[i] >= '0') && (str[i] <= '9'))
+        if ((ch >= '0') && (ch <= '9'))
         {
             sobj = lbCommonMakeSObjForGObj(gobj,
-                lbRelocGetFileData(Sprite*, sMNModeSelectFiles[3], dMNModeSelectNetplayDigitOffsets[str[i] - '0']));
-            sobj->sprite.attr &= ~SP_FASTCOPY;
-            sobj->sprite.attr |= SP_TRANSPARENT;
-            sobj->sprite.red = red;
-            sobj->sprite.green = green;
-            sobj->sprite.blue = blue;
-            sobj->sprite.scalex = 0.70F;
-            sobj->sprite.scaley = 0.70F;
-            sobj->pos.x = x;
-            sobj->pos.y = y - 1.0F;
-            x += (sobj->sprite.width * sobj->sprite.scalex) + 1.0F;
-            continue;
+                lbRelocGetFileData(Sprite*, sMNModeSelectFiles[0], dMNModeSelectNetplayMenuDigits[ch - '0']));
         }
-        if (str[i] == '.')
+        else if (ch == ':')
+        {
+            sobj = lbCommonMakeSObjForGObj(gobj,
+                lbRelocGetFileData(Sprite*, sMNModeSelectFiles[0], llMNCommonColonSprite));
+        }
+        else if (ch == '%')
+        {
+            sobj = lbCommonMakeSObjForGObj(gobj,
+                lbRelocGetFileData(Sprite*, sMNModeSelectFiles[0], llMNCommonPercentageSprite));
+        }
+        else if (ch == '-')
+        {
+            sobj = lbCommonMakeSObjForGObj(gobj,
+                lbRelocGetFileData(Sprite*, sMNModeSelectFiles[3], llIFCommonDigitsDashSprite));
+        }
+        else if (ch == '.')
         {
             sobj = lbCommonMakeSObjForGObj(gobj,
                 lbRelocGetFileData(Sprite*, sMNModeSelectFiles[2], llMNCommonFontsSymbolPeriodSprite));
-            sobj->sprite.attr &= ~SP_FASTCOPY;
-            sobj->sprite.attr |= SP_TRANSPARENT;
-            sobj->sprite.red = red;
-            sobj->sprite.green = green;
-            sobj->sprite.blue = blue;
-            sobj->pos.x = x;
-            sobj->pos.y = y + 4.0F;
-            x += sobj->sprite.width + 1.0F;
-            continue;
         }
-        if ((str[i] < 'A') || (str[i] > 'Z'))
+        else if ((ch >= 'A') && (ch <= 'Z'))
         {
-            continue;
+            sobj = lbCommonMakeSObjForGObj(gobj,
+                lbRelocGetFileData(Sprite*, sMNModeSelectFiles[2], dMNModeSelectNetplayFontOffsets[ch - 'A']));
         }
-        sobj = lbCommonMakeSObjForGObj(gobj,
-            lbRelocGetFileData(Sprite*, sMNModeSelectFiles[2], dMNModeSelectNetplayFontOffsets[str[i] - 'A']));
+        else continue;
+
         sobj->sprite.attr &= ~SP_FASTCOPY;
         sobj->sprite.attr |= SP_TRANSPARENT;
         sobj->sprite.red = red;
         sobj->sprite.green = green;
         sobj->sprite.blue = blue;
+        sobj->sprite.scalex = scale;
+        sobj->sprite.scaley = scale;
         sobj->pos.x = x;
-        sobj->pos.y = y;
-        x += sobj->sprite.width + 1.0F;
+        sobj->pos.y = (ch == '.') ? y + (3.0F * scale) : y;
+        x += (sobj->sprite.width * scale) + (mnModeSelectNetplayCharSpacing(str, i) * scale);
     }
     return x;
+}
+
+static f32 mnModeSelectNetplayMakeString(GObj *gobj, const char *str, f32 x, f32 y, u8 red, u8 green, u8 blue)
+{
+    return mnModeSelectNetplayMakeStringScaled(gobj, str, x, y, red, green, blue, 1.0F);
+}
+
+static void mnModeSelectNetplayUpdateTab(SObj *head, s32 status);
+static void mnModeSelectNetplayMakeCursor(GObj *gobj, f32 x, f32 y);
+
+static SObj *mnModeSelectNetplayMakeTab(GObj *gobj, f32 x, f32 y, s32 width_units, s32 status)
+{
+    SObj *first;
+    SObj *sobj;
+
+    first = sobj = lbCommonMakeSObjForGObj(gobj,
+        lbRelocGetFileData(Sprite*, sMNModeSelectFiles[0], llMNCommonOptionTabLeftSprite));
+    sobj->sprite.attr &= ~SP_FASTCOPY;
+    sobj->sprite.attr |= SP_TRANSPARENT;
+    sobj->pos.x = x;
+    sobj->pos.y = y;
+
+    sobj = lbCommonMakeSObjForGObj(gobj,
+        lbRelocGetFileData(Sprite*, sMNModeSelectFiles[0], llMNCommonOptionTabMiddleSprite));
+    sobj->sprite.attr &= ~SP_FASTCOPY;
+    sobj->sprite.attr |= SP_TRANSPARENT;
+    sobj->pos.x = x + 16.0F;
+    sobj->pos.y = y;
+    sobj->cms = 0;
+    sobj->cmt = 0;
+    sobj->masks = 4;
+    sobj->maskt = 0;
+    sobj->lrs = width_units * 8;
+    sobj->lrt = 0x1D;
+
+    sobj = lbCommonMakeSObjForGObj(gobj,
+        lbRelocGetFileData(Sprite*, sMNModeSelectFiles[0], llMNCommonOptionTabRightSprite));
+    sobj->sprite.attr &= ~SP_FASTCOPY;
+    sobj->sprite.attr |= SP_TRANSPARENT;
+    sobj->pos.x = x + 16.0F + (width_units * 8);
+    sobj->pos.y = y;
+
+    mnModeSelectNetplayUpdateTab(first, status);
+    return first;
+}
+
+static void mnModeSelectNetplayMakeTabRow(GObj *gobj, f32 x, f32 y, s32 width_units,
+    const char *label, sb32 is_hot)
+{
+    mnModeSelectNetplayMakeTab(gobj, x, y, width_units,
+        is_hot ? nMNOptionTabStatusHighlight : nMNOptionTabStatusNot);
+    mnModeSelectNetplayMakeString(gobj, label, x + 20.0F, y + 3.0F, 0x00, 0x00, 0x00);
+    if (is_hot)
+    {
+        mnModeSelectNetplayMakeCursor(gobj, x - 12.0F, y + 1.0F);
+    }
+}
+
+static void mnModeSelectNetplayUpdateTab(SObj *head, s32 status)
+{
+    u8 prim_r, prim_g, prim_b;
+    u8 env_r, env_g, env_b;
+    s32 i;
+
+    switch (status)
+    {
+    case nMNOptionTabStatusHighlight:
+        prim_r = 0x82; prim_g = 0x00; prim_b = 0x28;
+        env_r = 0xFF; env_g = 0x00; env_b = 0x28;
+        break;
+    case nMNOptionTabStatusSelected:
+        prim_r = 0x00; prim_g = 0x00; prim_b = 0x00;
+        env_r = 0xFF; env_g = 0xFF; env_b = 0xFF;
+        break;
+    default:
+        prim_r = 0x00; prim_g = 0x00; prim_b = 0x00;
+        env_r = 0x82; env_g = 0x82; env_b = 0xAA;
+        break;
+    }
+    for (i = 0; (i < 3) && (head != NULL); i++)
+    {
+        head->envcolor.r = prim_r;
+        head->envcolor.g = prim_g;
+        head->envcolor.b = prim_b;
+        head->sprite.red = env_r;
+        head->sprite.green = env_g;
+        head->sprite.blue = env_b;
+        head = head->next;
+    }
+}
+
+static void mnModeSelectNetplayMakeFrame(GObj *gobj, f32 x, f32 y, u8 red, u8 green, u8 blue)
+{
+    SObj *sobj = lbCommonMakeSObjForGObj(gobj,
+        lbRelocGetFileData(Sprite*, sMNModeSelectFiles[0], llMNCommonFrameSprite));
+
+    sobj->sprite.attr &= ~SP_FASTCOPY;
+    sobj->sprite.attr |= SP_TRANSPARENT;
+    sobj->envcolor.r = 0x00;
+    sobj->envcolor.g = 0x00;
+    sobj->envcolor.b = 0x00;
+    sobj->sprite.red = red;
+    sobj->sprite.green = green;
+    sobj->sprite.blue = blue;
+    sobj->pos.x = x;
+    sobj->pos.y = y;
+}
+
+static void mnModeSelectNetplayMakeCursor(GObj *gobj, f32 x, f32 y)
+{
+    SObj *sobj = lbCommonMakeSObjForGObj(gobj,
+        lbRelocGetFileData(Sprite*, sMNModeSelectFiles[0], llMNCommonArrowRSprite));
+
+    sobj->sprite.attr &= ~SP_FASTCOPY;
+    sobj->sprite.attr |= SP_TRANSPARENT;
+    sobj->sprite.red = 0xFF;
+    sobj->sprite.green = 0xAE;
+    sobj->sprite.blue = 0x00;
+    sobj->pos.x = x;
+    sobj->pos.y = y;
+}
+
+static void mnModeSelectNetplayMakeBackground(void)
+{
+    GObj *gobj = gcMakeGObjSPAfter(0, NULL, 2, GOBJ_PRIORITY_DEFAULT);
+    SObj *sobj;
+
+    gcAddGObjDisplay(gobj, lbCommonDrawSObjAttr, 0, GOBJ_PRIORITY_DEFAULT, ~0);
+
+    sobj = lbCommonMakeSObjForGObj(gobj,
+        lbRelocGetFileData(Sprite*, sMNModeSelectFiles[0], llMNCommonSmashBrosCollageSprite));
+    sobj->pos.x = 10.0F;
+    sobj->pos.y = 10.0F;
+
+    sobj = lbCommonMakeSObjForGObj(gobj,
+        lbRelocGetFileData(Sprite*, sMNModeSelectFiles[0], llMNCommonDecalPaperSprite));
+    sobj->sprite.attr &= ~SP_FASTCOPY;
+    sobj->sprite.attr |= SP_TRANSPARENT;
+    sobj->sprite.red = 0xA0;
+    sobj->sprite.green = 0x78;
+    sobj->sprite.blue = 0x14;
+    sobj->pos.x = 140.0F;
+    sobj->pos.y = 143.0F;
+
+    sobj = lbCommonMakeSObjForGObj(gobj,
+        lbRelocGetFileData(Sprite*, sMNModeSelectFiles[0], llMNCommonDecalPaperSprite));
+    sobj->sprite.attr &= ~SP_FASTCOPY;
+    sobj->sprite.attr |= SP_TRANSPARENT;
+    sobj->sprite.red = 0xA0;
+    sobj->sprite.green = 0x78;
+    sobj->sprite.blue = 0x14;
+    sobj->pos.x = 225.0F;
+    sobj->pos.y = 56.0F;
+
+    sobj = lbCommonMakeSObjForGObj(gobj,
+        lbRelocGetFileData(Sprite*, sMNModeSelectFiles[1], llMNMainConsoleIconDarkSprite));
+    sobj->sprite.attr &= ~SP_FASTCOPY;
+    sobj->sprite.attr |= SP_TRANSPARENT;
+    sobj->sprite.red = 0x99;
+    sobj->sprite.green = 0x99;
+    sobj->sprite.blue = 0x99;
+    sobj->pos.x = 10.0F;
+    sobj->pos.y = 10.0F;
 }
 
 static void mnModeSelectNetplayMakeMarker(GObj *gobj, f32 y)
@@ -818,58 +1012,26 @@ static void mnModeSelectNetplayMakeDiscoveryDetail(GObj *gobj, s32 index, f32 y)
     mnModeSelectNetplayMakeString(gobj, line, 50.0F, y + 15.0F, 0xB0, 0xB0, 0xB0);
 }
 
-static void mnModeSelectNetplayMakeNameEdit(GObj *gobj)
+static void mnModeSelectNetplayMakeTextEntry(GObj *gobj)
 {
-    s32 i;
-    char letter[2] = { 0, 0 };
+    const char *label;
 
-    mnModeSelectNetplayMakeString(gobj, "EDIT PLAYER NAME", 72.0F, 45.0F, 0xFF, 0x20, 0x20);
-
-    for (i = 0; i < 12; i++)
+    switch (sMNModeSelectNetplayImeTarget)
     {
-        letter[0] = sMNModeSelectNetplayNameEdit[i];
-        if (letter[0] == '\0') letter[0] = ' ';
-        mnModeSelectNetplayMakeString(gobj, letter, 48.0F + (i * 18.0F), 93.0F,
-            (i == sMNModeSelectNetplayNameCursor) ? 0xFF : 0xD0,
-            (i == sMNModeSelectNetplayNameCursor) ? 0xFF : 0x20,
-            (i == sMNModeSelectNetplayNameCursor) ? 0xFF : 0x20);
+    case 1:
+        label = "HOST IP ADDRESS";
+        break;
+    case 2:
+        label = "LOBBY SERVER";
+        break;
+    default:
+        label = "PLAYER NAME";
+        break;
     }
-    mnModeSelectNetplayMakeString(gobj, "UP DOWN CHANGE", 82.0F, 137.0F, 0xFF, 0x40, 0x40);
-    mnModeSelectNetplayMakeString(gobj, "LEFT RIGHT MOVE", 75.0F, 153.0F, 0xFF, 0x40, 0x40);
-    mnModeSelectNetplayMakeString(gobj, "A SAVE B CANCEL", 77.0F, 180.0F, 0xFF, 0x40, 0x40);
-}
 
-static s32 mnModeSelectNetplayAddrCells(void)
-{
-    return (sMNModeSelectNetplayAddrTarget == 1) ? 27 : 15;
-}
-
-static void mnModeSelectNetplayMakeJoinAddr(GObj *gobj)
-{
-    const sb32 server = (sMNModeSelectNetplayAddrTarget == 1);
-    const s32 cells = mnModeSelectNetplayAddrCells();
-    const f32 step = server ? 10.0F : 16.0F;
-    const f32 x0 = server ? 30.0F : 34.0F;
-    const f32 y = server ? 78.0F : 93.0F;
-    s32 i;
-    char letter[2] = { 0, 0 };
-
-    mnModeSelectNetplayMakeString(gobj, server ? "SET LOBBY SERVER" : "ENTER HOST IP",
-        server ? 82.0F : 92.0F, 45.0F, 0xFF, 0x20, 0x20);
-
-    for (i = 0; i < cells; i++)
-    {
-        letter[0] = sMNModeSelectNetplayAddrEdit[i];
-        if (letter[0] == '\0') letter[0] = ' ';
-        mnModeSelectNetplayMakeString(gobj, letter, x0 + (i * step), y,
-            (i == sMNModeSelectNetplayAddrCursor) ? 0xFF : 0xD0,
-            (i == sMNModeSelectNetplayAddrCursor) ? 0xFF : 0x20,
-            (i == sMNModeSelectNetplayAddrCursor) ? 0xFF : 0x20);
-    }
-    mnModeSelectNetplayMakeString(gobj, "UP DOWN CHANGE", 82.0F, 137.0F, 0xFF, 0x40, 0x40);
-    mnModeSelectNetplayMakeString(gobj, "LEFT RIGHT MOVE", 75.0F, 153.0F, 0xFF, 0x40, 0x40);
-    mnModeSelectNetplayMakeString(gobj, server ? "A SAVE B CANCEL" : "A CONNECT B CANCEL",
-        server ? 77.0F : 63.0F, 180.0F, 0xFF, 0x40, 0x40);
+    mnModeSelectNetplayMakeFrame(gobj, 66.0F, 86.0F, 0x82, 0x82, 0xAA);
+    mnModeSelectNetplayMakeStringScaled(gobj, label, 96.0F, 100.0F, 0xFF, 0xC0, 0x40, 1.15F);
+    mnModeSelectNetplayMakeString(gobj, "KEYBOARD OPEN", 106.0F, 124.0F, 0xA0, 0xFF, 0xA0);
 }
 
 static void mnModeSelectNetplayRefresh(void)
@@ -900,38 +1062,32 @@ static void mnModeSelectNetplayRefresh(void)
 
     if (sMNModeSelectNetplayPage == nMNModeSelectNetplayPageRoot)
     {
-        mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, "MULTIPLAYER", 111.0F, 42.0F, 0xFF, 0x20, 0x20);
+        mnModeSelectNetplayMakeStringScaled(sMNModeSelectNetplayGObj, "NETPLAY", 116.0F, 42.0F, 0xFF, 0x20, 0x20, 1.35F);
         for (i = 0; i < nMNModeSelectNetplayRootCount; i++)
         {
-            y = 75.0F + (i * 27.0F);
-            mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, root_options[i], 70.0F, y,
-                (i == sMNModeSelectNetplayOption) ? 0xFF : 0xD0,
-                (i == sMNModeSelectNetplayOption) ? 0xFF : 0x20,
-                (i == sMNModeSelectNetplayOption) ? 0xFF : 0x20);
+            y = 78.0F + (i * 28.0F);
+            mnModeSelectNetplayMakeTabRow(sMNModeSelectNetplayGObj, 90.0F, y, 16, root_options[i],
+                (i == sMNModeSelectNetplayOption));
         }
-        mnModeSelectNetplayMakeMarker(sMNModeSelectNetplayGObj, 75.0F + (sMNModeSelectNetplayOption * 27.0F));
         if (port_netplay_network_initialized() == FALSE)
         {
-            mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, "NETWORK INITIALIZING", 92.0F, 218.0F, 0xB0, 0xB0, 0xB0);
+            mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, "NETWORK INITIALIZING", 92.0F, 206.0F, 0xB0, 0xB0, 0xB0);
         }
-        else mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, "SELECT CONNECTION", 101.0F, 218.0F, 0xA0, 0xFF, 0xA0);
+        else mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, "SELECT CONNECTION", 101.0F, 206.0F, 0xA0, 0xFF, 0xA0);
     }
     else if (sMNModeSelectNetplayPage == nMNModeSelectNetplayPageMode)
     {
         const sb32 is_adhoc = (port_netplay_get_mode() == 1);
         const s32 adhoc_dialog_state = is_adhoc ? port_netplay_adhoc_dialog_state() : PORT_NETPLAY_ADHOC_DIALOG_INACTIVE;
-        mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj,
-            is_adhoc ? "LOCAL ADHOC" : "ONLINE", is_adhoc ? 107.0F : 127.0F, 42.0F,
-            0xFF, 0x20, 0x20);
+        mnModeSelectNetplayMakeStringScaled(sMNModeSelectNetplayGObj,
+            is_adhoc ? "LOCAL ADHOC" : "ONLINE", is_adhoc ? 104.0F : 128.0F, 42.0F,
+            0xFF, 0x20, 0x20, 1.35F);
         for (i = 0; i < nMNModeSelectNetplayModeCount; i++)
         {
-            y = 79.0F + (i * 29.0F);
-            mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, mode_options[i], 72.0F, y,
-                (i == sMNModeSelectNetplayOption) ? 0xFF : 0xD0,
-                (i == sMNModeSelectNetplayOption) ? 0xFF : 0x20,
-                (i == sMNModeSelectNetplayOption) ? 0xFF : 0x20);
+            y = 70.0F + (i * 26.0F);
+            mnModeSelectNetplayMakeTabRow(sMNModeSelectNetplayGObj, 90.0F, y, 16, mode_options[i],
+                (i == sMNModeSelectNetplayOption));
         }
-        mnModeSelectNetplayMakeMarker(sMNModeSelectNetplayGObj, 79.0F + (sMNModeSelectNetplayOption * 29.0F));
         if (port_netplay_mode_ready())
         {
             mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj,
@@ -1010,13 +1166,9 @@ static void mnModeSelectNetplayRefresh(void)
                 "A VERIFY  START RECORD", 70.0F, 218.0F, 0xD0, 0xD0, 0xD0);
         }
     }
-    else if (sMNModeSelectNetplayPage == nMNModeSelectNetplayPageNameEdit)
+    else if (sMNModeSelectNetplayPage == nMNModeSelectNetplayPageTextEntry)
     {
-        mnModeSelectNetplayMakeNameEdit(sMNModeSelectNetplayGObj);
-    }
-    else if (sMNModeSelectNetplayPage == nMNModeSelectNetplayPageJoinAddr)
-    {
-        mnModeSelectNetplayMakeJoinAddr(sMNModeSelectNetplayGObj);
+        mnModeSelectNetplayMakeTextEntry(sMNModeSelectNetplayGObj);
     }
     else if (sMNModeSelectNetplayPage == nMNModeSelectNetplayPageHostRules)
     {
@@ -1188,122 +1340,106 @@ static void mnModeSelectNetplayMoveOption(s32 delta, s32 count)
     mnModeSelectNetplayRefresh();
 }
 
-static void mnModeSelectNetplayBeginNameEdit(void)
+static void mnModeSelectNetplayBeginTextEntry(s32 target)
 {
-    char current[16];
-    s32 i;
+    char current[64];
+    const char *title;
+    s32 max_len;
+    s32 mode;
 
-    port_netplay_get_player_name(current, ARRAY_COUNT(current));
-    for (i = 0; i < 12; i++)
+    current[0] = '\0';
+    sMNModeSelectNetplayImeTarget = target;
+
+    switch (target)
     {
-        sMNModeSelectNetplayNameEdit[i] = (current[i] != '\0') ? current[i] : ' ';
-    }
-    sMNModeSelectNetplayNameEdit[12] = '\0';
-    sMNModeSelectNetplayNameCursor = 0;
-    sMNModeSelectNetplayPage = nMNModeSelectNetplayPageNameEdit;
-    mnModeSelectNetplayRefresh();
-}
-
-static void mnModeSelectNetplayCycleNameLetter(s32 delta)
-{
-    char c = sMNModeSelectNetplayNameEdit[sMNModeSelectNetplayNameCursor];
-    s32 index = (c == ' ') ? 0 : (c - 'A') + 1;
-
-    index += delta;
-    if (index < 0) index = 26;
-    if (index > 26) index = 0;
-    sMNModeSelectNetplayNameEdit[sMNModeSelectNetplayNameCursor] = (index == 0) ? ' ' : ('A' + index - 1);
-    func_800269C0_275C0(nSYAudioFGMMenuScroll2);
-    mnModeSelectNetplayRefresh();
-}
-
-static void mnModeSelectNetplayBeginJoinAddr(void)
-{
-    char current[16];
-    s32 i;
-
-    sMNModeSelectNetplayAddrTarget = 0;
-    port_netplay_get_join_address(current, ARRAY_COUNT(current));
-    for (i = 0; i < 15; i++)
-    {
-        sMNModeSelectNetplayAddrEdit[i] = (current[i] != '\0') ? current[i] : ' ';
-    }
-    sMNModeSelectNetplayAddrEdit[15] = '\0';
-    sMNModeSelectNetplayAddrCursor = 0;
-    sMNModeSelectNetplayPage = nMNModeSelectNetplayPageJoinAddr;
-    mnModeSelectNetplayRefresh();
-}
-
-static void mnModeSelectNetplayBeginServerEdit(void)
-{
-    char current[40];
-    s32 i;
-    const s32 cells = 27;
-
-    sMNModeSelectNetplayAddrTarget = 1;
-    port_netplay_get_rendezvous_server(current, ARRAY_COUNT(current));
-    for (i = 0; i < cells; i++)
-    {
-        sMNModeSelectNetplayAddrEdit[i] = (current[i] != '\0') ? current[i] : ' ';
-    }
-    sMNModeSelectNetplayAddrEdit[cells] = '\0';
-    sMNModeSelectNetplayAddrCursor = 0;
-    sMNModeSelectNetplayPage = nMNModeSelectNetplayPageJoinAddr;
-    mnModeSelectNetplayRefresh();
-}
-
-static void mnModeSelectNetplayCycleAddrChar(s32 delta)
-{
-    static const char ip_set[] = " 0123456789.";
-    static const char host_set[] = " 0123456789.-ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    const char *set = (sMNModeSelectNetplayAddrTarget == 1) ? host_set : ip_set;
-    const s32 count = (sMNModeSelectNetplayAddrTarget == 1) ? 38 : 12;
-    char c = sMNModeSelectNetplayAddrEdit[sMNModeSelectNetplayAddrCursor];
-    s32 index = 0;
-    s32 k;
-
-    for (k = 0; k < count; k++)
-    {
-        if (set[k] == c) { index = k; break; }
-    }
-    index += delta;
-    if (index < 0) index = count - 1;
-    if (index >= count) index = 0;
-    sMNModeSelectNetplayAddrEdit[sMNModeSelectNetplayAddrCursor] = set[index];
-    func_800269C0_275C0(nSYAudioFGMMenuScroll2);
-    mnModeSelectNetplayRefresh();
-}
-
-static void mnModeSelectNetplayCommitJoinAddr(void)
-{
-    char buf[40];
-    const s32 cells = mnModeSelectNetplayAddrCells();
-    s32 i;
-    s32 n = 0;
-
-    for (i = 0; i < cells; i++)
-    {
-        if (sMNModeSelectNetplayAddrEdit[i] != ' ') buf[n++] = sMNModeSelectNetplayAddrEdit[i];
-    }
-    buf[n] = '\0';
-
-    if (sMNModeSelectNetplayAddrTarget == 1)
-    {
-        port_netplay_set_rendezvous_server(buf);
-        sMNModeSelectNetplayPage = nMNModeSelectNetplayPageSettings;
-        sMNModeSelectNetplayOption = nMNModeSelectNetplaySettingsServer;
-        func_800269C0_275C0(nSYAudioFGMMenuSelect);
-        mnModeSelectNetplayRefresh();
-        return;
+    case 1:
+        port_netplay_get_join_address(current, ARRAY_COUNT(current));
+        title = "HOST IP ADDRESS";
+        max_len = 15;
+        mode = 1;
+        break;
+    case 2:
+        port_netplay_get_rendezvous_server(current, ARRAY_COUNT(current));
+        title = "LOBBY SERVER";
+        max_len = 60;
+        mode = 0;
+        break;
+    default:
+        port_netplay_get_player_name(current, ARRAY_COUNT(current));
+        title = "PLAYER NAME";
+        max_len = 12;
+        mode = 0;
+        break;
     }
 
-    if (port_netplay_join_address(buf) != 0)
+    if (port_netplay_ime_begin(title, current, max_len, mode))
     {
-        sMNModeSelectNetplayPage = nMNModeSelectNetplayPageJoin;
-        sMNModeSelectNetplayOption = 0;
-        func_800269C0_275C0(nSYAudioFGMMenuSelect);
+        sMNModeSelectNetplayPage = nMNModeSelectNetplayPageTextEntry;
     }
     else func_800269C0_275C0(nSYAudioFGMMenuDenied);
+    mnModeSelectNetplayRefresh();
+}
+
+static void mnModeSelectNetplayFinishTextEntry(void)
+{
+    s32 state = port_netplay_ime_state();
+    s32 target = sMNModeSelectNetplayImeTarget;
+
+    if (state == 2)
+    {
+        char buf[64];
+
+        port_netplay_ime_result(buf, ARRAY_COUNT(buf));
+        port_netplay_ime_cancel();
+
+        if (target == 1)
+        {
+            if (port_netplay_join_address(buf) != 0)
+            {
+                sMNModeSelectNetplayPage = nMNModeSelectNetplayPageJoin;
+                sMNModeSelectNetplayOption = 0;
+                func_800269C0_275C0(nSYAudioFGMMenuSelect);
+            }
+            else
+            {
+                sMNModeSelectNetplayPage = nMNModeSelectNetplayPageMode;
+                sMNModeSelectNetplayOption = nMNModeSelectNetplayModeDirect;
+                func_800269C0_275C0(nSYAudioFGMMenuDenied);
+            }
+        }
+        else if (target == 2)
+        {
+            port_netplay_set_rendezvous_server(buf);
+            sMNModeSelectNetplayPage = nMNModeSelectNetplayPageSettings;
+            sMNModeSelectNetplayOption = nMNModeSelectNetplaySettingsServer;
+            func_800269C0_275C0(nSYAudioFGMMenuSelect);
+        }
+        else
+        {
+            port_netplay_set_player_name(buf);
+            sMNModeSelectNetplayPage = nMNModeSelectNetplayPageSettings;
+            sMNModeSelectNetplayOption = nMNModeSelectNetplaySettingsName;
+            func_800269C0_275C0(nSYAudioFGMMenuSelect);
+        }
+    }
+    else
+    {
+        port_netplay_ime_cancel();
+        if (target == 1)
+        {
+            sMNModeSelectNetplayPage = nMNModeSelectNetplayPageMode;
+            sMNModeSelectNetplayOption = nMNModeSelectNetplayModeDirect;
+        }
+        else
+        {
+            sMNModeSelectNetplayPage = nMNModeSelectNetplayPageSettings;
+            sMNModeSelectNetplayOption = (target == 2)
+                ? nMNModeSelectNetplaySettingsServer
+                : nMNModeSelectNetplaySettingsName;
+        }
+        func_800269C0_275C0(nSYAudioFGMMenuScroll1);
+    }
+    sMNModeSelectNetplayNavWait = 10;
     mnModeSelectNetplayRefresh();
 }
 
@@ -1360,71 +1496,15 @@ static void mnModeSelectNetplayFuncRun(void)
         }
     }
 
-    if (sMNModeSelectNetplayPage == nMNModeSelectNetplayPageNameEdit)
+    if (sMNModeSelectNetplayPage == nMNModeSelectNetplayPageTextEntry)
     {
-        if (up) mnModeSelectNetplayCycleNameLetter(+1);
-        else if (down) mnModeSelectNetplayCycleNameLetter(-1);
-        else if (left)
+        port_netplay_ime_tick();
+        if (port_netplay_ime_state() != 1)
         {
-            sMNModeSelectNetplayNameCursor = (sMNModeSelectNetplayNameCursor == 0) ? 11 : sMNModeSelectNetplayNameCursor - 1;
-            func_800269C0_275C0(nSYAudioFGMMenuScroll2);
-            mnModeSelectNetplayRefresh();
+            mnModeSelectNetplayFinishTextEntry();
         }
-        else if (right)
+        else if ((sMNModeSelectTotalTimeTics % 15) == 0)
         {
-            sMNModeSelectNetplayNameCursor = (sMNModeSelectNetplayNameCursor == 11) ? 0 : sMNModeSelectNetplayNameCursor + 1;
-            func_800269C0_275C0(nSYAudioFGMMenuScroll2);
-            mnModeSelectNetplayRefresh();
-        }
-        else if (accept)
-        {
-            port_netplay_set_player_name(sMNModeSelectNetplayNameEdit);
-            sMNModeSelectNetplayPage = nMNModeSelectNetplayPageSettings;
-            sMNModeSelectNetplayOption = nMNModeSelectNetplaySettingsName;
-            func_800269C0_275C0(nSYAudioFGMMenuSelect);
-            mnModeSelectNetplayRefresh();
-        }
-        else if (cancel)
-        {
-            sMNModeSelectNetplayPage = nMNModeSelectNetplayPageSettings;
-            sMNModeSelectNetplayOption = nMNModeSelectNetplaySettingsName;
-            func_800269C0_275C0(nSYAudioFGMMenuScroll1);
-            mnModeSelectNetplayRefresh();
-        }
-        return;
-    }
-
-    if (sMNModeSelectNetplayPage == nMNModeSelectNetplayPageJoinAddr)
-    {
-        const s32 last = mnModeSelectNetplayAddrCells() - 1;
-        if (up) mnModeSelectNetplayCycleAddrChar(+1);
-        else if (down) mnModeSelectNetplayCycleAddrChar(-1);
-        else if (left)
-        {
-            sMNModeSelectNetplayAddrCursor = (sMNModeSelectNetplayAddrCursor == 0) ? last : sMNModeSelectNetplayAddrCursor - 1;
-            func_800269C0_275C0(nSYAudioFGMMenuScroll2);
-            mnModeSelectNetplayRefresh();
-        }
-        else if (right)
-        {
-            sMNModeSelectNetplayAddrCursor = (sMNModeSelectNetplayAddrCursor == last) ? 0 : sMNModeSelectNetplayAddrCursor + 1;
-            func_800269C0_275C0(nSYAudioFGMMenuScroll2);
-            mnModeSelectNetplayRefresh();
-        }
-        else if (accept) mnModeSelectNetplayCommitJoinAddr();
-        else if (cancel)
-        {
-            if (sMNModeSelectNetplayAddrTarget == 1)
-            {
-                sMNModeSelectNetplayPage = nMNModeSelectNetplayPageSettings;
-                sMNModeSelectNetplayOption = nMNModeSelectNetplaySettingsServer;
-            }
-            else
-            {
-                sMNModeSelectNetplayPage = nMNModeSelectNetplayPageMode;
-                sMNModeSelectNetplayOption = nMNModeSelectNetplayModeDirect;
-            }
-            func_800269C0_275C0(nSYAudioFGMMenuScroll1);
             mnModeSelectNetplayRefresh();
         }
         return;
@@ -1721,12 +1801,12 @@ static void mnModeSelectNetplayFuncRun(void)
         {
             if (sMNModeSelectNetplayOption == nMNModeSelectNetplaySettingsName)
             {
-                mnModeSelectNetplayBeginNameEdit();
+                mnModeSelectNetplayBeginTextEntry(0);
                 return;
             }
             if (sMNModeSelectNetplayOption == nMNModeSelectNetplaySettingsServer)
             {
-                mnModeSelectNetplayBeginServerEdit();
+                mnModeSelectNetplayBeginTextEntry(2);
                 return;
             }
             if (sMNModeSelectNetplayOption == nMNModeSelectNetplaySettingsReset)
@@ -1797,8 +1877,8 @@ static void mnModeSelectNetplayFuncRun(void)
                 port_netplay_start_discovery();
                 break;
             case nMNModeSelectNetplayModeDirect:
-                mnModeSelectNetplayBeginJoinAddr();
-                break;
+                mnModeSelectNetplayBeginTextEntry(1);
+                return;
             }
             func_800269C0_275C0(nSYAudioFGMMenuSelect);
             mnModeSelectNetplayRefresh();
@@ -2506,9 +2586,7 @@ void mnModeSelectInitVars(void)
     sMNModeSelectNetplayRuleCursor = 0;
     sMNModeSelectNetplayItemCursor = 0;
     sMNModeSelectNetplayItemScroll = 0;
-    sMNModeSelectNetplayNameCursor = 0;
-    sMNModeSelectNetplayAddrCursor = 0;
-    sMNModeSelectNetplayAddrTarget = 0;
+    sMNModeSelectNetplayImeTarget = 0;
 #endif
 
     sMNModeSelectTotalTimeTics = 0;
@@ -2725,7 +2803,7 @@ void mnModeSelectFuncStart(void)
         s32 np_state = port_netplay_get_state();
 
         gMNNetplayOverlayRequest = FALSE;
-        mnModeSelectMakeDecals();
+        mnModeSelectNetplayMakeBackground();
         port_netplay_enter_menu();
         if (!fresh_request &&
             ((np_state == PORT_NETPLAY_STATE_HOSTING_LOBBY) || (np_state == PORT_NETPLAY_STATE_CLIENT_LOBBY)))
