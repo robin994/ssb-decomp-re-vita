@@ -10,6 +10,9 @@
 #ifdef PORT
 #include <sys/netrollback.h>
 #endif
+#if defined(PORT) && defined(__vita__)
+#include <psp2/ctrl.h>
+#endif
 
 // 0x800450F0
 OSMesgQueue sSYControllerInitMesgQueue; // Queue for OS controller Init, Status, and Read
@@ -72,12 +75,14 @@ Unk80045268 D_80045268[MAXCONTROLLERS];
 OSPfs sSYControllerMotorPfs[MAXCONTROLLERS];
 
 #if defined(PORT) && defined(__vita__)
-// Vita's D-pad doubles as a digital approximation of the N64 analog stick
-// during gameplay. A normal press stays below Smash 64's dash/run threshold;
-// a second press in the same direction within ~220 ms reaches full range.
+// Vita's D-pad is the N64 D-pad (menu nav). In gameplay it emulates the left
+// analog stick: up/down = full-range Y (jump/crouch), left/right = X (single
+// press < dash threshold, second press within ~220 ms = full range). Taunt is
+// a flick of the right analog stick.
 #define SYCONTROLLER_VITA_DPAD_SLOW_RANGE 48
 #define SYCONTROLLER_VITA_DPAD_FAST_RANGE 80
 #define SYCONTROLLER_VITA_DPAD_DOUBLE_TAP_TICS 13
+#define SYCONTROLLER_VITA_RSTICK_TAUNT_DEADZONE 68
 
 typedef struct SYControllerVitaDPadState
 {
@@ -101,10 +106,57 @@ static void syControllerVitaResetDPadState(s32 player)
     state->left_fast = state->right_fast = FALSE;
 }
 
+// Read the Vita sticks/D-pad straight from sceCtrl so the layout is fixed
+// regardless of any saved LUS binding (older installs route the D-pad to
+// L_TRIG). D-pad -> N64 D-pad directions (menu nav + gameplay stick synth in
+// syControllerVitaApplyDPadMovement). Right stick flick -> L_TRIG taunt,
+// gameplay only.
+static void syControllerVitaForceDPad(void)
+{
+    SceCtrlData pad;
+    u16 *button;
+    u8 scene;
+    sb32 in_gameplay;
+    s32 rx;
+    s32 ry;
+
+    if (sSYControllerData[0].errno != 0)
+    {
+        return;
+    }
+
+    sceCtrlPeekBufferPositive(0, &pad, 1);
+    button = &sSYControllerData[0].button;
+
+    *button &= ~(U_JPAD | D_JPAD | L_JPAD | R_JPAD | L_TRIG);
+    if (pad.buttons & SCE_CTRL_UP)    *button |= U_JPAD;
+    if (pad.buttons & SCE_CTRL_DOWN)  *button |= D_JPAD;
+    if (pad.buttons & SCE_CTRL_LEFT)  *button |= L_JPAD;
+    if (pad.buttons & SCE_CTRL_RIGHT) *button |= R_JPAD;
+
+    scene = gSCManagerSceneData.scene_curr;
+    in_gameplay = (scene == nSCKindVSBattle
+                   || scene == nSCKind1PGame
+                   || scene == nSCKind1PBonusStage
+                   || scene == nSCKind1PTrainingMode);
+    if (in_gameplay)
+    {
+        rx = (s32)pad.rx - 128;
+        ry = (s32)pad.ry - 128;
+        if ((rx * rx + ry * ry)
+            > (SYCONTROLLER_VITA_RSTICK_TAUNT_DEADZONE * SYCONTROLLER_VITA_RSTICK_TAUNT_DEADZONE))
+        {
+            *button |= L_TRIG;
+        }
+    }
+}
+
 static void syControllerVitaApplyDPadMovement(s32 player, u16 button_hold, u16 button_tap, s8 *stick_x, s8 *stick_y, sb32 in_gameplay)
 {
     SYControllerVitaDPadState *state;
     u32 tic;
+    u16 hold;
+    u16 tap;
     sb32 left_hold;
     sb32 right_hold;
     sb32 up_hold;
@@ -121,6 +173,8 @@ static void syControllerVitaApplyDPadMovement(s32 player, u16 button_hold, u16 b
         return;
     }
 
+    hold = button_hold;
+    tap = button_tap;
     state = &sSYControllerVitaDPadStates[player];
     tic = sySchedulerGetTicCount();
 
@@ -133,7 +187,7 @@ static void syControllerVitaApplyDPadMovement(s32 player, u16 button_hold, u16 b
         state->right_tap_armed = FALSE;
     }
 
-    if (button_tap & L_JPAD)
+    if (tap & L_JPAD)
     {
         state->right_tap_armed = FALSE;
         state->right_fast = FALSE;
@@ -150,7 +204,7 @@ static void syControllerVitaApplyDPadMovement(s32 player, u16 button_hold, u16 b
             state->last_left_tap = tic;
         }
     }
-    if (button_tap & R_JPAD)
+    if (tap & R_JPAD)
     {
         state->left_tap_armed = FALSE;
         state->left_fast = FALSE;
@@ -168,10 +222,10 @@ static void syControllerVitaApplyDPadMovement(s32 player, u16 button_hold, u16 b
         }
     }
 
-    left_hold = (button_hold & L_JPAD) != 0;
-    right_hold = (button_hold & R_JPAD) != 0;
-    up_hold = (button_hold & U_JPAD) != 0;
-    down_hold = (button_hold & D_JPAD) != 0;
+    left_hold = (hold & L_JPAD) != 0;
+    right_hold = (hold & R_JPAD) != 0;
+    up_hold = (hold & U_JPAD) != 0;
+    down_hold = (hold & D_JPAD) != 0;
 
     if (!left_hold)
     {
@@ -195,8 +249,8 @@ static void syControllerVitaApplyDPadMovement(s32 player, u16 button_hold, u16 b
         }
     }
 
-    // Vertical D-pad input mirrors a full-range analog Y direction. This keeps
-    // jump/crouch/drop-through behaviour identical to pushing the stick fully.
+    // Vertical D-pad mirrors a full-range analog Y direction (jump / crouch /
+    // fastfall), identical to pushing the left stick fully.
     if ((*stick_y == 0) && (up_hold != down_hold))
     {
         *stick_y = up_hold ? SYCONTROLLER_VITA_DPAD_FAST_RANGE : -SYCONTROLLER_VITA_DPAD_FAST_RANGE;
@@ -256,6 +310,10 @@ void syControllerReadDeviceData(void)
     osContStartReadData(&sSYControllerInitMesgQueue);
     osRecvMesg(&sSYControllerInitMesgQueue, NULL, OS_MESG_BLOCK);
     osContGetReadData(sSYControllerData);
+
+#if defined(PORT) && defined(__vita__)
+    syControllerVitaForceDPad();
+#endif
 
     for (i = 0; i != MAXCONTROLLERS; i++)
     {
@@ -362,7 +420,7 @@ void syControllerUpdateGlobalData(void)
 #if defined(PORT) && defined(__vita__)
             syControllerVitaApplyDPadMovement(i,
                 gSYControllerDevices[i].button_hold,
-                sSYControllerDescs[i].unk04,
+                gSYControllerDevices[i].button_tap,
                 &gSYControllerDevices[i].stick_range.x,
                 &gSYControllerDevices[i].stick_range.y,
                 in_gameplay);

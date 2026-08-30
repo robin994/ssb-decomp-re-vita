@@ -308,6 +308,8 @@ static f32 mnModeSelectNetplayMakeStringScaled(GObj *gobj, const char *str, f32 
     {
         char ch = str[i];
 
+        if ((ch >= 'a') && (ch <= 'z')) ch = ch - 'a' + 'A';
+
         if (ch == ' ')
         {
             x += 5.0F * scale;
@@ -520,25 +522,6 @@ static void mnModeSelectNetplayMakeBackground(void)
     sobj->sprite.blue = 0x99;
     sobj->pos.x = 10.0F;
     sobj->pos.y = 10.0F;
-}
-
-static void mnModeSelectNetplayMakeMarker(GObj *gobj, f32 y)
-{
-    SObj *sobj = lbCommonMakeSObjForGObj(gobj,
-        lbRelocGetFileData(Sprite*, sMNModeSelectFiles[1], llMNMainConsoleIconSprite));
-
-    sobj->sprite.attr &= ~SP_FASTCOPY;
-    sobj->sprite.attr |= SP_TRANSPARENT;
-    sobj->sprite.red = 0xFF;
-    sobj->sprite.green = 0xFF;
-    sobj->sprite.blue = 0xFF;
-    sobj->envcolor.r = 0x00;
-    sobj->envcolor.g = 0x00;
-    sobj->envcolor.b = 0x00;
-    sobj->pos.x = 18.0F;
-    sobj->pos.y = y - 8.0F;
-    sobj->sprite.scalex = 0.45F;
-    sobj->sprite.scaley = 0.45F;
 }
 
 static const char* mnModeSelectNetplayGetDelayText(void)
@@ -811,7 +794,7 @@ static void mnModeSelectNetplayMakeRules(GObj *gobj)
         n += snprintf(line + n, sizeof(line) - n, (row == nMNModeSelectNetplayRuleStage) ? "%s %s" : "  %s %s",
             labels[row], value);
     }
-    mnModeSelectNetplayMakeString(gobj, line, 20.0F, 181.0F, 0xB0, 0xB0, 0xB0);
+    mnModeSelectNetplayMakeStringScaled(gobj, line, 20.0F, 180.0F, 0xC8, 0xC8, 0xC8, 0.75F);
 
     n = 0;
     for (row = nMNModeSelectNetplayRuleItems; row <= nMNModeSelectNetplayRuleHandicap; row++)
@@ -821,11 +804,11 @@ static void mnModeSelectNetplayMakeRules(GObj *gobj)
         n += snprintf(line + n, sizeof(line) - n, (row == nMNModeSelectNetplayRuleItems) ? "%s %s" : "  %s %s",
             labels[row], value);
     }
-    mnModeSelectNetplayMakeString(gobj, line, 20.0F, 193.0F, 0xB0, 0xB0, 0xB0);
+    mnModeSelectNetplayMakeStringScaled(gobj, line, 20.0F, 191.0F, 0xC8, 0xC8, 0xC8, 0.75F);
 
     if (is_host)
     {
-        mnModeSelectNetplayMakeString(gobj, "R  MATCH RULES", 20.0F, 206.0F, 0xA0, 0xFF, 0xA0);
+        mnModeSelectNetplayMakeStringScaled(gobj, "R MATCH RULES", 20.0F, 203.0F, 0xFF, 0xAE, 0x00, 0.85F);
     }
 }
 
@@ -840,22 +823,24 @@ static void mnModeSelectNetplayMakeHostRulesPage(GObj *gobj)
     char line[48];
     s32 row;
 
-    mnModeSelectNetplayMakeString(gobj, "MATCH RULES", 108.0F, 32.0F, 0xFF, 0x20, 0x20);
+    mnModeSelectNetplayMakeStringScaled(gobj, "MATCH RULES", 96.0F, 28.0F, 0xFF, 0x20, 0x20, 1.3F);
 
     for (row = 0; row < nMNModeSelectNetplayRuleCount; row++)
     {
-        f32 y = 54.0F + (row * 17.0F);
+        f32 y = 50.0F + (row * 18.0F);
         sb32 hot = (row == sMNModeSelectNetplayRuleCursor);
+
+        mnModeSelectNetplayMakeTab(gobj, 44.0F, y - 4.0F, 28,
+            hot ? nMNOptionTabStatusHighlight : nMNOptionTabStatusNot);
+        if (hot) mnModeSelectNetplayMakeCursor(gobj, 30.0F, y - 1.0F);
 
         mnModeSelectNetplayFormatRuleValue(row, TRUE, value, sizeof(value));
         snprintf(line, sizeof(line), "%s", labels[row]);
-        mnModeSelectNetplayMakeString(gobj, line, 40.0F, y,
-            hot ? 0xFF : 0xD0, hot ? 0xFF : 0xD0, hot ? 0x40 : 0xD0);
-        mnModeSelectNetplayMakeString(gobj, value, 200.0F, y,
-            hot ? 0xFF : 0xC0, hot ? 0xFF : 0xC0, hot ? 0x40 : 0x40);
+        mnModeSelectNetplayMakeString(gobj, line, 62.0F, y, 0x00, 0x00, 0x00);
+        mnModeSelectNetplayMakeString(gobj, value, 208.0F, y, 0x00, 0x00, 0x00);
     }
 
-    mnModeSelectNetplayMakeString(gobj, "L R CHANGE   A ITEM LIST   B BACK", 44.0F, 214.0F, 0xFF, 0x40, 0x40);
+    mnModeSelectNetplayMakeStringScaled(gobj, "L R CHANGE   A ITEM LIST   B BACK", 44.0F, 216.0F, 0xFF, 0x40, 0x40, 0.82F);
 }
 
 static void mnModeSelectNetplayMakeItemTogglesPage(GObj *gobj)
@@ -863,25 +848,29 @@ static void mnModeSelectNetplayMakeItemTogglesPage(GObj *gobj)
     u32 mask = (u32)port_netplay_hostrules_get_item_toggles();
     s32 i;
 
-    mnModeSelectNetplayMakeString(gobj, "ITEM LIST", 118.0F, 32.0F, 0xFF, 0x20, 0x20);
+    mnModeSelectNetplayMakeStringScaled(gobj, "ITEM LIST", 104.0F, 28.0F, 0xFF, 0x20, 0x20, 1.3F);
 
     for (i = 0; i < MNNP_ITEM_LIST_VIEW; i++)
     {
         s32 idx = sMNModeSelectNetplayItemScroll + i;
-        f32 y = 54.0F + (i * 19.0F);
+        f32 y = 52.0F + (i * 20.0F);
         sb32 hot;
         sb32 on;
 
         if (idx >= MNNP_ITEM_LIST_COUNT) break;
         hot = (idx == sMNModeSelectNetplayItemCursor);
         on = (mask & ITEM_TOGGLE_MASK_KIND(sMNModeSelectNetplayItemKinds[idx])) != 0;
-        mnModeSelectNetplayMakeString(gobj, sMNModeSelectNetplayItemNames[idx], 44.0F, y,
-            hot ? 0xFF : 0xD0, hot ? 0xFF : 0xD0, hot ? 0x40 : 0xD0);
+
+        mnModeSelectNetplayMakeTab(gobj, 46.0F, y - 4.0F, 28,
+            hot ? nMNOptionTabStatusHighlight : nMNOptionTabStatusNot);
+        if (hot) mnModeSelectNetplayMakeCursor(gobj, 32.0F, y - 1.0F);
+
+        mnModeSelectNetplayMakeString(gobj, sMNModeSelectNetplayItemNames[idx], 64.0F, y, 0x00, 0x00, 0x00);
         mnModeSelectNetplayMakeString(gobj, on ? "ON" : "OFF", 236.0F, y,
-            on ? 0xA0 : 0x90, on ? 0xFF : 0x90, on ? 0x40 : 0x90);
+            on ? 0x00 : 0x60, on ? 0x00 : 0x60, on ? 0x00 : 0x60);
     }
 
-    mnModeSelectNetplayMakeString(gobj, "L R TOGGLE   B BACK", 82.0F, 214.0F, 0xFF, 0x40, 0x40);
+    mnModeSelectNetplayMakeString(gobj, "L R TOGGLE   B BACK", 84.0F, 216.0F, 0xFF, 0x40, 0x40);
 }
 
 static const char* mnModeSelectNetplayGetDeterminismText(void)
@@ -938,30 +927,50 @@ static void mnModeSelectNetplayMakeLobby(GObj *gobj, const char *title)
     s32 ping;
     s32 jitter;
 
-    mnModeSelectNetplayMakeString(gobj, title, 112.0F, 33.0F, 0xFF, 0x20, 0x20);
+    mnModeSelectNetplayMakeStringScaled(gobj, title, 100.0F, 30.0F, 0xFF, 0x20, 0x20, 1.3F);
     port_netplay_get_local_ip(local_ip, ARRAY_COUNT(local_ip));
     if (port_netplay_lobby_is_host())
     {
-        snprintf(line, sizeof(line), (port_netplay_get_mode() == 1) ? "MAC %s" : "IP %s", local_ip);
-        mnModeSelectNetplayMakeString(gobj, line, 28.0F, 52.0F, 0xA0, 0xFF, 0xA0);
+        char public_ip[24];
+        const sb32 online = (port_netplay_get_mode() != 1);
+        s32 map_state = port_netplay_get_portmap_state();
+
+        snprintf(line, sizeof(line), online ? "LOCAL %s" : "MAC %s", local_ip);
+        mnModeSelectNetplayMakeStringScaled(gobj, line, 28.0F, 50.0F, 0xA0, 0xFF, 0xA0, 0.80F);
+
+        public_ip[0] = '\0';
+        port_netplay_get_public_ip(public_ip, ARRAY_COUNT(public_ip));
+        if (online && (map_state == 1))
+        {
+            mnModeSelectNetplayMakeStringScaled(gobj, "OPENING PORTS", 28.0F, 60.0F, 0xFF, 0xC0, 0x40, 0.80F);
+        }
+        else if (online && (public_ip[0] != '\0'))
+        {
+            snprintf(line, sizeof(line), (map_state == 2) ? "PUBLIC %s OPEN" : "PUBLIC %s", public_ip);
+            mnModeSelectNetplayMakeStringScaled(gobj, line, 28.0F, 60.0F,
+                (map_state == 2) ? 0xA0 : 0xFF, (map_state == 2) ? 0xFF : 0xAE,
+                (map_state == 2) ? 0xA0 : 0x00, 0.80F);
+        }
     }
-    mnModeSelectNetplayMakeProtocolLine(gobj, 66.0F);
+    mnModeSelectNetplayMakeProtocolLine(gobj, 72.0F);
 
     for (slot = 0; slot < 4; slot++)
     {
+        f32 row_y = 88.0F + (slot * 21.0F);
+
         player_name[0] = '\0';
         state = ping = jitter = 0;
         port_netplay_lobby_get_slot(slot, player_name, ARRAY_COUNT(player_name), &state, &ping, &jitter);
         if (player_name[0] == '\0') snprintf(player_name, sizeof(player_name), "EMPTY");
         snprintf(line, sizeof(line), "P%d %s", slot + 1, player_name);
-        mnModeSelectNetplayMakeString(gobj, line, 34.0F, 88.0F + (slot * 28.0F),
-            (state == 2) ? 0xA0 : 0xF0, (state == 2) ? 0xFF : 0xD0, (state == 3) ? 0x40 : 0xD0);
-        mnModeSelectNetplayMakeString(gobj, mnModeSelectNetplayGetSlotStateText(state), 155.0F,
-            88.0F + (slot * 28.0F), (state == 2) ? 0xA0 : 0xD0, (state == 2) ? 0xFF : 0xB0, 0x80);
+        mnModeSelectNetplayMakeStringScaled(gobj, line, 32.0F, row_y,
+            (state == 2) ? 0xA0 : 0xF0, (state == 2) ? 0xFF : 0xD0, (state == 3) ? 0x40 : 0xD0, 0.85F);
+        mnModeSelectNetplayMakeStringScaled(gobj, mnModeSelectNetplayGetSlotStateText(state), 150.0F,
+            row_y, (state == 2) ? 0xA0 : 0xD0, (state == 2) ? 0xFF : 0xB0, 0x80, 0.85F);
         if ((state == 1) || (state == 2))
         {
             snprintf(line, sizeof(line), "%d MS", ping);
-            mnModeSelectNetplayMakeString(gobj, line, 250.0F, 88.0F + (slot * 28.0F), 0xD0, 0xD0, 0xD0);
+            mnModeSelectNetplayMakeStringScaled(gobj, line, 256.0F, row_y, 0xD0, 0xD0, 0xD0, 0.85F);
         }
     }
 
@@ -970,26 +979,30 @@ static void mnModeSelectNetplayMakeLobby(GObj *gobj, const char *title)
     port_netplay_get_lobby_message(message, ARRAY_COUNT(message));
     if (message[0] != '\0')
     {
-        mnModeSelectNetplayMakeString(gobj, message, 84.0F, 200.0F, 0xFF, 0xC0, 0x40);
+        mnModeSelectNetplayMakeString(gobj, message, 44.0F, 168.0F, 0xFF, 0xC0, 0x40);
     }
     if (port_netplay_lobby_is_host())
     {
+        mnModeSelectNetplayMakeTab(gobj, 22.0F, 216.0F, 10, nMNOptionTabStatusNot);
         mnModeSelectNetplayMakeString(gobj, port_netplay_lobby_local_ready() ? "A UNREADY" : "A READY",
-            32.0F, 219.0F, 0xFF, 0x40, 0x40);
-        mnModeSelectNetplayMakeString(gobj, port_netplay_lobby_can_start() ? "START GO" : "START WAIT",
-            126.0F, 219.0F, port_netplay_lobby_can_start() ? 0xA0 : 0x80,
-            port_netplay_lobby_can_start() ? 0xFF : 0x80, 0x80);
-        mnModeSelectNetplayMakeString(gobj, "B LEAVE", 237.0F, 219.0F, 0xFF, 0x40, 0x40);
+            40.0F, 220.0F, 0x00, 0x00, 0x00);
+        mnModeSelectNetplayMakeTab(gobj, 128.0F, 216.0F, 11,
+            port_netplay_lobby_can_start() ? nMNOptionTabStatusHighlight : nMNOptionTabStatusNot);
+        mnModeSelectNetplayMakeString(gobj, "START", 148.0F, 220.0F, 0x00, 0x00, 0x00);
+        mnModeSelectNetplayMakeTab(gobj, 224.0F, 216.0F, 9, nMNOptionTabStatusNot);
+        mnModeSelectNetplayMakeString(gobj, "B LEAVE", 242.0F, 220.0F, 0x00, 0x00, 0x00);
     }
     else
     {
+        mnModeSelectNetplayMakeTab(gobj, 66.0F, 216.0F, 12, nMNOptionTabStatusNot);
         mnModeSelectNetplayMakeString(gobj, port_netplay_lobby_local_ready() ? "A UNREADY" : "A READY",
-            80.0F, 219.0F, 0xFF, 0x40, 0x40);
-        mnModeSelectNetplayMakeString(gobj, "B LEAVE", 205.0F, 219.0F, 0xFF, 0x40, 0x40);
+            84.0F, 220.0F, 0x00, 0x00, 0x00);
+        mnModeSelectNetplayMakeTab(gobj, 186.0F, 216.0F, 9, nMNOptionTabStatusNot);
+        mnModeSelectNetplayMakeString(gobj, "B LEAVE", 204.0F, 220.0F, 0x00, 0x00, 0x00);
     }
 }
 
-static void mnModeSelectNetplayMakeDiscoveryDetail(GObj *gobj, s32 index, f32 y)
+static void mnModeSelectNetplayMakeDiscoveryDetail(GObj *gobj, s32 index, f32 y, sb32 is_hot)
 {
     char host[20];
     char ip[20];
@@ -1005,11 +1018,15 @@ static void mnModeSelectNetplayMakeDiscoveryDetail(GObj *gobj, s32 index, f32 y)
     if (!port_netplay_get_discovery_lobby(index, host, ARRAY_COUNT(host), ip, ARRAY_COUNT(ip),
         build, ARRAY_COUNT(build), &players, &max_players, &ping, &protocol, &status, &compatible)) return;
 
-    snprintf(line, sizeof(line), "%s %s", host, mnModeSelectNetplayGetLobbyStatusText(status));
-    mnModeSelectNetplayMakeString(gobj, line, 50.0F, y, compatible ? 0xF0 : 0xFF,
-        compatible ? 0xD0 : 0x80, compatible ? 0xD0 : 0x40);
-    snprintf(line, sizeof(line), "%d OF %d  %d MS  V%d BUILD %s", players, max_players, ping, protocol, build);
-    mnModeSelectNetplayMakeString(gobj, line, 50.0F, y + 15.0F, 0xB0, 0xB0, 0xB0);
+    mnModeSelectNetplayMakeTab(gobj, 44.0F, y - 3.0F, 30,
+        is_hot ? nMNOptionTabStatusHighlight : nMNOptionTabStatusNot);
+    if (is_hot) mnModeSelectNetplayMakeCursor(gobj, 30.0F, y);
+
+    snprintf(line, sizeof(line), "%s  %s", host, mnModeSelectNetplayGetLobbyStatusText(status));
+    mnModeSelectNetplayMakeString(gobj, line, 64.0F, y + 2.0F, compatible ? 0xFF : 0xFF,
+        compatible ? 0xC0 : 0x80, compatible ? 0x40 : 0x40);
+    snprintf(line, sizeof(line), "%d OF %d   %d MS   V%d   %s", players, max_players, ping, protocol, build);
+    mnModeSelectNetplayMakeString(gobj, line, 64.0F, y + 16.0F, 0xB0, 0xB0, 0xB0);
 }
 
 static void mnModeSelectNetplayMakeTextEntry(GObj *gobj)
@@ -1125,14 +1142,15 @@ static void mnModeSelectNetplayRefresh(void)
     }
     else if (sMNModeSelectNetplayPage == nMNModeSelectNetplayPageSettings)
     {
-        mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, "MULTIPLAYER SETTINGS", 82.0F, 42.0F, 0xFF, 0x20, 0x20);
+        mnModeSelectNetplayMakeStringScaled(sMNModeSelectNetplayGObj, "SETTINGS", 112.0F, 34.0F, 0xFF, 0x20, 0x20, 1.3F);
         for (i = 0; i < nMNModeSelectNetplaySettingsCount; i++)
         {
-            y = 70.0F + (i * 24.0F);
-            mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, settings_options[i], 56.0F, y,
-                (i == sMNModeSelectNetplayOption) ? 0xFF : 0xD0,
-                (i == sMNModeSelectNetplayOption) ? 0xFF : 0x20,
-                (i == sMNModeSelectNetplayOption) ? 0xFF : 0x20);
+            sb32 hot = (i == sMNModeSelectNetplayOption);
+            y = 58.0F + (i * 22.0F);
+            mnModeSelectNetplayMakeTab(sMNModeSelectNetplayGObj, 48.0F, y - 4.0F, 30,
+                hot ? nMNOptionTabStatusHighlight : nMNOptionTabStatusNot);
+            if (hot) mnModeSelectNetplayMakeCursor(sMNModeSelectNetplayGObj, 34.0F, y - 1.0F);
+            mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, settings_options[i], 66.0F, y, 0x00, 0x00, 0x00);
         }
         {
             char server_buf[40];
@@ -1140,30 +1158,29 @@ static void mnModeSelectNetplayRefresh(void)
             s32 sc;
 
             port_netplay_get_player_name(player_name, ARRAY_COUNT(player_name));
-            mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, player_name, 190.0F,
-                70.0F + (nMNModeSelectNetplaySettingsName * 24.0F), 0xFF, 0xC0, 0x40);
-            mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, mnModeSelectNetplayGetDelayText(), 190.0F,
-                70.0F + (nMNModeSelectNetplaySettingsDelay * 24.0F), 0xFF, 0xC0, 0x40);
+            mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, player_name, 206.0F,
+                58.0F + (nMNModeSelectNetplaySettingsName * 22.0F), 0x00, 0x00, 0x00);
+            mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, mnModeSelectNetplayGetDelayText(), 206.0F,
+                58.0F + (nMNModeSelectNetplaySettingsDelay * 22.0F), 0x00, 0x00, 0x00);
             mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj,
-                port_netplay_get_show_stats() ? "ON" : "OFF", 190.0F,
-                70.0F + (nMNModeSelectNetplaySettingsStats * 24.0F), 0xFF, 0xC0, 0x40);
+                port_netplay_get_show_stats() ? "ON" : "OFF", 206.0F,
+                58.0F + (nMNModeSelectNetplaySettingsStats * 22.0F), 0x00, 0x00, 0x00);
 
             port_netplay_get_rendezvous_server(server_buf, ARRAY_COUNT(server_buf));
             for (sc = 0; sc < 15 && server_buf[sc] != '\0'; sc++) server_short[sc] = server_buf[sc];
             server_short[sc] = '\0';
             mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj,
-                (server_short[0] != '\0') ? server_short : "OFF", 190.0F,
-                70.0F + (nMNModeSelectNetplaySettingsServer * 24.0F), 0xFF, 0xC0, 0x40);
+                (server_short[0] != '\0') ? server_short : "OFF", 206.0F,
+                58.0F + (nMNModeSelectNetplaySettingsServer * 22.0F), 0x00, 0x00, 0x00);
 
             mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj,
-                mnModeSelectNetplayGetDeterminismText(), 190.0F,
-                70.0F + (nMNModeSelectNetplaySettingsDeterminism * 24.0F), 0xFF, 0xC0, 0x40);
+                mnModeSelectNetplayGetDeterminismText(), 206.0F,
+                58.0F + (nMNModeSelectNetplaySettingsDeterminism * 22.0F), 0x00, 0x00, 0x00);
         }
-        mnModeSelectNetplayMakeMarker(sMNModeSelectNetplayGObj, 70.0F + (sMNModeSelectNetplayOption * 24.0F));
         if (sMNModeSelectNetplayOption == nMNModeSelectNetplaySettingsDeterminism)
         {
             mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj,
-                "A VERIFY  START RECORD", 70.0F, 218.0F, 0xD0, 0xD0, 0xD0);
+                "A VERIFY   START RECORD", 68.0F, 218.0F, 0xD0, 0xD0, 0xD0);
         }
     }
     else if (sMNModeSelectNetplayPage == nMNModeSelectNetplayPageTextEntry)
@@ -1230,7 +1247,7 @@ static void mnModeSelectNetplayRefresh(void)
         }
         else if (port_netplay_get_state() == 2)
         {
-            mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, "FIND GAME", 120.0F, 48.0F, 0xFF, 0x20, 0x20);
+            mnModeSelectNetplayMakeStringScaled(sMNModeSelectNetplayGObj, "FIND GAME", 108.0F, 46.0F, 0xFF, 0x20, 0x20, 1.35F);
             mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, "CONNECTING", 116.0F, 112.0F, 0xFF, 0xC0, 0x40);
             mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, "B CANCEL", 126.0F, 190.0F, 0xFF, 0x40, 0x40);
         }
@@ -1240,35 +1257,35 @@ static void mnModeSelectNetplayRefresh(void)
             s32 players, max_players, ping, protocol, status, compatible;
             char host[20], ip[20], build[24];
 
-            mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, "FIND GAME", 120.0F, 40.0F, 0xFF, 0x20, 0x20);
+            mnModeSelectNetplayMakeStringScaled(sMNModeSelectNetplayGObj, "FIND GAME", 108.0F, 44.0F, 0xFF, 0x20, 0x20, 1.35F);
             if (count <= 0)
             {
                 mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj,
                     (port_netplay_get_mode() == 1) ? "SEARCHING ADHOC" : "SEARCHING NETWORK",
-                    (port_netplay_get_mode() == 1) ? 91.0F : 84.0F, 100.0F, 0xD0, 0xD0, 0xD0);
+                    (port_netplay_get_mode() == 1) ? 91.0F : 84.0F, 104.0F, 0xD0, 0xD0, 0xD0);
                 port_netplay_get_last_error(message, ARRAY_COUNT(message));
                 if (message[0] != '\0')
                 {
-                    mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, message, 80.0F, 130.0F, 0xFF, 0x80, 0x40);
+                    mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, message, 80.0F, 132.0F, 0xFF, 0x80, 0x40);
                 }
-                mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, "A RETRY", 74.0F, 190.0F, 0xFF, 0x40, 0x40);
-                mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, "B BACK", 205.0F, 190.0F, 0xFF, 0x40, 0x40);
+                mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, "A RETRY", 74.0F, 194.0F, 0xFF, 0x40, 0x40);
+                mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, "B BACK", 208.0F, 194.0F, 0xFF, 0x40, 0x40);
             }
             else
             {
-                mnModeSelectNetplayMakeDiscoveryDetail(sMNModeSelectNetplayGObj, 0, 82.0F);
+                mnModeSelectNetplayMakeDiscoveryDetail(sMNModeSelectNetplayGObj, 0, 84.0F, TRUE);
                 players = max_players = ping = protocol = status = compatible = 0;
                 host[0] = ip[0] = build[0] = '\0';
                 port_netplay_get_discovery_lobby(0, host, ARRAY_COUNT(host), ip, ARRAY_COUNT(ip),
                     build, ARRAY_COUNT(build), &players, &max_players, &ping, &protocol, &status, &compatible);
                 mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, compatible ? "COMPATIBLE" : "INCOMPATIBLE",
-                    105.0F, 128.0F, compatible ? 0xA0 : 0xFF, compatible ? 0xFF : 0x80, 0x40);
+                    105.0F, 138.0F, compatible ? 0xA0 : 0xFF, compatible ? 0xFF : 0x80, 0x40);
                 if (compatible && (status == 0) && (players < max_players))
                 {
-                    mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, "A CONFIRM JOIN", 89.0F, 173.0F, 0xFF, 0x40, 0x40);
+                    mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, "A CONFIRM JOIN", 89.0F, 176.0F, 0xFF, 0x40, 0x40);
                 }
-                else mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, "JOIN UNAVAILABLE", 91.0F, 173.0F, 0x90, 0x90, 0x90);
-                mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, "START REFRESH  B BACK", 59.0F, 205.0F, 0xFF, 0x40, 0x40);
+                else mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, "JOIN UNAVAILABLE", 91.0F, 176.0F, 0x90, 0x90, 0x90);
+                mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, "START REFRESH   B BACK", 62.0F, 206.0F, 0xFF, 0x40, 0x40);
             }
         }
     }
@@ -1284,18 +1301,18 @@ static void mnModeSelectNetplayRefresh(void)
         }
         else if (port_netplay_get_state() == 2)
         {
-            mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, "JOIN GAME", 120.0F, 48.0F, 0xFF, 0x20, 0x20);
+            mnModeSelectNetplayMakeStringScaled(sMNModeSelectNetplayGObj, "JOIN GAME", 108.0F, 46.0F, 0xFF, 0x20, 0x20, 1.35F);
             mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, "CONNECTING", 116.0F, 112.0F, 0xFF, 0xC0, 0x40);
             mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, "B CANCEL", 126.0F, 190.0F, 0xFF, 0x40, 0x40);
         }
         else
         {
-            mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, "JOIN GAME", 120.0F, 34.0F, 0xFF, 0x20, 0x20);
+            mnModeSelectNetplayMakeStringScaled(sMNModeSelectNetplayGObj, "JOIN GAME", 108.0F, 40.0F, 0xFF, 0x20, 0x20, 1.35F);
             if (count <= 0)
             {
                 sMNModeSelectNetplayOption = 0;
-                mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, "NO LOBBIES FOUND", 91.0F, 104.0F, 0xD0, 0xD0, 0xD0);
-                mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, "START REFRESH", 100.0F, 170.0F, 0xFF, 0x40, 0x40);
+                mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, "NO LOBBIES FOUND", 91.0F, 108.0F, 0xD0, 0xD0, 0xD0);
+                mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, "START REFRESH", 100.0F, 172.0F, 0xFF, 0x40, 0x40);
             }
             else
             {
@@ -1307,11 +1324,11 @@ static void mnModeSelectNetplayRefresh(void)
 
                 for (i = first; (i < count) && (i < first + 3); i++)
                 {
-                    y = 59.0F + ((i - first) * 49.0F);
-                    mnModeSelectNetplayMakeDiscoveryDetail(sMNModeSelectNetplayGObj, i, y);
-                    if (i == sMNModeSelectNetplayOption) mnModeSelectNetplayMakeMarker(sMNModeSelectNetplayGObj, y + 6.0F);
+                    y = 64.0F + ((i - first) * 50.0F);
+                    mnModeSelectNetplayMakeDiscoveryDetail(sMNModeSelectNetplayGObj, i, y,
+                        (i == sMNModeSelectNetplayOption));
                 }
-                mnModeSelectNetplayMakeString(sMNModeSelectNetplayGObj, "A JOIN  START REFRESH  B BACK", 34.0F, 211.0F, 0xFF, 0x40, 0x40);
+                mnModeSelectNetplayMakeStringScaled(sMNModeSelectNetplayGObj, "A JOIN   START REFRESH   B BACK", 40.0F, 212.0F, 0xFF, 0x40, 0x40, 0.82F);
             }
         }
     }
