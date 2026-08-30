@@ -5516,6 +5516,10 @@ static void mnPlayersVSNetplayCommitMatch(void)
 		nGRKindYamabuki,
 		nGRKindInishie
 	};
+	static u8 team_slots[/* */] =
+	{
+		nSCBattleTeamIDRed, nSCBattleTeamIDRed, nSCBattleTeamIDBlue, nSCBattleTeamIDBlue
+	};
 	PortNetplayMatchConfig config = {0};
 	SCBattleState *battle_state;
 	u32 seed;
@@ -5523,15 +5527,25 @@ static void mnPlayersVSNetplayCommitMatch(void)
 	s32 stage_pref = port_netplay_hostrules_get_stage();
 	s32 stocks_pref = port_netplay_hostrules_get_stocks();
 	s32 time_pref = port_netplay_hostrules_get_time();
+	s32 item_rate_pref = port_netplay_hostrules_get_item_rate();
+	s32 damage_pref = port_netplay_hostrules_get_damage_ratio();
+	s32 team_battle = port_netplay_hostrules_get_team_battle();
+	s32 handicap_mode = port_netplay_hostrules_get_handicap();
 	s32 resolved_stage;
 	s32 resolved_stocks;
 	s32 resolved_time_units;
+	s32 resolved_item_rate;
+	s32 resolved_damage;
+	u8 per_player_handicap;
 
 	resolved_stage = (stage_pref < 0)
 		? stage_list[syUtilsRandIntRange(ARRAY_COUNT(stage_list))]
 		: stage_pref;
 	resolved_stocks = (stocks_pref < 0) ? (1 + syUtilsRandIntRange(5)) : stocks_pref;
 	resolved_time_units = (time_pref < 0) ? (2 + syUtilsRandIntRange(9)) : time_pref;
+	resolved_item_rate = (item_rate_pref < 0) ? (s32)syUtilsRandIntRange(nSCBattleItemSwitchEnumCount) : item_rate_pref;
+	resolved_damage = (damage_pref < 0) ? (50 + 10 * (s32)syUtilsRandIntRange(16)) : damage_pref;
+	per_player_handicap = (handicap_mode == nSCBattleHandicapAuto) ? 5 : FTCOMMON_HANDICAP_DEFAULT;
 
 	gSCManagerSceneData.gkind = resolved_stage;
 	mnPlayersVSSetIdlePlayerNotAll();
@@ -5551,14 +5565,16 @@ static void mnPlayersVSNetplayCommitMatch(void)
 		? SCBATTLE_TIMELIMIT_INFINITE
 		: (u32)((resolved_time_units + 1) / 2);
 	config.item_switch = 0;
-	config.item_toggles = battle_state->item_toggles;
+	config.item_appearance_rate = resolved_item_rate;
+	config.item_toggles = (resolved_item_rate == nSCBattleItemSwitchNone)
+		? 0U
+		: (u32)port_netplay_hostrules_get_item_toggles();
 	config.game_type = nSCBattleGameTypeRoyal;
 	config.game_rules = SCBATTLE_GAMERULE_STOCK;
-	config.is_team_battle = battle_state->is_team_battle;
-	config.handicap = battle_state->handicap;
-	config.is_team_attack = battle_state->is_team_attack;
-	config.damage_ratio = battle_state->damage_ratio;
-	config.item_appearance_rate = battle_state->item_appearance_rate;
+	config.is_team_battle = (team_battle != 0) ? TRUE : FALSE;
+	config.handicap = (u8)handicap_mode;
+	config.is_team_attack = (u8)port_netplay_hostrules_get_team_attack();
+	config.damage_ratio = (u8)resolved_damage;
 	config.is_not_teamshadows = battle_state->is_not_teamshadows;
 
 	for (player = 0; player < GMCOMMON_PLAYERS_MAX; player++)
@@ -5567,8 +5583,8 @@ static void mnPlayersVSNetplayCommitMatch(void)
 		config.player_kinds[player] = battle_state->players[player].pkind;
 		config.fighter_kinds[player] = battle_state->players[player].fkind;
 		config.costumes[player] = battle_state->players[player].costume;
-		config.teams[player] = battle_state->players[player].team;
-		config.handicaps[player] = battle_state->players[player].handicap;
+		config.teams[player] = config.is_team_battle ? team_slots[player] : battle_state->players[player].team;
+		config.handicaps[player] = per_player_handicap;
 		config.levels[player] = battle_state->players[player].level;
 		config.shades[player] = battle_state->players[player].shade;
 	}

@@ -12,6 +12,7 @@ extern void *func_800269C0_275C0(u16 id);
 #if defined(PORT) && defined(__vita__)
 #include <stdio.h>
 #include <string.h>
+#include <it/itdef.h>
 #include <netplay/netplay_bridge.h>
 #include <sys/netreplay.h>
 #endif
@@ -191,9 +192,25 @@ typedef enum MNModeSelectNetplayPage
     nMNModeSelectNetplayPageJoin,
     nMNModeSelectNetplayPageSettings,
     nMNModeSelectNetplayPageNameEdit,
-    nMNModeSelectNetplayPageJoinAddr
+    nMNModeSelectNetplayPageJoinAddr,
+    nMNModeSelectNetplayPageHostRules,
+    nMNModeSelectNetplayPageItemToggles
 
 } MNModeSelectNetplayPage;
+
+enum
+{
+    nMNModeSelectNetplayRuleStage,
+    nMNModeSelectNetplayRuleLives,
+    nMNModeSelectNetplayRuleTime,
+    nMNModeSelectNetplayRuleItems,
+    nMNModeSelectNetplayRuleItemList,
+    nMNModeSelectNetplayRuleTeam,
+    nMNModeSelectNetplayRuleFriendlyFire,
+    nMNModeSelectNetplayRuleDamage,
+    nMNModeSelectNetplayRuleHandicap,
+    nMNModeSelectNetplayRuleCount
+};
 
 enum
 {
@@ -343,6 +360,99 @@ static const char* mnModeSelectNetplayGetDelayText(void)
 }
 
 static s32 sMNModeSelectNetplayRuleCursor;
+static s32 sMNModeSelectNetplayItemCursor;
+static s32 sMNModeSelectNetplayItemScroll;
+
+#define MNNP_ITEM_LIST_COUNT 15
+#define MNNP_ITEM_LIST_VIEW 8
+#define MNNP_ITEM_CONTAINER_BITS \
+    (ITEM_TOGGLE_MASK_KIND(nITKindBox) | ITEM_TOGGLE_MASK_KIND(nITKindTaru) | \
+     ITEM_TOGGLE_MASK_KIND(nITKindCapsule) | ITEM_TOGGLE_MASK_KIND(nITKindEgg))
+#define MNNP_ITEM_UTILITY_BITS \
+    ((ITEM_TOGGLE_MASK_KIND(nITKindUtilityEnd + 1) - 1) & ~(ITEM_TOGGLE_MASK_KIND(nITKindUtilityStart) - 1))
+
+static const s32 sMNModeSelectNetplayItemKinds[MNNP_ITEM_LIST_COUNT] =
+{
+    nITKindSword, nITKindBat, nITKindHammer, nITKindHarisen, nITKindMSBomb,
+    nITKindBombHei, nITKindNBumper, nITKindGShell, nITKindMBall, nITKindLGun,
+    nITKindFFlower, nITKindStarRod, nITKindTomato, nITKindHeart, nITKindStar
+};
+
+static const char *const sMNModeSelectNetplayItemNames[MNNP_ITEM_LIST_COUNT] =
+{
+    "BEAM SWORD", "HOME RUN BAT", "HAMMER", "FAN", "MOTION SENSOR",
+    "BOB OMB", "BUMPER", "SHELL", "POKE BALL", "RAY GUN",
+    "FIRE FLOWER", "STAR ROD", "MAXIM TOMATO", "HEART", "STAR MAN"
+};
+
+static const char* mnModeSelectNetplayGetItemRateName(s32 rate)
+{
+    static const char *const names[] =
+    {
+        "OFF", "VERY LOW", "LOW", "MIDDLE", "HIGH", "VERY HIGH"
+    };
+    if ((rate < 0) || (rate >= (s32)ARRAY_COUNT(names))) return "RANDOM";
+    return names[rate];
+}
+
+static const char* mnModeSelectNetplayGetHandicapName(s32 mode)
+{
+    switch (mode)
+    {
+    case nSCBattleHandicapOn: return "ON";
+    case nSCBattleHandicapAuto: return "AUTO";
+    default: return "OFF";
+    }
+}
+
+static void mnModeSelectNetplayFormatDamage(s32 value, char *buf, s32 buf_size)
+{
+    if (value < 0) snprintf(buf, buf_size, "RANDOM");
+    else snprintf(buf, buf_size, "%d", value);
+}
+
+static s32 mnModeSelectNetplayCycleItemRate(s32 value, s32 dir)
+{
+    s32 next = value + dir;
+    if (next < -1) next = nSCBattleItemSwitchEnumCount - 1;
+    if (next >= nSCBattleItemSwitchEnumCount) next = -1;
+    return next;
+}
+
+static s32 mnModeSelectNetplayCycleDamage(s32 value, s32 dir)
+{
+    if (value < 0) return (dir > 0) ? 50 : 200;
+    value += dir * 10;
+    if (value < 50) return -1;
+    if (value > 200) return -1;
+    return value;
+}
+
+static s32 mnModeSelectNetplayCycleHandicap(s32 value, s32 dir)
+{
+    s32 next = value + dir;
+    if (next < 0) next = nSCBattleHandicapAuto;
+    if (next > nSCBattleHandicapAuto) next = 0;
+    return next;
+}
+
+static u32 mnModeSelectNetplayNormalizeItemMask(u32 mask)
+{
+    if ((mask & MNNP_ITEM_UTILITY_BITS) == 0) return 0;
+    return (mask & MNNP_ITEM_UTILITY_BITS) | MNNP_ITEM_CONTAINER_BITS;
+}
+
+static void mnModeSelectNetplayToggleItem(s32 index)
+{
+    s32 kind = sMNModeSelectNetplayItemKinds[index];
+    u32 mask = (u32)port_netplay_hostrules_get_item_toggles();
+    u32 bit = ITEM_TOGGLE_MASK_KIND(kind);
+
+    if (kind == nITKindGShell) bit |= ITEM_TOGGLE_MASK_KIND(nITKindRShell);
+    if (mask & ITEM_TOGGLE_MASK_KIND(kind)) mask &= ~bit;
+    else mask |= bit;
+    port_netplay_hostrules_set_item_toggles((s32)mnModeSelectNetplayNormalizeItemMask(mask));
+}
 
 static const char* mnModeSelectNetplayGetStageName(s32 idx)
 {
@@ -410,48 +520,173 @@ static s32 mnModeSelectNetplayCycleTime(s32 value, s32 dir)
 
 static void mnModeSelectNetplayCycleRule(s32 cursor, s32 dir)
 {
-    if (cursor == 0)
+    switch (cursor)
     {
+    case nMNModeSelectNetplayRuleStage:
         port_netplay_hostrules_set_stage(mnModeSelectNetplayCycleStage(port_netplay_hostrules_get_stage(), dir));
-    }
-    else if (cursor == 1)
-    {
+        break;
+    case nMNModeSelectNetplayRuleLives:
         port_netplay_hostrules_set_stocks(mnModeSelectNetplayCycleStocks(port_netplay_hostrules_get_stocks(), dir));
-    }
-    else
-    {
+        break;
+    case nMNModeSelectNetplayRuleTime:
         port_netplay_hostrules_set_time(mnModeSelectNetplayCycleTime(port_netplay_hostrules_get_time(), dir));
+        break;
+    case nMNModeSelectNetplayRuleItems:
+        port_netplay_hostrules_set_item_rate(mnModeSelectNetplayCycleItemRate(port_netplay_hostrules_get_item_rate(), dir));
+        break;
+    case nMNModeSelectNetplayRuleTeam:
+        port_netplay_hostrules_set_team_battle(!port_netplay_hostrules_get_team_battle());
+        break;
+    case nMNModeSelectNetplayRuleFriendlyFire:
+        port_netplay_hostrules_set_team_attack(!port_netplay_hostrules_get_team_attack());
+        break;
+    case nMNModeSelectNetplayRuleDamage:
+        port_netplay_hostrules_set_damage_ratio(mnModeSelectNetplayCycleDamage(port_netplay_hostrules_get_damage_ratio(), dir));
+        break;
+    case nMNModeSelectNetplayRuleHandicap:
+        port_netplay_hostrules_set_handicap(mnModeSelectNetplayCycleHandicap(port_netplay_hostrules_get_handicap(), dir));
+        break;
+    default:
+        break;
     }
 }
 
-static void mnModeSelectNetplayMakeRuleField(GObj *gobj, const char *text, f32 x, f32 y,
-    sb32 is_host, s32 field, s32 cursor)
+static void mnModeSelectNetplayFormatRuleValue(s32 row, sb32 is_host, char *buf, s32 buf_size)
 {
-    sb32 hot = (is_host && cursor == field);
-    mnModeSelectNetplayMakeString(gobj, text, x, y,
-        hot ? 0xFF : 0xB0, hot ? 0xFF : 0xB0, hot ? 0x40 : 0xB0);
+    s32 stage = is_host ? port_netplay_hostrules_get_stage() : port_netplay_lobby_get_rule_stage();
+    s32 stocks = is_host ? port_netplay_hostrules_get_stocks() : port_netplay_lobby_get_rule_stocks();
+    s32 time_units = is_host ? port_netplay_hostrules_get_time() : port_netplay_lobby_get_rule_time();
+    s32 item_rate = is_host ? port_netplay_hostrules_get_item_rate() : port_netplay_lobby_get_rule_item_rate();
+    s32 team = is_host ? port_netplay_hostrules_get_team_battle() : port_netplay_lobby_get_rule_team_battle();
+    s32 friendly = is_host ? port_netplay_hostrules_get_team_attack() : port_netplay_lobby_get_rule_team_attack();
+    s32 damage = is_host ? port_netplay_hostrules_get_damage_ratio() : port_netplay_lobby_get_rule_damage_ratio();
+    s32 handicap = is_host ? port_netplay_hostrules_get_handicap() : port_netplay_lobby_get_rule_handicap();
+
+    switch (row)
+    {
+    case nMNModeSelectNetplayRuleStage:
+        snprintf(buf, buf_size, "%s", mnModeSelectNetplayGetStageName(stage));
+        break;
+    case nMNModeSelectNetplayRuleLives:
+        mnModeSelectNetplayFormatStocks(stocks, buf, buf_size);
+        break;
+    case nMNModeSelectNetplayRuleTime:
+        mnModeSelectNetplayFormatTime(time_units, buf, buf_size);
+        break;
+    case nMNModeSelectNetplayRuleItems:
+        snprintf(buf, buf_size, "%s", mnModeSelectNetplayGetItemRateName(item_rate));
+        break;
+    case nMNModeSelectNetplayRuleItemList:
+        snprintf(buf, buf_size, "SELECT");
+        break;
+    case nMNModeSelectNetplayRuleTeam:
+        snprintf(buf, buf_size, "%s", (team > 0) ? "ON" : "OFF");
+        break;
+    case nMNModeSelectNetplayRuleFriendlyFire:
+        snprintf(buf, buf_size, "%s", (friendly > 0) ? "ON" : "OFF");
+        break;
+    case nMNModeSelectNetplayRuleDamage:
+        mnModeSelectNetplayFormatDamage(damage, buf, buf_size);
+        break;
+    case nMNModeSelectNetplayRuleHandicap:
+        snprintf(buf, buf_size, "%s", mnModeSelectNetplayGetHandicapName(handicap));
+        break;
+    default:
+        buf[0] = '\0';
+        break;
+    }
 }
 
 static void mnModeSelectNetplayMakeRules(GObj *gobj)
 {
+    static const char *const labels[] =
+    {
+        "STAGE", "LIVES", "TIME", "ITEMS", "", "TEAM", "FF", "DMG", "HCAP"
+    };
     sb32 is_host = port_netplay_lobby_is_host();
-    s32 stage = is_host ? port_netplay_hostrules_get_stage() : port_netplay_lobby_get_rule_stage();
-    s32 stocks = is_host ? port_netplay_hostrules_get_stocks() : port_netplay_lobby_get_rule_stocks();
-    s32 time_units = is_host ? port_netplay_hostrules_get_time() : port_netplay_lobby_get_rule_time();
-    char stocks_text[12];
-    char time_text[12];
-    char line[40];
-    f32 y = 183.0F;
+    char value[16];
+    char line[80];
+    s32 n;
+    s32 row;
 
-    mnModeSelectNetplayFormatStocks(stocks, stocks_text, sizeof(stocks_text));
-    mnModeSelectNetplayFormatTime(time_units, time_text, sizeof(time_text));
+    n = 0;
+    for (row = nMNModeSelectNetplayRuleStage; row <= nMNModeSelectNetplayRuleTime; row++)
+    {
+        mnModeSelectNetplayFormatRuleValue(row, is_host, value, sizeof(value));
+        n += snprintf(line + n, sizeof(line) - n, (row == nMNModeSelectNetplayRuleStage) ? "%s %s" : "  %s %s",
+            labels[row], value);
+    }
+    mnModeSelectNetplayMakeString(gobj, line, 20.0F, 181.0F, 0xB0, 0xB0, 0xB0);
 
-    snprintf(line, sizeof(line), "STAGE %s", mnModeSelectNetplayGetStageName(stage));
-    mnModeSelectNetplayMakeRuleField(gobj, line, 20.0F, y, is_host, 0, sMNModeSelectNetplayRuleCursor);
-    snprintf(line, sizeof(line), "LIVES %s", stocks_text);
-    mnModeSelectNetplayMakeRuleField(gobj, line, 20.0F, y + 15.0F, is_host, 1, sMNModeSelectNetplayRuleCursor);
-    snprintf(line, sizeof(line), "TIME %s", time_text);
-    mnModeSelectNetplayMakeRuleField(gobj, line, 168.0F, y + 15.0F, is_host, 2, sMNModeSelectNetplayRuleCursor);
+    n = 0;
+    for (row = nMNModeSelectNetplayRuleItems; row <= nMNModeSelectNetplayRuleHandicap; row++)
+    {
+        if (row == nMNModeSelectNetplayRuleItemList) continue;
+        mnModeSelectNetplayFormatRuleValue(row, is_host, value, sizeof(value));
+        n += snprintf(line + n, sizeof(line) - n, (row == nMNModeSelectNetplayRuleItems) ? "%s %s" : "  %s %s",
+            labels[row], value);
+    }
+    mnModeSelectNetplayMakeString(gobj, line, 20.0F, 193.0F, 0xB0, 0xB0, 0xB0);
+
+    if (is_host)
+    {
+        mnModeSelectNetplayMakeString(gobj, "R  MATCH RULES", 20.0F, 206.0F, 0xA0, 0xFF, 0xA0);
+    }
+}
+
+static void mnModeSelectNetplayMakeHostRulesPage(GObj *gobj)
+{
+    static const char *const labels[nMNModeSelectNetplayRuleCount] =
+    {
+        "STAGE", "LIVES", "TIME", "ITEMS", "ITEM LIST", "TEAM BATTLE",
+        "FRIENDLY FIRE", "DAMAGE", "HANDICAP"
+    };
+    char value[16];
+    char line[48];
+    s32 row;
+
+    mnModeSelectNetplayMakeString(gobj, "MATCH RULES", 108.0F, 32.0F, 0xFF, 0x20, 0x20);
+
+    for (row = 0; row < nMNModeSelectNetplayRuleCount; row++)
+    {
+        f32 y = 54.0F + (row * 17.0F);
+        sb32 hot = (row == sMNModeSelectNetplayRuleCursor);
+
+        mnModeSelectNetplayFormatRuleValue(row, TRUE, value, sizeof(value));
+        snprintf(line, sizeof(line), "%s", labels[row]);
+        mnModeSelectNetplayMakeString(gobj, line, 40.0F, y,
+            hot ? 0xFF : 0xD0, hot ? 0xFF : 0xD0, hot ? 0x40 : 0xD0);
+        mnModeSelectNetplayMakeString(gobj, value, 200.0F, y,
+            hot ? 0xFF : 0xC0, hot ? 0xFF : 0xC0, hot ? 0x40 : 0x40);
+    }
+
+    mnModeSelectNetplayMakeString(gobj, "L R CHANGE   A ITEM LIST   B BACK", 44.0F, 214.0F, 0xFF, 0x40, 0x40);
+}
+
+static void mnModeSelectNetplayMakeItemTogglesPage(GObj *gobj)
+{
+    u32 mask = (u32)port_netplay_hostrules_get_item_toggles();
+    s32 i;
+
+    mnModeSelectNetplayMakeString(gobj, "ITEM LIST", 118.0F, 32.0F, 0xFF, 0x20, 0x20);
+
+    for (i = 0; i < MNNP_ITEM_LIST_VIEW; i++)
+    {
+        s32 idx = sMNModeSelectNetplayItemScroll + i;
+        f32 y = 54.0F + (i * 19.0F);
+        sb32 hot;
+        sb32 on;
+
+        if (idx >= MNNP_ITEM_LIST_COUNT) break;
+        hot = (idx == sMNModeSelectNetplayItemCursor);
+        on = (mask & ITEM_TOGGLE_MASK_KIND(sMNModeSelectNetplayItemKinds[idx])) != 0;
+        mnModeSelectNetplayMakeString(gobj, sMNModeSelectNetplayItemNames[idx], 44.0F, y,
+            hot ? 0xFF : 0xD0, hot ? 0xFF : 0xD0, hot ? 0x40 : 0xD0);
+        mnModeSelectNetplayMakeString(gobj, on ? "ON" : "OFF", 236.0F, y,
+            on ? 0xA0 : 0x90, on ? 0xFF : 0x90, on ? 0x40 : 0x90);
+    }
+
+    mnModeSelectNetplayMakeString(gobj, "L R TOGGLE   B BACK", 82.0F, 214.0F, 0xFF, 0x40, 0x40);
 }
 
 static const char* mnModeSelectNetplayGetDeterminismText(void)
@@ -782,6 +1017,28 @@ static void mnModeSelectNetplayRefresh(void)
     {
         mnModeSelectNetplayMakeJoinAddr(sMNModeSelectNetplayGObj);
     }
+    else if (sMNModeSelectNetplayPage == nMNModeSelectNetplayPageHostRules)
+    {
+        if (port_netplay_lobby_is_host())
+        {
+            mnModeSelectNetplayMakeHostRulesPage(sMNModeSelectNetplayGObj);
+        }
+        else
+        {
+            sMNModeSelectNetplayPage = nMNModeSelectNetplayPageHost;
+        }
+    }
+    else if (sMNModeSelectNetplayPage == nMNModeSelectNetplayPageItemToggles)
+    {
+        if (port_netplay_lobby_is_host())
+        {
+            mnModeSelectNetplayMakeItemTogglesPage(sMNModeSelectNetplayGObj);
+        }
+        else
+        {
+            sMNModeSelectNetplayPage = nMNModeSelectNetplayPageHost;
+        }
+    }
     else if (sMNModeSelectNetplayPage == nMNModeSelectNetplayPageHost)
     {
         if (port_netplay_lobby_is_connected() && port_netplay_lobby_is_host())
@@ -920,6 +1177,8 @@ static void mnModeSelectNetplayEnter(void)
     sMNModeSelectNetplayOption = 0;
     sMNModeSelectNetplayNavWait = 0;
     sMNModeSelectNetplayRuleCursor = 0;
+    sMNModeSelectNetplayItemCursor = 0;
+    sMNModeSelectNetplayItemScroll = 0;
     sMNModeSelectNetplayNameCursor = 0;
     sMNModeSelectNetplayAddrCursor = 0;
     sMNModeSelectNetplayAddrTarget = 0;
@@ -1189,6 +1448,104 @@ static void mnModeSelectNetplayFuncRun(void)
         return;
     }
 
+    if (sMNModeSelectNetplayPage == nMNModeSelectNetplayPageHostRules)
+    {
+        sb32 rule_left = left;
+        sb32 rule_right = right;
+
+        if (!port_netplay_lobby_is_host())
+        {
+            sMNModeSelectNetplayPage = nMNModeSelectNetplayPageHost;
+            mnModeSelectNetplayRefresh();
+            return;
+        }
+        if (!rule_left && !rule_right && (sMNModeSelectNetplayNavWait == 0))
+        {
+            if (scSubsysControllerGetPlayerStickLR(20, 1) != 0) rule_right = TRUE;
+            else if (scSubsysControllerGetPlayerStickLR(-20, 0) != 0) rule_left = TRUE;
+        }
+        if (up || down)
+        {
+            sMNModeSelectNetplayRuleCursor =
+                (sMNModeSelectNetplayRuleCursor + (up ? (nMNModeSelectNetplayRuleCount - 1) : 1)) % nMNModeSelectNetplayRuleCount;
+            sMNModeSelectNetplayNavWait = 10;
+            func_800269C0_275C0(nSYAudioFGMMenuScroll1);
+            mnModeSelectNetplayRefresh();
+            return;
+        }
+        if (accept && (sMNModeSelectNetplayRuleCursor == nMNModeSelectNetplayRuleItemList))
+        {
+            sMNModeSelectNetplayItemCursor = 0;
+            sMNModeSelectNetplayItemScroll = 0;
+            sMNModeSelectNetplayPage = nMNModeSelectNetplayPageItemToggles;
+            func_800269C0_275C0(nSYAudioFGMMenuSelect);
+            mnModeSelectNetplayRefresh();
+            return;
+        }
+        if ((rule_left || rule_right) && (sMNModeSelectNetplayRuleCursor != nMNModeSelectNetplayRuleItemList))
+        {
+            mnModeSelectNetplayCycleRule(sMNModeSelectNetplayRuleCursor, rule_right ? 1 : -1);
+            sMNModeSelectNetplayNavWait = 10;
+            func_800269C0_275C0(nSYAudioFGMMenuScroll2);
+            mnModeSelectNetplayRefresh();
+            return;
+        }
+        if (cancel)
+        {
+            sMNModeSelectNetplayPage = nMNModeSelectNetplayPageHost;
+            func_800269C0_275C0(nSYAudioFGMMenuScroll1);
+            mnModeSelectNetplayRefresh();
+        }
+        return;
+    }
+
+    if (sMNModeSelectNetplayPage == nMNModeSelectNetplayPageItemToggles)
+    {
+        sb32 toggle_left = left;
+        sb32 toggle_right = right;
+
+        if (!port_netplay_lobby_is_host())
+        {
+            sMNModeSelectNetplayPage = nMNModeSelectNetplayPageHost;
+            mnModeSelectNetplayRefresh();
+            return;
+        }
+        if (!toggle_left && !toggle_right && (sMNModeSelectNetplayNavWait == 0))
+        {
+            if (scSubsysControllerGetPlayerStickLR(20, 1) != 0) toggle_right = TRUE;
+            else if (scSubsysControllerGetPlayerStickLR(-20, 0) != 0) toggle_left = TRUE;
+        }
+        if (up || down)
+        {
+            sMNModeSelectNetplayItemCursor += up ? -1 : 1;
+            if (sMNModeSelectNetplayItemCursor < 0) sMNModeSelectNetplayItemCursor = MNNP_ITEM_LIST_COUNT - 1;
+            if (sMNModeSelectNetplayItemCursor >= MNNP_ITEM_LIST_COUNT) sMNModeSelectNetplayItemCursor = 0;
+            if (sMNModeSelectNetplayItemCursor < sMNModeSelectNetplayItemScroll)
+                sMNModeSelectNetplayItemScroll = sMNModeSelectNetplayItemCursor;
+            if (sMNModeSelectNetplayItemCursor >= sMNModeSelectNetplayItemScroll + MNNP_ITEM_LIST_VIEW)
+                sMNModeSelectNetplayItemScroll = sMNModeSelectNetplayItemCursor - MNNP_ITEM_LIST_VIEW + 1;
+            sMNModeSelectNetplayNavWait = 10;
+            func_800269C0_275C0(nSYAudioFGMMenuScroll1);
+            mnModeSelectNetplayRefresh();
+            return;
+        }
+        if (toggle_left || toggle_right || accept)
+        {
+            mnModeSelectNetplayToggleItem(sMNModeSelectNetplayItemCursor);
+            sMNModeSelectNetplayNavWait = 10;
+            func_800269C0_275C0(nSYAudioFGMMenuScroll2);
+            mnModeSelectNetplayRefresh();
+            return;
+        }
+        if (cancel)
+        {
+            sMNModeSelectNetplayPage = nMNModeSelectNetplayPageHostRules;
+            func_800269C0_275C0(nSYAudioFGMMenuScroll1);
+            mnModeSelectNetplayRefresh();
+        }
+        return;
+    }
+
     if ((sMNModeSelectNetplayPage == nMNModeSelectNetplayPageFind) ||
         (sMNModeSelectNetplayPage == nMNModeSelectNetplayPageHost) ||
         (sMNModeSelectNetplayPage == nMNModeSelectNetplayPageJoin))
@@ -1209,31 +1566,14 @@ static void mnModeSelectNetplayFuncRun(void)
 
         if (sMNModeSelectNetplayPage == nMNModeSelectNetplayPageHost)
         {
-            if (port_netplay_lobby_is_host())
+            if (port_netplay_lobby_is_host() &&
+                scSubsysControllerGetPlayerTapButtons(Z_TRIG))
             {
-                sb32 rule_left = left;
-                sb32 rule_right = right;
-                if (!rule_left && !rule_right && (sMNModeSelectNetplayNavWait == 0))
-                {
-                    if (scSubsysControllerGetPlayerStickLR(20, 1) != 0) rule_right = TRUE;
-                    else if (scSubsysControllerGetPlayerStickLR(-20, 0) != 0) rule_left = TRUE;
-                }
-                if (up || down)
-                {
-                    sMNModeSelectNetplayRuleCursor = (sMNModeSelectNetplayRuleCursor + (up ? 2 : 1)) % 3;
-                    sMNModeSelectNetplayNavWait = 10;
-                    func_800269C0_275C0(nSYAudioFGMMenuScroll1);
-                    mnModeSelectNetplayRefresh();
-                    return;
-                }
-                if (rule_left || rule_right)
-                {
-                    mnModeSelectNetplayCycleRule(sMNModeSelectNetplayRuleCursor, rule_right ? 1 : -1);
-                    sMNModeSelectNetplayNavWait = 10;
-                    func_800269C0_275C0(nSYAudioFGMMenuScroll2);
-                    mnModeSelectNetplayRefresh();
-                    return;
-                }
+                sMNModeSelectNetplayRuleCursor = 0;
+                sMNModeSelectNetplayPage = nMNModeSelectNetplayPageHostRules;
+                func_800269C0_275C0(nSYAudioFGMMenuSelect);
+                mnModeSelectNetplayRefresh();
+                return;
             }
             if (action && port_netplay_lobby_is_connected())
             {
@@ -2227,6 +2567,8 @@ void mnModeSelectInitVars(void)
     sMNModeSelectNetplayOption = 0;
     sMNModeSelectNetplayNavWait = 0;
     sMNModeSelectNetplayRuleCursor = 0;
+    sMNModeSelectNetplayItemCursor = 0;
+    sMNModeSelectNetplayItemScroll = 0;
 #endif
     
     sMNModeSelectTotalTimeTics = 0;
