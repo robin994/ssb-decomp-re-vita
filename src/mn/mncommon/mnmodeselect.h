@@ -22,4 +22,9 @@ extern void mnModeSelectFuncRun(GObj *gobj);
 extern void mnModeSelectFuncStart(void);
 extern void mnModeSelectStartScene(void);
 
+#if defined(PORT) && defined(__vita__)
+extern sb32 gMNNetplayOverlayRequest;
+extern sb32 gMNNetplayReturnToVSMode;
+#endif
+
 #endif

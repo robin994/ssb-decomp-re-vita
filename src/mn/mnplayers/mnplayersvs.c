@@ -5518,7 +5518,7 @@ static void mnPlayersVSNetplayCommitMatch(void)
 	};
 	static u8 team_slots[/* */] =
 	{
-		nSCBattleTeamIDRed, nSCBattleTeamIDRed, nSCBattleTeamIDBlue, nSCBattleTeamIDBlue
+		nSCBattleTeamIDRed, nSCBattleTeamIDBlue, nSCBattleTeamIDRed, nSCBattleTeamIDBlue
 	};
 	PortNetplayMatchConfig config = {0};
 	SCBattleState *battle_state;

@@ -152,6 +152,9 @@ typedef enum MNVSModeOptions
     nMNVSModeOptionRule,            // Rule
     nMNVSModeOptionTimeStock,       // Time/Stock
     nMNVSModeOptionOptions,         // VS Options
+#if defined(PORT) && defined(__vita__)
+    nMNVSModeOptionNetplay,
+#endif
 	nMNVSModeOptionEnumCount
 
 } MNVSModeOptions;
@@ -196,12 +199,7 @@ typedef enum MNModeSelectOptions
 	nMNModeSelectOptionVSMode,
 	nMNModeSelectOptionOption,
 	nMNModeSelectOptionData,
-#if defined(PORT) && defined(__vita__)
-	nMNModeSelectOptionMultiplayer,
-	nMNModeSelectOptionEnd = nMNModeSelectOptionMultiplayer,
-#else
 	nMNModeSelectOptionEnd = nMNModeSelectOptionData,
-#endif
 
 	nMNModeSelectOptionEnumCount
 

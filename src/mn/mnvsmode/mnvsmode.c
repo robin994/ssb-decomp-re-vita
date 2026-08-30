@@ -25,7 +25,11 @@ extern ub8 gSYMainImemOK;
 // // // // // // // // // // // //
 
 // 0x801347B0
+#if defined(PORT) && defined(__vita__)
+u32 dMNVSModeFileIDs[/* */] = { llMNCommonFileID, llMNVSModeFileID, llMNCommonFontsFileID };
+#else
 u32 dMNVSModeFileIDs[/* */] = { llMNCommonFileID, llMNVSModeFileID };
+#endif
 
 // 0x801347B8
 Lights1 dMNVSModeLights1 = gdSPDefLights1(0x20, 0x20, 0x20, 0xFF, 0xFF, 0xFF, 0x3C, 0x3C, 0x3C);
@@ -55,6 +59,10 @@ GObj* sMNVSModeButtonGObjTimeStock;
 
 // 0x8013493C
 GObj* sMNVSModeButtonGObjVSOptions;
+
+#if defined(PORT) && defined(__vita__)
+GObj* sMNVSModeButtonGObjNetplay;
+#endif
 
 // 0x80134940 - Padding?
 s32 sMNVSModePad0x80134940[2];
@@ -757,6 +765,45 @@ void mnVSModeMakeVSOptionsButton(void)
     button_sobj->pos.y = 151.0F;
 }
 
+#if defined(PORT) && defined(__vita__)
+void mnVSModeMakeNetplayLabel(GObj* gobj, f32 x, f32 y)
+{
+    static const intptr_t letters[/* */] =
+    {
+        llMNCommonFontsLetterNSprite, llMNCommonFontsLetterESprite,
+        llMNCommonFontsLetterTSprite, llMNCommonFontsLetterPSprite,
+        llMNCommonFontsLetterLSprite, llMNCommonFontsLetterASprite,
+        llMNCommonFontsLetterYSprite
+    };
+    SObj* sobj;
+    s32 i;
+
+    for (i = 0; i < (s32) ARRAY_COUNT(letters); i++)
+    {
+        sobj = lbCommonMakeSObjForGObj(gobj, lbRelocGetFileData(Sprite*, sMNVSModeFiles[2], letters[i]));
+        sobj->sprite.attr &= ~SP_FASTCOPY;
+        sobj->sprite.attr |= SP_TRANSPARENT;
+        sobj->sprite.red = 0x00;
+        sobj->sprite.green = 0x00;
+        sobj->sprite.blue = 0x00;
+        sobj->pos.x = x;
+        sobj->pos.y = y;
+        x += sobj->sprite.width + 1.0F;
+    }
+}
+
+void mnVSModeMakeNetplayButton(void)
+{
+    GObj* button_gobj;
+
+    sMNVSModeButtonGObjNetplay = button_gobj = gcMakeGObjSPAfter(0, NULL, 4, GOBJ_PRIORITY_DEFAULT);
+    gcAddGObjDisplay(button_gobj, lbCommonDrawSObjAttr, 2, GOBJ_PRIORITY_DEFAULT, ~0);
+    mnVSModeMakeButton(button_gobj, 28.0F, 187.0F, 17);
+    mnVSModeUpdateButton(button_gobj, (sMNVSModeCursorIndex == nMNVSModeOptionNetplay) ? nMNOptionTabStatusHighlight : nMNOptionTabStatusNot);
+    mnVSModeMakeNetplayLabel(button_gobj, 48.0F, 190.0F);
+}
+#endif
+
 // 0x80132FA4 - Unused?
 void mnVSModeSetSubtitleSpriteColors(SObj* sobj)
 {
@@ -1105,6 +1152,14 @@ void mnVSModeMakeBackgroundViewport()
 // 0x801336AC
 void mnVSModeFuncStartVars()
 {
+#if defined(PORT) && defined(__vita__)
+    if (gMNNetplayReturnToVSMode)
+    {
+        gMNNetplayReturnToVSMode = FALSE;
+        sMNVSModeCursorIndex = nMNVSModeOptionNetplay;
+    }
+    else
+#endif
     if (gSCManagerSceneData.scene_prev == nSCKindVSOptions)
     {
         sMNVSModeCursorIndex = nMNVSModeOptionOptions;
@@ -1284,8 +1339,14 @@ void mnVSModeMain(GObj *gobj)
     s32 unused;
 
     // 0x80134870
+#if defined(PORT) && defined(__vita__)
+    GObj** buttons[/* */] = { &sMNVSModeButtonGObjVSStart, &sMNVSModeButtonGObjRule, &sMNVSModeButtonGObjTimeStock, &sMNVSModeButtonGObjVSOptions, &sMNVSModeButtonGObjNetplay };
+    const s32 last_option = nMNVSModeOptionNetplay;
+#else
     GObj** buttons[/* */] = { &sMNVSModeButtonGObjVSStart, &sMNVSModeButtonGObjRule, &sMNVSModeButtonGObjTimeStock, &sMNVSModeButtonGObjVSOptions };
-    
+    const s32 last_option = nMNVSModeOptionOptions;
+#endif
+
     s32 stick_range;
     s32 is_button;
 
@@ -1352,6 +1413,21 @@ void mnVSModeMain(GObj *gobj)
                     gSCManagerSceneData.scene_curr = nSCKindVSOptions;
 
                     return;
+#if defined(PORT) && defined(__vita__)
+                case nMNVSModeOptionNetplay:
+                    func_800269C0_275C0(nSYAudioFGMMenuSelect);
+                    mnVSModeUpdateButton(sMNVSModeButtonGObjNetplay, nMNOptionTabStatusSelected);
+                    mnVSModeSaveSettings();
+
+                    gMNNetplayOverlayRequest = TRUE;
+
+                    gSCManagerSceneData.scene_prev = gSCManagerSceneData.scene_curr;
+                    gSCManagerSceneData.scene_curr = nSCKindModeSelect;
+
+                    syTaskmanSetLoadScene();
+
+                    return;
+#endif
             }
         }
 
@@ -1382,7 +1458,7 @@ void mnVSModeMain(GObj *gobj)
 
             if (sMNVSModeCursorIndex == nMNVSModeOptionStart)
             {
-                sMNVSModeCursorIndex = nMNVSModeOptionOptions;
+                sMNVSModeCursorIndex = last_option;
             }
             else sMNVSModeCursorIndex--;
 
@@ -1422,7 +1498,7 @@ void mnVSModeMain(GObj *gobj)
 
             mnVSModeUpdateButton(*buttons[sMNVSModeCursorIndex], nMNOptionTabStatusNot);
 
-            if (sMNVSModeCursorIndex == nMNVSModeOptionOptions)
+            if (sMNVSModeCursorIndex == last_option)
             {
                 sMNVSModeCursorIndex = nMNVSModeOptionStart;
             }
@@ -1652,6 +1728,9 @@ void mnVSModeFuncStart(void)
     mnVSModeMakeTimeStockButton();
     mnVSModeMakeTimeStockValue();
     mnVSModeMakeVSOptionsButton();
+#if defined(PORT) && defined(__vita__)
+    mnVSModeMakeNetplayButton();
+#endif
     mnVSModeMakeSubtitle();
 
     if (gSCManagerSceneData.scene_prev == nSCKindPlayersVS)
