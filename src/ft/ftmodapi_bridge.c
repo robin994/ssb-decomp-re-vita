@@ -1,4 +1,5 @@
 #include <ft/fighter.h>
+#include <ft/ftchar/ftmario/ftmario.h>
 #include <ft/ftmain.h>
 #include <gm/gmcollision.h>
 #include <it/itcommon/itfflower.h>
@@ -64,6 +65,45 @@ int port_mod_fighter_joint_world_position(void *fighter_gobj, int joint_id,
     *out_y = pos.y;
     *out_z = pos.z;
     return 0;
+}
+
+static sb32 portModFighterSpecialHiProcPass(GObj *fighter_gobj)
+{
+    FTStruct *fp = ftGetStruct(fighter_gobj);
+
+    if (!(fp->coll_data.floor_flags & MAP_VERTEX_COLL_PASS) ||
+        fp->input.pl.stick_range.y >= FTMARIO_SUPERJUMP_STICK_Y_UNK)
+    {
+        return TRUE;
+    }
+    return FALSE;
+}
+
+void port_mod_fighter_special_hi_map(void *fighter_gobj, float landing_lag)
+{
+    GObj *gobj;
+    FTStruct *fp;
+
+    if (fighter_gobj == NULL) return;
+    gobj = (GObj *)fighter_gobj;
+    fp = ftGetStruct(gobj);
+
+    if (fp->ga == nMPKineticsAir)
+    {
+        if (fp->motion_vars.flags.flag1 == 0 || fp->physics.vel_air.y >= 0.0F)
+        {
+            mpCommonCheckFighterProject(gobj);
+        }
+        else if (mpCommonCheckFighterPassCliff(gobj, portModFighterSpecialHiProcPass) != FALSE)
+        {
+            if (fp->coll_data.mask_stat & MAP_FLAG_CLIFF_MASK)
+            {
+                ftCommonCliffCatchSetStatus(gobj);
+            }
+            else ftCommonLandingFallSpecialSetStatus(gobj, FALSE, landing_lag);
+        }
+    }
+    else mpCommonSetFighterFallOnEdgeBreak(gobj);
 }
 
 int port_mod_projectile_spawn_fflower(void *owner_gobj,
