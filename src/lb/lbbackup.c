@@ -40,8 +40,15 @@ sb32 lbBackupIsChecksumValid(void)
 void lbBackupWrite(void)
 {
     gSCManagerBackupData.checksum = lbBackupCreateChecksum(&gSCManagerBackupData);
+#ifdef PORT
+    extern int port_save_write_pair(uintptr_t, uintptr_t, const void*, size_t);
+    port_save_write_pair(ALIGN(sizeof(LBBackupData), 0x0),
+                         ALIGN(sizeof(LBBackupData), 0x10),
+                         &gSCManagerBackupData, sizeof(LBBackupData));
+#else
     syDmaWriteSram(&gSCManagerBackupData, ALIGN(sizeof(LBBackupData),  0x0), sizeof(LBBackupData));
     syDmaWriteSram(&gSCManagerBackupData, ALIGN(sizeof(LBBackupData), 0x10), sizeof(LBBackupData));
+#endif
 }
 
 // 0x800D4644

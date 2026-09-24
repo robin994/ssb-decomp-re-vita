@@ -598,6 +598,16 @@ void scVSBattleStartBattle(void)
 		desc.pkind = gSCManagerBattleState->players[player].pkind;
 		desc.controller = &gSYControllerDevices[player];
 
+#ifdef __vita__
+		/* 3/4-player matches already use low-poly fighter models above. Avoid the
+		 * separate per-fighter shadow collision/render pass at the same threshold;
+		 * this is especially important on the additional 4-player stages. */
+		if ((gSCManagerBattleState->pl_count + gSCManagerBattleState->cp_count) >= 3)
+		{
+			desc.is_skip_shadow_setup = TRUE;
+		}
+#endif
+
 		desc.figatree_heap = ftManagerAllocFigatreeHeapKind(gSCManagerBattleState->players[player].fkind);
 
 		ftParamInitPlayerBattleStats(player, ftManagerMakeFighter(&desc));

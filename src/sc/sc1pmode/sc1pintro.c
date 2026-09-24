@@ -1234,6 +1234,34 @@ void sc1PIntroVSFighterProcDisplay(GObj *fighter_gobj)
     
     if (sSC1PIntroStage == nSC1PGameStageZako)
     {
+#ifdef __vita__
+        /* The original intro deliberately renders up to three animation poses
+         * for every Polygon fighter in the same frame. With roughly ten
+         * Polygon kinds this can become ~30 full fighter draws, which is one
+         * of the worst-case scenes on Vita. Preserve the same staged pose
+         * progression, but render only the newest eligible pose. */
+        if (((fp->fkind * 2) + 12) < sc1PIntroTotalTimeTics)
+        {
+            ftMainSetStatus(fighter_gobj, 0x1000E, 2.0F, 0.0F, FTSTATUS_PRESERVE_NONE);
+            gcPlayAnimAll(fighter_gobj);
+            gcEndProcessAll(fighter_gobj);
+            ftDisplayMainProcDisplay(fighter_gobj);
+        }
+        else if (((fp->fkind * 2) - 8) < sc1PIntroTotalTimeTics)
+        {
+            ftMainSetStatus(fighter_gobj, 0x1000E, 1.0F, 0.0F, FTSTATUS_PRESERVE_NONE);
+            gcPlayAnimAll(fighter_gobj);
+            gcEndProcessAll(fighter_gobj);
+            ftDisplayMainProcDisplay(fighter_gobj);
+        }
+        else if (((fp->fkind * 2) - 28) < sc1PIntroTotalTimeTics)
+        {
+            ftMainSetStatus(fighter_gobj, 0x1000E, 0.0F, 0.0F, FTSTATUS_PRESERVE_NONE);
+            gcPlayAnimAll(fighter_gobj);
+            gcEndProcessAll(fighter_gobj);
+            ftDisplayMainProcDisplay(fighter_gobj);
+        }
+#else
         if (((fp->fkind * 2) - 28) < sc1PIntroTotalTimeTics)
         {
             ftMainSetStatus(fighter_gobj, 0x1000E, 0.0F, 0.0F, FTSTATUS_PRESERVE_NONE);
@@ -1255,6 +1283,7 @@ void sc1PIntroVSFighterProcDisplay(GObj *fighter_gobj)
             gcEndProcessAll(fighter_gobj);
             ftDisplayMainProcDisplay(fighter_gobj);
         }
+#endif
     }
     else ftDisplayMainProcDisplay(fighter_gobj);
     
@@ -1278,8 +1307,11 @@ GObj* sc1PIntroMakeVSFighter(s32 fkind, s32 stage, s32 card_anim_frame_id, void 
     desc.unk_rebirth_0x1C = 4;
     desc.unk_rebirth_0x1D = 4;
     
-    if ((stage == nSC1PGameStageYoshi) || (stage == nSC1PGameStageZako))
+    if ((stage == nSC1PGameStageYoshi) || (stage == nSC1PGameStageKirby) || (stage == nSC1PGameStageZako))
     {
+        /* Team-card scenes can put 8-18 fighter models on screen at once.
+         * Kirby was the only team intro still inheriting the default hi-poly
+         * model, which is disproportionately expensive on Vita. */
         desc.detail = nFTPartsDetailLow;
     }
     fighter_gobj = ftManagerMakeFighter(&desc);

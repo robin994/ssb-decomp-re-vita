@@ -13,6 +13,7 @@ extern void* func_800269C0_275C0(u16);
 
 #ifdef PORT
 extern float port_widescreen_clip_x_scale(void);
+extern void port_log(const char *fmt, ...);
 #include "fighter_registry.h"
 #include <netplay/netplay_bridge.h>
 #endif
@@ -508,6 +509,41 @@ s32 mnVSResultsGetPlayerDistanceID(s32 player)
 	return foes;
 }
 
+#ifdef PORT
+static s32 mnVSResultsGetSafePlayerDistanceID(s32 player, s32 present_count)
+{
+	s32 dist = mnVSResultsGetPlayerDistanceID(player);
+	s32 dist_count;
+	static u32 sDistanceGuardLogs = 0;
+
+	switch (present_count)
+	{
+	case 2:
+		dist_count = 2;
+		break;
+	case 3:
+		dist_count = 3;
+		break;
+	case 4:
+	default:
+		dist_count = 4;
+		break;
+	}
+
+	if ((dist < 0) || (dist >= dist_count))
+	{
+		if (sDistanceGuardLogs < 16)
+		{
+			port_log("SSB64: VS_RESULTS_DISTANCE_CLAMP player=%d present=%d dist=%d\n",
+			         player, present_count, dist);
+			sDistanceGuardLogs++;
+		}
+		dist = (dist < 0) ? 0 : dist_count - 1;
+	}
+	return dist;
+}
+#endif
+
 // 0x8013234C
 s32 mnVSResultsGetWinPlayer(void)
 {
@@ -899,6 +935,51 @@ void mnVSResultsSetFighterPosition(GObj* fighter_gobj, s32 player, s32 place)
 		{ -900.0F, -9000.0F }
 	};
 
+#ifdef PORT
+	/* Two real-hardware coredumps from the same tester hit the 4P table load
+	 * below with `place` equal to fighter_gobj + 2. The bad value originated
+	 * in mnVSResultsGetSpot(), but keep this boundary hardened as well: these
+	 * local podium tables are only four entries deep and an invalid index turns
+	 * into an arbitrary stack read before the first DObj write. */
+	if (fighter_gobj == NULL)
+	{
+		port_log("SSB64: VS_RESULTS_POSITION_DROP null fighter player=%d place=%d\n", player, place);
+		return;
+	}
+	if ((player < 0) || (player >= (s32)ARRAY_COUNT(sMNVSResultsIsPresent)))
+	{
+		port_log("SSB64: VS_RESULTS_POSITION_DROP bad player=%d place=%d\n", player, place);
+		return;
+	}
+	if ((place < 0) || (place >= (s32)ARRAY_COUNT(pos_yz)))
+	{
+		port_log("SSB64: VS_RESULTS_POSITION_CLAMP player=%d bad_place=%d\n", player, place);
+		place = (place < 0) ? 0 : (s32)ARRAY_COUNT(pos_yz) - 1;
+	}
+#endif
+
+#ifdef PORT
+	{
+		s32 present_count = mnVSResultsGetPresentCount();
+		s32 dist = mnVSResultsGetSafePlayerDistanceID(player, present_count);
+
+		switch (present_count)
+		{
+		case 2:
+			DObjGetStruct(fighter_gobj)->translate.vec.f.x = pos_x_2p[dist][place];
+			break;
+
+		case 3:
+			DObjGetStruct(fighter_gobj)->translate.vec.f.x = pos_x_3p[dist][place];
+			break;
+
+		case 4:
+		default:
+			DObjGetStruct(fighter_gobj)->translate.vec.f.x = pos_x_4p[dist][place];
+			break;
+		}
+	}
+#else
 	switch (mnVSResultsGetPresentCount())
 	{
 	case 2:
@@ -914,6 +995,7 @@ void mnVSResultsSetFighterPosition(GObj* fighter_gobj, s32 player, s32 place)
 		DObjGetStruct(fighter_gobj)->translate.vec.f.x = pos_x_4p[mnVSResultsGetPlayerDistanceID(player)][place];
 		break;
 	}
+#endif
 	DObjGetStruct(fighter_gobj)->translate.vec.f.y = pos_yz[place][0];
 	DObjGetStruct(fighter_gobj)->translate.vec.f.z = pos_yz[place][1];
 }
@@ -1038,7 +1120,80 @@ s32 mnVSResultsGetSpot(s32 player)
 	sb32 aheads[/* */] = { 0, 0, 1, 1 };
 	sb32 places[/* */] = { 0, 0, 1, 1, 1 };
 
+#ifdef PORT
+	{
+		s32 place;
+		s32 ahead_count;
+		s32 same_place_count;
+		s32 ahead_index;
+		s32 spot;
+		static u32 sSpotFixLogs = 0;
+
+		if ((player < 0) || (player >= (s32)ARRAY_COUNT(sMNVSResultsPlaces)))
+		{
+			if (sSpotFixLogs < 16)
+			{
+				port_log("SSB64: VS_RESULTS_SPOT_GUARD bad player=%d\n", player);
+				sSpotFixLogs++;
+			}
+			return 0;
+		}
+
+		place = sMNVSResultsPlaces[player];
+		ahead_count = mnVSResultsGetPlayerCountAhead(player);
+		same_place_count = mnVSResultsGetPlayerCountPlace(place);
+
+		/* `place` is a compressed rank (0,1,2,...) while ahead_count counts
+		 * actual players. With ties, ahead_count can therefore be greater than
+		 * place. The decomp expression used place-ahead_count, indexing before
+		 * aheads[] for layouts such as 0,0,1,1. The intended quantity is the
+		 * number of extra tied players in earlier rank groups: ahead_count-place. */
+		ahead_index = ahead_count - place;
+
+		if ((place < 0) || (place >= GMCOMMON_PLAYERS_MAX))
+		{
+			if (sSpotFixLogs < 16)
+			{
+				port_log("SSB64: VS_RESULTS_SPOT_GUARD player=%d bad_place=%d ahead=%d tied=%d\n",
+				         player, place, ahead_count, same_place_count);
+				sSpotFixLogs++;
+			}
+			place = (place < 0) ? 0 : GMCOMMON_PLAYERS_MAX - 1;
+		}
+		if (ahead_index < 0)
+			ahead_index = 0;
+		else if (ahead_index >= (s32)ARRAY_COUNT(aheads))
+			ahead_index = (s32)ARRAY_COUNT(aheads) - 1;
+
+		if (same_place_count < 0)
+			same_place_count = 0;
+		else if (same_place_count >= (s32)ARRAY_COUNT(places))
+			same_place_count = (s32)ARRAY_COUNT(places) - 1;
+
+		spot = place + aheads[ahead_index] + places[same_place_count];
+		if ((spot < 0) || (spot >= 4))
+		{
+			if (sSpotFixLogs < 16)
+			{
+				port_log("SSB64: VS_RESULTS_SPOT_GUARD player=%d place=%d ahead=%d tied=%d spot=%d\n",
+				         player, place, ahead_count, same_place_count, spot);
+				sSpotFixLogs++;
+			}
+			spot = (spot < 0) ? 0 : 3;
+		}
+		else if ((ahead_count > place) && (sSpotFixLogs < 16))
+		{
+			/* This is the exact tie layout that made the old expression read
+			 * before aheads[]. Leave a bounded marker for the tester's log. */
+			port_log("SSB64: VS_RESULTS_SPOT_TIE_FIX player=%d place=%d ahead=%d tied=%d spot=%d\n",
+			         player, place, ahead_count, same_place_count, spot);
+			sSpotFixLogs++;
+		}
+		return spot;
+	}
+#else
 	return sMNVSResultsPlaces[player] + aheads[sMNVSResultsPlaces[player] - mnVSResultsGetPlayerCountAhead(player)] + places[mnVSResultsGetPlayerCountPlace(sMNVSResultsPlaces[player])];
+#endif
 }
 
 // 0x801338EC
@@ -1115,7 +1270,11 @@ void mnVSResultsSetPlayerTagPosition(GObj *gobj, s32 player)
 	};
 
 	spot = mnVSResultsGetSpot(player);
+#ifdef PORT
+	dist = mnVSResultsGetSafePlayerDistanceID(player, mnVSResultsGetPresentCount());
+#else
 	dist = mnVSResultsGetPlayerDistanceID(player);
+#endif
 
 	switch (mnVSResultsGetPresentCount())
 	{
@@ -2899,8 +3058,27 @@ void mnVSResultsSetIsPresent(void)
 void mnVSResultsInitFighter(s32 player)
 {
 	mnVSResultsMakeFighter(player);
+#ifdef PORT
+	{
+		s32 spot;
+
+		if (sMNVSResultsFighterGObjs[player] == NULL)
+		{
+			port_log("SSB64: VS_RESULTS_FIGHTER_CREATE_FAIL player=%d fkind=%d\n",
+			         player, mnVSResultsGetFighterKind(player));
+			return;
+		}
+
+		/* GetSpot used to be evaluated independently for position and scale.
+		 * Keep one validated value for the whole fighter initialization. */
+		spot = mnVSResultsGetSpot(player);
+		mnVSResultsSetFighterPosition(sMNVSResultsFighterGObjs[player], player, spot);
+		mnVSResultsSetFighterScale(sMNVSResultsFighterGObjs[player], player, mnVSResultsGetFighterKind(player), spot);
+	}
+#else
 	mnVSResultsSetFighterPosition(sMNVSResultsFighterGObjs[player], player, mnVSResultsGetSpot(player));
 	mnVSResultsSetFighterScale(sMNVSResultsFighterGObjs[player], player, mnVSResultsGetFighterKind(player), mnVSResultsGetSpot(player));
+#endif
 	mnVSResultsMakePlayerTag(player, gSCManagerTransferBattleState.players[player].color);
 	mnVSResultsSetFighterStatus(sMNVSResultsFighterGObjs[player], player);
 }

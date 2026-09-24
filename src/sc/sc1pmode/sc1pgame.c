@@ -2517,6 +2517,18 @@ void sc1PGameFuncStart(void)
 
         desc.is_magnify_ignore = sSC1PGamePlayerSetups[i].is_magnify_ignore;
 
+#ifdef __vita__
+        /* Fighter shadows do a non-trivial collision walk and emit another
+         * display object every frame. Team fights are already switched to
+         * low-poly models at 3+ active fighters; skip shadows under the same
+         * pressure threshold on Vita so Yoshi/Kirby/Polygon battles scale
+         * with fighter count instead of paying that extra CPU/GPU pass. */
+        if ((gSCManagerBattleState->pl_count + gSCManagerBattleState->cp_count) >= 3)
+        {
+            desc.is_skip_shadow_setup = TRUE;
+        }
+#endif
+
         fighter_gobj = ftManagerMakeFighter(&desc), fp = ftGetStruct(fighter_gobj);
 
         ftParamInitPlayerBattleStats(i, fighter_gobj);

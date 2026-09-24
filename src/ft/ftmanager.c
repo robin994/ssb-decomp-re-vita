@@ -1245,7 +1245,7 @@ GObj* ftManagerMakeFighter(FTDesc *desc) // Create fighter
         FT_DIAG_LOG("SSB64: ATTR fkind=%d sizeof=%d fog_off=0x%X\n",
             (int)fp->fkind, (int)sizeof(FTAttributes),
             (int)offsetof(FTAttributes, fog_color));
-        port_log("  raw[0x3E..0x43]: %08X %08X %08X %08X %08X %08X\n",
+        FT_DIAG_LOG("  raw[0x3E..0x43]: %08X %08X %08X %08X %08X %08X\n",
             raw[0x3E], raw[0x3F], raw[0x40], raw[0x41], raw[0x42], raw[0x43]);
     }
     FT_DIAG_LOG("SSB64: ftManagerMakeFighter - begin fkind=%d\n", (int)fp->fkind);
