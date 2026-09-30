@@ -9,6 +9,7 @@
 #ifdef PORT
 #include <config.h>
 #include <sys/debug.h>
+#include <string.h>
 extern void *func_800269C0_275C0(u16 id);
 extern void portFixupStructU16(void *base, unsigned int byte_offset, unsigned int num_words);
 extern void port_log(const char *fmt, ...);
@@ -142,6 +143,16 @@ void itManagerInitItems(void) // Many linker things here
 {
     ITStruct *ip;
     s32 i;
+
+#ifdef PORT
+    /* These are overlay BSS globals in the original game. The port keeps the
+     * translated overlay storage alive across scene changes, so explicitly
+     * restore the zero-initialized state before rebuilding per-stage item
+     * weights. Otherwise host/client scene history leaks into frame 0 and can
+     * later affect random item/container scheduling. */
+    memset(&gITManagerRandomWeights, 0, sizeof(gITManagerRandomWeights));
+    memset(&gITManagerAppearActor, 0, sizeof(gITManagerAppearActor));
+#endif
 
     gITManagerStructsAllocFree = ip = syTaskmanMalloc(sizeof(ITStruct) * ITEM_ALLOC_MAX, 0x8);
 

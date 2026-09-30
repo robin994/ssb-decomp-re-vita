@@ -5,6 +5,8 @@
 #include <ssb_types.h>
 
 struct GObj;
+struct DObj;
+struct FTParts;
 
 #define SYNETROLLBACK_WINDOW 6
 
@@ -38,6 +40,8 @@ extern void syNetRollbackReset(void);
 extern sb32 syNetRollbackIsResimulating(void);
 extern sb32 syNetRollbackSpeculationSafe(u32 confirmed_frame_count);
 extern sb32 syNetRollbackDeferObjectEject(struct GObj *gobj, void *struct_ptr, sb32 is_weapon);
+extern sb32 syNetRollbackDeferFighterDObjEject(struct GObj *fighter_gobj, struct DObj *dobj,
+                                                struct FTParts *parts, s32 joint_id);
 extern void syNetRollbackCapturePreFrame(u32 frame);
 /* 1=rollback performed, 0=no mismatch, -1=controlled abort required. */
 extern s32 syNetRollbackHandlePredictionMismatch(u32 current_frame);

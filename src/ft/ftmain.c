@@ -8,6 +8,8 @@ extern void port_log(const char *fmt, ...);
 extern void port_dump_backtrace(void);
 #include "fighter_registry.h"
 #include "hooks/Events.h"
+#include <sys/netinput.h>
+#include <sys/netrollback.h>
 #endif
 #include <sys/controller.h>
 
@@ -4491,8 +4493,23 @@ void ftMainEjectHiddenPartID(FTStruct *fp, s32 hiddenpart_id)
     DObj *child_joint;
     DObj *sibling_joint;
     DObj *new_sibling_joint;
+#ifdef PORT
+    FTParts *root_parts = ftGetParts(root_joint);
+    sb32 defer_eject = FALSE;
+
+    if (syNetInputModernNetplayActive() != FALSE)
+    {
+        defer_eject = syNetRollbackDeferFighterDObjEject(fp->fighter_gobj, root_joint, root_parts,
+                                                         hiddenpart->root_joint_id);
+    }
+    if (defer_eject == FALSE)
+    {
+        ftManagerSetPrevPartsAlloc(root_parts);
+    }
+#else
 
     ftManagerSetPrevPartsAlloc(ftGetParts(root_joint));
+#endif
 
     child_joint = root_joint->child;
     parent_joint = root_joint->parent;
@@ -4545,7 +4562,14 @@ void ftMainEjectHiddenPartID(FTStruct *fp, s32 hiddenpart_id)
     root_joint->sib_prev = NULL;
     root_joint->child = NULL;
 
+#ifdef PORT
+    if (defer_eject == FALSE)
+    {
+        gcEjectDObj(root_joint);
+    }
+#else
     gcEjectDObj(root_joint);
+#endif
 }
 
 // 0x800E6F24

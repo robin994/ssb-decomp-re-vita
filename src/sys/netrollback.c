@@ -1,6 +1,8 @@
 #include <sys/netrollback.h>
 
 #include <ft/fighter.h>
+#include <ft/ftmain.h>
+#include <ft/ftmanager.h>
 #include <gm/gmcamera.h>
 #include <gr/ground.h>
 #include <if/ifcommon.h>
@@ -48,6 +50,11 @@ typedef struct SYNetRollbackAObjState
 typedef struct SYNetRollbackDObjState
 {
     DObj *ptr;
+    GObj *parent_gobj;
+    DObj *sib_next;
+    DObj *sib_prev;
+    DObj *child;
+    DObj *parent;
     GCTranslate translate;
     GCRotate rotate;
     GCScale scale;
@@ -148,6 +155,7 @@ static u32 sSYNetRollbackSnapshotRestoreUs;
 static u32 sSYNetRollbackResimUs;
 static u32 sSYNetRollbackLastHashSubmitted = UINT32_MAX;
 static u32 sSYNetRollbackTopologyEpochFrame = UINT32_MAX;
+static u32 sSYNetRollbackTopologyLogCount;
 
 #define SYNETROLLBACK_ZOMBIE_MAX (ITEM_ALLOC_MAX + WEAPON_ALLOC_MAX)
 
@@ -162,6 +170,20 @@ typedef struct SYNetRollbackZombie
 
 static SYNetRollbackZombie sSYNetRollbackZombies[SYNETROLLBACK_ZOMBIE_MAX];
 static u32 sSYNetRollbackForwardFrame;
+
+#define SYNETROLLBACK_FIGHTER_DOBJ_ZOMBIE_MAX (GMCOMMON_PLAYERS_MAX * FTPARTS_JOINT_NUM_MAX)
+
+typedef struct SYNetRollbackFighterDObjZombie
+{
+    GObj *fighter_gobj;
+    DObj *dobj;
+    FTParts *parts;
+    s32 joint_id;
+    u32 destroy_frame;
+    sb32 active;
+} SYNetRollbackFighterDObjZombie;
+
+static SYNetRollbackFighterDObjZombie sSYNetRollbackFighterDObjZombies[SYNETROLLBACK_FIGHTER_DOBJ_ZOMBIE_MAX];
 
 static SYNetRollbackZombie *syNetRollbackFindZombie(GObj *gobj)
 {
@@ -230,6 +252,58 @@ sb32 syNetRollbackDeferObjectEject(GObj *gobj, void *struct_ptr, sb32 is_weapon)
 static void syNetRollbackFlushZombies(void)
 {
     memset(sSYNetRollbackZombies, 0, sizeof(sSYNetRollbackZombies));
+    memset(sSYNetRollbackFighterDObjZombies, 0, sizeof(sSYNetRollbackFighterDObjZombies));
+}
+
+static SYNetRollbackFighterDObjZombie *syNetRollbackFindFighterDObjZombie(DObj *dobj)
+{
+    u32 i;
+    if (dobj == NULL) return NULL;
+    for (i = 0; i < SYNETROLLBACK_FIGHTER_DOBJ_ZOMBIE_MAX; i++)
+    {
+        SYNetRollbackFighterDObjZombie *z = &sSYNetRollbackFighterDObjZombies[i];
+        if ((z->active != FALSE) && (z->dobj == dobj)) return z;
+    }
+    return NULL;
+}
+
+sb32 syNetRollbackDeferFighterDObjEject(GObj *fighter_gobj, DObj *dobj, FTParts *parts, s32 joint_id)
+{
+    u32 i;
+    SYNetRollbackFighterDObjZombie *z;
+
+    if ((fighter_gobj == NULL) || (dobj == NULL) || (parts == NULL) ||
+        (joint_id < 0) || (joint_id >= FTPARTS_JOINT_NUM_MAX) ||
+        (syNetInputModernNetplayActive() == FALSE))
+    {
+        return FALSE;
+    }
+    z = syNetRollbackFindFighterDObjZombie(dobj);
+    if (z != NULL)
+    {
+        z->fighter_gobj = fighter_gobj;
+        z->parts = parts;
+        z->joint_id = joint_id;
+        z->destroy_frame = sSYNetRollbackForwardFrame;
+        return TRUE;
+    }
+    for (i = 0; i < SYNETROLLBACK_FIGHTER_DOBJ_ZOMBIE_MAX; i++)
+    {
+        z = &sSYNetRollbackFighterDObjZombies[i];
+        if (z->active != FALSE) continue;
+        z->fighter_gobj = fighter_gobj;
+        z->dobj = dobj;
+        z->parts = parts;
+        z->joint_id = joint_id;
+        z->destroy_frame = sSYNetRollbackForwardFrame;
+        z->active = TRUE;
+        return TRUE;
+    }
+#ifdef PORT
+    port_log("[NETPLAY] fighter DObj zombie pool full frame=%u player_gobj=%p joint=%d\n",
+             sSYNetRollbackForwardFrame, (void *)fighter_gobj, joint_id);
+#endif
+    return FALSE;
 }
 
 static u32 syNetRollbackDObjTreeSig(DObj *dobj, u32 sig, s32 depth)
@@ -250,6 +324,51 @@ static u32 syNetRollbackFighterTreeSig(GObj *gobj)
         return syNetRollbackDObjTreeSig(DObjGetStruct(gobj), SYNETROLLBACK_FNV32_OFFSET, 0);
     }
     return SYNETROLLBACK_FNV32_OFFSET;
+}
+
+static u64 syNetRollbackFighterJointPresenceMask(const FTStruct *fp)
+{
+    u64 mask = 0;
+    s32 joint;
+
+    if (fp == NULL) return 0;
+    for (joint = 0; joint < FTPARTS_JOINT_NUM_MAX; joint++)
+    {
+        if (fp->joints[joint] != NULL) mask |= (1ULL << joint);
+    }
+    return mask;
+}
+
+static void syNetRollbackLogTopologyChange(u32 frame, u32 slot,
+                                           const SYNetRollbackFighterState *prev,
+                                           const SYNetRollbackFighterState *curr)
+{
+#ifdef PORT
+    u64 prev_mask;
+    u64 curr_mask;
+
+    if ((prev == NULL) || (curr == NULL) || (sSYNetRollbackTopologyLogCount >= 64U)) return;
+    prev_mask = syNetRollbackFighterJointPresenceMask(&prev->state);
+    curr_mask = syNetRollbackFighterJointPresenceMask(&curr->state);
+    port_log("[NETPLAY] fighter topology change frame=%u slot=%u player=%u fkind=%d "
+             "status=%d->%d motion=%d->%d gobj=%p->%p tree=%08X->%08X "
+             "joints=%08X%08X->%08X%08X changed=%08X%08X\n",
+             frame, slot,
+             (unsigned)curr->state.player, curr->state.fkind,
+             prev->state.status_id, curr->state.status_id,
+             prev->state.motion_id, curr->state.motion_id,
+             (void *)prev->gobj, (void *)curr->gobj,
+             (unsigned)prev->tree_sig, (unsigned)curr->tree_sig,
+             (unsigned)(prev_mask >> 32), (unsigned)prev_mask,
+             (unsigned)(curr_mask >> 32), (unsigned)curr_mask,
+             (unsigned)((prev_mask ^ curr_mask) >> 32), (unsigned)(prev_mask ^ curr_mask));
+    sSYNetRollbackTopologyLogCount++;
+#else
+    (void)frame;
+    (void)slot;
+    (void)prev;
+    (void)curr;
+#endif
 }
 
 static u32 syNetRollbackElapsedUs(u64 begin)
@@ -302,6 +421,11 @@ static void syNetRollbackSaveDObjTree(SYNetRollbackSnapshot *snapshot, DObj *dob
             state = &snapshot->dobjs[snapshot->dobj_count++];
             memset(state, 0, sizeof(*state));
             state->ptr = dobj;
+            state->parent_gobj = dobj->parent_gobj;
+            state->sib_next = dobj->sib_next;
+            state->sib_prev = dobj->sib_prev;
+            state->child = dobj->child;
+            state->parent = dobj->parent;
             state->translate = dobj->translate;
             state->rotate = dobj->rotate;
             state->scale = dobj->scale;
@@ -453,6 +577,7 @@ void syNetRollbackReset(void)
     sSYNetRollbackResimUs = 0;
     sSYNetRollbackLastHashSubmitted = UINT32_MAX;
     sSYNetRollbackTopologyEpochFrame = UINT32_MAX;
+    sSYNetRollbackTopologyLogCount = 0;
     sSYNetRollbackForwardFrame = 0;
     syNetRollbackFlushZombies();
 }
@@ -479,6 +604,14 @@ static void syNetRollbackTrackTopology(u32 frame)
     if ((prev->valid == FALSE) || (prev->frame != (frame - 1U))) return;
     if (prev->fighter_count != curr->fighter_count)
     {
+#ifdef PORT
+        if (sSYNetRollbackTopologyLogCount < 64U)
+        {
+            port_log("[NETPLAY] fighter topology count change frame=%u fighters=%u->%u\n",
+                     frame, (unsigned)prev->fighter_count, (unsigned)curr->fighter_count);
+            sSYNetRollbackTopologyLogCount++;
+        }
+#endif
         sSYNetRollbackTopologyEpochFrame = frame;
         return;
     }
@@ -487,6 +620,7 @@ static void syNetRollbackTrackTopology(u32 frame)
         if ((prev->fighters[i].gobj != curr->fighters[i].gobj) ||
             (prev->fighters[i].tree_sig != curr->fighters[i].tree_sig))
         {
+            syNetRollbackLogTopologyChange(frame, i, &prev->fighters[i], &curr->fighters[i]);
             sSYNetRollbackTopologyEpochFrame = frame;
             return;
         }
@@ -591,6 +725,184 @@ static sb32 syNetRollbackFightersMatch(const SYNetRollbackSnapshot *snapshot)
     return (i == snapshot->fighter_count) ? TRUE : FALSE;
 }
 
+static void syNetRollbackLogRestoreTopologyMismatch(const SYNetRollbackSnapshot *snapshot, u32 frame)
+{
+#ifdef PORT
+    GObj *gobj;
+    u32 i = 0;
+
+    if ((snapshot == NULL) || (sSYNetRollbackTopologyLogCount >= 64U)) return;
+    for (gobj = gGCCommonLinks[nGCCommonLinkIDFighter]; gobj != NULL; gobj = gobj->link_next, i++)
+    {
+        FTStruct *live_fp = ftGetStruct(gobj);
+        u64 saved_mask;
+        u64 live_mask;
+        u32 live_sig;
+
+        if (i >= snapshot->fighter_count)
+        {
+            port_log("[NETPLAY] rollback topology mismatch frame=%u slot=%u extra_live_gobj=%p\n",
+                     frame, i, (void *)gobj);
+            sSYNetRollbackTopologyLogCount++;
+            return;
+        }
+        live_sig = syNetRollbackFighterTreeSig(gobj);
+        if ((snapshot->fighters[i].gobj == gobj) &&
+            (snapshot->fighters[i].tree_sig == live_sig)) continue;
+
+        saved_mask = syNetRollbackFighterJointPresenceMask(&snapshot->fighters[i].state);
+        live_mask = syNetRollbackFighterJointPresenceMask(live_fp);
+        port_log("[NETPLAY] rollback topology mismatch frame=%u slot=%u player=%d fkind=%d "
+                 "saved_status=%d live_status=%d saved_motion=%d live_motion=%d "
+                 "gobj=%p/%p tree=%08X/%08X joints=%08X%08X/%08X%08X changed=%08X%08X\n",
+                 frame, i,
+                 (live_fp != NULL) ? (int)live_fp->player : -1,
+                 (live_fp != NULL) ? live_fp->fkind : -1,
+                 snapshot->fighters[i].state.status_id,
+                 (live_fp != NULL) ? live_fp->status_id : -1,
+                 snapshot->fighters[i].state.motion_id,
+                 (live_fp != NULL) ? live_fp->motion_id : -1,
+                 (void *)snapshot->fighters[i].gobj, (void *)gobj,
+                 (unsigned)snapshot->fighters[i].tree_sig, (unsigned)live_sig,
+                 (unsigned)(saved_mask >> 32), (unsigned)saved_mask,
+                 (unsigned)(live_mask >> 32), (unsigned)live_mask,
+                 (unsigned)((saved_mask ^ live_mask) >> 32), (unsigned)(saved_mask ^ live_mask));
+        sSYNetRollbackTopologyLogCount++;
+        return;
+    }
+    if (i != snapshot->fighter_count)
+    {
+        port_log("[NETPLAY] rollback topology mismatch frame=%u live_fighters=%u saved_fighters=%u\n",
+                 frame, i, (unsigned)snapshot->fighter_count);
+        sSYNetRollbackTopologyLogCount++;
+    }
+#else
+    (void)snapshot;
+    (void)frame;
+#endif
+}
+
+static s32 syNetRollbackFindHiddenPartForJoint(FTStruct *fp, s32 joint_id)
+{
+    FTHiddenPart *hiddenparts;
+    s32 i;
+
+    if ((fp == NULL) || (fp->attr == NULL) || (joint_id < 0) || (joint_id >= FTPARTS_JOINT_NUM_MAX))
+        return -1;
+    hiddenparts = (FTHiddenPart *)PORT_RESOLVE(fp->attr->hiddenparts);
+    if (hiddenparts == NULL) return -1;
+    for (i = 0; i < 32; i++)
+    {
+        if (hiddenparts[i].root_joint_id == joint_id) return i;
+    }
+    return -1;
+}
+
+static sb32 syNetRollbackDetachHiddenPart(FTStruct *fp, s32 joint_id)
+{
+    DObj *root;
+    s32 hiddenpart_id;
+
+    if ((fp == NULL) || (joint_id < 0) || (joint_id >= FTPARTS_JOINT_NUM_MAX)) return FALSE;
+    root = fp->joints[joint_id];
+    if (root == NULL) return TRUE;
+    hiddenpart_id = syNetRollbackFindHiddenPartForJoint(fp, joint_id);
+    if (hiddenpart_id < 0) return FALSE;
+
+    /* ftMainEjectHiddenPartID dereferences the parent while splicing the
+     * children back into the tree. Refuse an unsafe repair rather than turn a
+     * controlled rollback abort into a crash. */
+    if ((root->parent == NULL) || (root->parent == DOBJ_PARENT_NULL)) return FALSE;
+    ftMainEjectHiddenPartID(fp, hiddenpart_id);
+    return (fp->joints[joint_id] == NULL) ? TRUE : FALSE;
+}
+
+static sb32 syNetRollbackReactivateHiddenPart(GObj *fighter_gobj, FTStruct *fp,
+                                               s32 joint_id, DObj *saved_dobj)
+{
+    SYNetRollbackFighterDObjZombie *z;
+
+    if ((fighter_gobj == NULL) || (fp == NULL) || (saved_dobj == NULL)) return FALSE;
+    z = syNetRollbackFindFighterDObjZombie(saved_dobj);
+    if ((z == NULL) || (z->fighter_gobj != fighter_gobj) || (z->joint_id != joint_id)) return FALSE;
+    z->active = FALSE;
+    saved_dobj->parent_gobj = fighter_gobj;
+    fp->joints[joint_id] = saved_dobj;
+    return TRUE;
+}
+
+static void syNetRollbackRestoreFighterDObjLinks(const SYNetRollbackSnapshot *snapshot, GObj *fighter_gobj)
+{
+    u32 i;
+    for (i = 0; i < snapshot->dobj_count; i++)
+    {
+        const SYNetRollbackDObjState *state = &snapshot->dobjs[i];
+        DObj *dobj;
+        if ((state->ptr == NULL) || (state->parent_gobj != fighter_gobj)) continue;
+        dobj = state->ptr;
+        dobj->parent_gobj = state->parent_gobj;
+        dobj->sib_next = state->sib_next;
+        dobj->sib_prev = state->sib_prev;
+        dobj->child = state->child;
+        dobj->parent = state->parent;
+    }
+}
+
+/* Fighter GObjs live for the whole VS match, but their hidden-part DObjs do
+ * not: status changes can splice a joint in/out between the pre-frame snapshot
+ * and a late-input rollback. Keep ejected joints alive for the rollback window
+ * and rebuild the exact capture-time pointer topology before validating the
+ * snapshot. This is deliberately limited to joints represented by the fighter
+ * hidden-part table; unknown topology changes still fail closed. */
+static sb32 syNetRollbackReconcileFighterTopology(const SYNetRollbackSnapshot *snapshot)
+{
+    GObj *gobj;
+    u32 i = 0;
+
+    if (snapshot == NULL) return FALSE;
+    for (gobj = gGCCommonLinks[nGCCommonLinkIDFighter]; gobj != NULL; gobj = gobj->link_next, i++)
+    {
+        FTStruct *fp;
+        const SYNetRollbackFighterState *saved;
+        s32 joint;
+        u64 changed_mask = 0;
+
+        if ((i >= snapshot->fighter_count) || (snapshot->fighters[i].gobj != gobj)) return FALSE;
+        fp = ftGetStruct(gobj);
+        if (fp == NULL) return FALSE;
+        saved = &snapshot->fighters[i];
+
+        for (joint = 0; joint < FTPARTS_JOINT_NUM_MAX; joint++)
+        {
+            DObj *saved_dobj = saved->state.joints[joint];
+            DObj *live_dobj = fp->joints[joint];
+
+            if (saved_dobj == live_dobj) continue;
+            changed_mask |= (1ULL << joint);
+            if (live_dobj != NULL)
+            {
+                if (syNetRollbackDetachHiddenPart(fp, joint) == FALSE) return FALSE;
+            }
+            if (saved_dobj != NULL)
+            {
+                if (syNetRollbackReactivateHiddenPart(gobj, fp, joint, saved_dobj) == FALSE) return FALSE;
+            }
+        }
+        syNetRollbackRestoreFighterDObjLinks(snapshot, gobj);
+        if (syNetRollbackFighterTreeSig(gobj) != saved->tree_sig) return FALSE;
+#ifdef PORT
+        if ((changed_mask != 0) && (sSYNetRollbackTopologyLogCount < 64U))
+        {
+            port_log("[NETPLAY] fighter topology restored frame=%u slot=%u player=%u fkind=%d joints=%08X%08X\n",
+                     snapshot->frame, i, (unsigned)saved->state.player, saved->state.fkind,
+                     (unsigned)(changed_mask >> 32), (unsigned)changed_mask);
+            sSYNetRollbackTopologyLogCount++;
+        }
+#endif
+    }
+    return (i == snapshot->fighter_count) ? TRUE : FALSE;
+}
+
 static sb32 syNetRollbackTopologyMatches(const SYNetRollbackSnapshot *snapshot)
 {
     GObj *gobj;
@@ -624,6 +936,11 @@ static void syNetRollbackRestoreDObjs(const SYNetRollbackSnapshot *snapshot)
         DObj *dobj = state->ptr;
         u32 a;
         if (dobj == NULL) continue;
+        dobj->parent_gobj = state->parent_gobj;
+        dobj->sib_next = state->sib_next;
+        dobj->sib_prev = state->sib_prev;
+        dobj->child = state->child;
+        dobj->parent = state->parent;
         dobj->translate = state->translate;
         dobj->rotate = state->rotate;
         dobj->scale = state->scale;
@@ -687,7 +1004,16 @@ static sb32 syNetRollbackRestoreSnapshot(u32 frame)
     {
         return FALSE;
     }
-    if (syNetRollbackFightersMatch(snapshot) == FALSE) return FALSE;
+    if (syNetRollbackReconcileFighterTopology(snapshot) == FALSE)
+    {
+        syNetRollbackLogRestoreTopologyMismatch(snapshot, frame);
+        return FALSE;
+    }
+    if (syNetRollbackFightersMatch(snapshot) == FALSE)
+    {
+        syNetRollbackLogRestoreTopologyMismatch(snapshot, frame);
+        return FALSE;
+    }
     syNetRollbackReconcileObjects(snapshot);
     if (syNetRollbackTopologyMatches(snapshot) == FALSE) return FALSE;
     syUtilsSetRandomSeed(snapshot->rng_seed);
@@ -840,6 +1166,16 @@ void syNetRollbackPostFrame(u32 frame)
             z->active = FALSE;
         }
     }
+    for (zi = 0; zi < SYNETROLLBACK_FIGHTER_DOBJ_ZOMBIE_MAX; zi++)
+    {
+        SYNetRollbackFighterDObjZombie *z = &sSYNetRollbackFighterDObjZombies[zi];
+        if ((z->active != FALSE) && ((z->destroy_frame + SYNETROLLBACK_WINDOW) < frame))
+        {
+            if (z->parts != NULL) ftManagerSetPrevPartsAlloc(z->parts);
+            if (z->dobj != NULL) gcEjectDObj(z->dobj);
+            z->active = FALSE;
+        }
+    }
 
     if ((frame % SYNETROLLBACK_HASH_INTERVAL) == 0U && snapshot->valid != FALSE && snapshot->frame == frame)
     {
@@ -857,6 +1193,10 @@ void syNetRollbackPostFrame(u32 frame)
             sSYNetRollbackLastHashSubmitted != confirmed_frame)
         {
 #ifdef PORT
+            PortNetplayStateDigest wire_digest = {0};
+            s32 player;
+#endif
+#ifdef PORT
             port_log("[NETPLAY][DET] HASH frame=%u total=%08X%08X rng=%08X%08X battle=%08X%08X "
                      "p1=%08X%08X p2=%08X%08X p3=%08X%08X p4=%08X%08X "
                      "stage=%08X%08X map=%08X%08X items=%08X%08X weapons=%08X%08X counts=%u/%u\n",
@@ -873,9 +1213,41 @@ void syNetRollbackPostFrame(u32 frame)
                      (u32)(confirmed->post_digest.item_hash >> 32), (u32)confirmed->post_digest.item_hash,
                      (u32)(confirmed->post_digest.weapon_hash >> 32), (u32)confirmed->post_digest.weapon_hash,
                      confirmed->post_digest.item_count, confirmed->post_digest.weapon_count);
+
+            wire_digest.frame = confirmed_frame;
+#define SYNETROLLBACK_SET_WIRE_HASH(index, value) \
+            do { \
+                wire_digest.hash_high[(index)] = (u32)((value) >> 32); \
+                wire_digest.hash_low[(index)] = (u32)(value); \
+            } while (0)
+            SYNETROLLBACK_SET_WIRE_HASH(PORT_NETPLAY_DIGEST_TOTAL, confirmed->post_digest.total_hash);
+            SYNETROLLBACK_SET_WIRE_HASH(PORT_NETPLAY_DIGEST_RNG, confirmed->post_digest.rng_hash);
+            SYNETROLLBACK_SET_WIRE_HASH(PORT_NETPLAY_DIGEST_BATTLE, confirmed->post_digest.battle_hash);
+            SYNETROLLBACK_SET_WIRE_HASH(PORT_NETPLAY_DIGEST_FIGHTER0, confirmed->post_digest.fighter_hash[0]);
+            SYNETROLLBACK_SET_WIRE_HASH(PORT_NETPLAY_DIGEST_FIGHTER1, confirmed->post_digest.fighter_hash[1]);
+            SYNETROLLBACK_SET_WIRE_HASH(PORT_NETPLAY_DIGEST_FIGHTER2, confirmed->post_digest.fighter_hash[2]);
+            SYNETROLLBACK_SET_WIRE_HASH(PORT_NETPLAY_DIGEST_FIGHTER3, confirmed->post_digest.fighter_hash[3]);
+            SYNETROLLBACK_SET_WIRE_HASH(PORT_NETPLAY_DIGEST_STAGE, confirmed->post_digest.stage_hash);
+            SYNETROLLBACK_SET_WIRE_HASH(PORT_NETPLAY_DIGEST_MAP, confirmed->post_digest.map_hash);
+            SYNETROLLBACK_SET_WIRE_HASH(PORT_NETPLAY_DIGEST_ITEMS, confirmed->post_digest.item_hash);
+            SYNETROLLBACK_SET_WIRE_HASH(PORT_NETPLAY_DIGEST_WEAPONS, confirmed->post_digest.weapon_hash);
+#undef SYNETROLLBACK_SET_WIRE_HASH
+            wire_digest.rng_seed = confirmed->post_digest.rng_seed;
+            wire_digest.item_count = confirmed->post_digest.item_count;
+            wire_digest.weapon_count = confirmed->post_digest.weapon_count;
+            for (player = 0; player < GMCOMMON_PLAYERS_MAX; player++)
+            {
+                wire_digest.fighter_status[player] = confirmed->post_digest.fighter_status[player];
+                wire_digest.fighter_motion[player] = confirmed->post_digest.fighter_motion[player];
+                wire_digest.fighter_damage[player] = confirmed->post_digest.fighter_damage[player];
+                wire_digest.fighter_stock[player] = confirmed->post_digest.fighter_stock[player];
+                wire_digest.fighter_pos_x_bits[player] = confirmed->post_digest.fighter_pos_x_bits[player];
+                wire_digest.fighter_pos_y_bits[player] = confirmed->post_digest.fighter_pos_y_bits[player];
+                wire_digest.fighter_vel_x_bits[player] = confirmed->post_digest.fighter_vel_x_bits[player];
+                wire_digest.fighter_vel_y_bits[player] = confirmed->post_digest.fighter_vel_y_bits[player];
+            }
+            port_netplay_submit_state_digest(&wire_digest);
 #endif
-            port_netplay_submit_state_hash(confirmed_frame, (u32)(confirmed->post_hash >> 32),
-                                           (u32)confirmed->post_hash);
             sSYNetRollbackLastHashSubmitted = confirmed_frame;
         }
     }

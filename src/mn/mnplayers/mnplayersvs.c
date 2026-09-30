@@ -4357,6 +4357,35 @@ s32 mnPlayersVSRandFighterKind(GObj *gobj)
 {
 	s32 fkind;
 
+#ifdef PORT
+	if (port_netplay_css_active())
+	{
+		/* CSS runs independently on both Vitas, so the original wall-clock RNG
+		 * (syUtilsRandTimeUCharRange) can pick a different CPU fighter on each
+		 * peer. Derive the CPU "random" pick from the shared lobby session and
+		 * slot instead. Restrict the pool to the eight always-unlocked fighters
+		 * so different local save/unlock masks cannot reintroduce divergence. */
+		static u8 netplay_cpu_kinds[/* */] =
+		{
+			nFTKindMario, nFTKindFox, nFTKindDonkey, nFTKindSamus,
+			nFTKindLink, nFTKindYoshi, nFTKindKirby, nFTKindPikachu
+		};
+		u32 session = port_netplay_css_get_session_id();
+		u32 slot = (gobj != NULL) ? (u32)gobj->user_data.s : 0U;
+		u32 mixed = session ^ ((slot + 1U) * 0x9E3779B9U);
+
+		mixed ^= mixed >> 16;
+		mixed *= 0x85EBCA6BU;
+		mixed ^= mixed >> 13;
+		fkind = netplay_cpu_kinds[mixed % ARRAY_COUNT(netplay_cpu_kinds)];
+
+		mnPlayersVSCenterPuckInPortrait(gobj, fkind);
+		port_log("[NETPLAY] CSS deterministic CPU slot=P%u fighter=%d session=%08X\n",
+		         (unsigned)(slot + 1U), fkind, (unsigned)session);
+		return fkind;
+	}
+#endif
+
 	do
 	{
 		do

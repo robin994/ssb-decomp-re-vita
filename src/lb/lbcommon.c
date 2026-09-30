@@ -21,6 +21,41 @@ extern void portFixupSpriteBitmapData(void* sprite, void* bitmaps);
 extern void portDeswizzleDecodedSprite4c(void* sprite, void* bitmaps);
 extern void portFixupMObjSub(void* mobjsub);
 extern GObj *sGRWallpaperGObj; /* grwallpaper.c — for the WALLPAPER_DRAW correlation trace below */
+
+/* Matrix kinds 0x30/0x31 keep a raw pointer to the fighter joint they follow
+ * in the effect DObj's user_data.p. Rollback can temporarily detach a hidden
+ * fighter joint and keep the DObj alive as a zombie; after the rollback window
+ * that allocation may be recycled while an effect still owns the old pointer.
+ * Validate by pointer identity against the live fighter joint tables before
+ * dereferencing the candidate itself. */
+static sb32 lbCommonIsLiveFighterJointDObj(const DObj *candidate)
+{
+	GObj *fighter_gobj;
+	s32 joint;
+
+	if (candidate == NULL)
+	{
+		return FALSE;
+	}
+	for (fighter_gobj = gGCCommonLinks[nGCCommonLinkIDFighter]; fighter_gobj != NULL;
+	     fighter_gobj = fighter_gobj->link_next)
+	{
+		FTStruct *fp = ftGetStruct(fighter_gobj);
+
+		if (fp == NULL)
+		{
+			continue;
+		}
+		for (joint = 0; joint < FTPARTS_JOINT_NUM_MAX; joint++)
+		{
+			if (fp->joints[joint] == candidate)
+			{
+				return TRUE;
+			}
+		}
+	}
+	return FALSE;
+}
 #endif
 
 extern void syInterpCubic(void*, void*, f32);
@@ -1542,10 +1577,11 @@ sb32 func_ovl0_800C994C(Mtx* mtx, DObj* dobj, Gfx** dls)
 	 * issues are fixed, this guard becomes a no-op.
 	 *
 	 * Same crash class as project_addr64_relocation_bug.md. */
-	if (attach_dobj == NULL || attach_dobj->user_data.p == NULL)
-	{
-		return 0;
-	}
+		if ((lbCommonIsLiveFighterJointDObj(attach_dobj) == FALSE) ||
+		    (attach_dobj->user_data.p == NULL))
+		{
+			return 0;
+		}
 #endif
 
 	parts = attach_dobj->user_data.p;
@@ -1565,6 +1601,13 @@ sb32 func_ovl0_800C99CC(Mtx* mtx, DObj* dobj, Gfx** dls)
 
 	// 0x800D5CA0
 	Vec3f translate_base = { 0.0F, 0.0F, 0.0F };
+
+#ifdef PORT
+	if (lbCommonIsLiveFighterJointDObj(attach_dobj) == FALSE)
+	{
+		return 0;
+	}
+#endif
 
 	gmCollisionGetFighterPartsWorldPosition(attach_dobj, &translate_base);
 
@@ -2230,6 +2273,14 @@ void lbCommonDrawDObjDefault(DObj* dobj)
 // 0x800CB608
 void lbCommonEjectGObjLinkedList(GObj* gobj)
 {
+	/* Rollback resimulation can revisit presentation-only cleanup after the
+	 * real frame already removed the list (notably the netplay pause menu).
+	 * The original overlay path assumes a non-NULL list head; the port must
+	 * tolerate an already-ejected presentation list. */
+	if (gobj == NULL)
+	{
+		return;
+	}
 	if (gobj->link_next != NULL)
 	{
 		lbCommonEjectGObjLinkedList(gobj->link_next);
